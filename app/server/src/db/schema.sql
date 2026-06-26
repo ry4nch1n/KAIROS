@@ -1,0 +1,95 @@
+-- KAIROS schema (Postgres / PGlite compatible)
+-- Layer 1: identity · Layer 2: append-only facts · brief + library namespaces.
+
+CREATE TABLE IF NOT EXISTS sources (
+  id        SERIAL PRIMARY KEY,
+  name      TEXT UNIQUE NOT NULL,        -- 'poki' | 'crazygames'
+  base_url  TEXT NOT NULL,
+  active    BOOLEAN DEFAULT TRUE
+);
+
+CREATE TABLE IF NOT EXISTS games (
+  id             BIGSERIAL PRIMARY KEY,
+  source_id      INT REFERENCES sources(id),
+  source_game_id TEXT NOT NULL,
+  url            TEXT NOT NULL,
+  title          TEXT NOT NULL,
+  thumbnail_url  TEXT,
+  developer      TEXT,
+  description    TEXT,
+  engine         TEXT,
+  orientation    TEXT,
+  mobile         BOOLEAN,
+  first_seen_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  last_seen_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  is_live        BOOLEAN DEFAULT TRUE,
+  UNIQUE (source_id, source_game_id)
+);
+
+CREATE TABLE IF NOT EXISTS crawls (
+  id          BIGSERIAL PRIMARY KEY,
+  source_id   INT REFERENCES sources(id),
+  started_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  finished_at TIMESTAMPTZ,
+  status      TEXT DEFAULT 'running',
+  games_seen  INT
+);
+
+-- append-only daily facts
+CREATE TABLE IF NOT EXISTS game_snapshots (
+  id            BIGSERIAL PRIMARY KEY,
+  game_id       BIGINT REFERENCES games(id),
+  crawl_id      BIGINT REFERENCES crawls(id),
+  captured_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  rating        NUMERIC(4,2),
+  votes         INT,
+  plays         BIGINT,
+  homepage_position INT,
+  featured      BOOLEAN DEFAULT FALSE,
+  trending      BOOLEAN DEFAULT FALSE,
+  genre         TEXT,
+  UNIQUE (game_id, crawl_id)
+);
+CREATE INDEX IF NOT EXISTS idx_snap_game_time ON game_snapshots (game_id, captured_at DESC);
+
+CREATE TABLE IF NOT EXISTS tags (
+  id   SERIAL PRIMARY KEY,
+  name TEXT UNIQUE NOT NULL
+);
+CREATE TABLE IF NOT EXISTS game_tags (
+  game_id BIGINT REFERENCES games(id),
+  tag_id  INT REFERENCES tags(id),
+  PRIMARY KEY (game_id, tag_id)
+);
+
+-- latest snapshot per game
+CREATE OR REPLACE VIEW v_latest AS
+SELECT DISTINCT ON (game_id) *
+FROM game_snapshots
+ORDER BY game_id, captured_at DESC;
+
+-- brief namespace
+CREATE TABLE IF NOT EXISTS brief_editions (
+  id            BIGSERIAL PRIMARY KEY,
+  edition_date  DATE NOT NULL,
+  weekday       TEXT,
+  brief_type    TEXT,
+  payload       JSONB NOT NULL,
+  rendered_html TEXT,
+  local_path    TEXT,
+  source_count  INT,
+  created_at    TIMESTAMPTZ DEFAULT now(),
+  UNIQUE (edition_date, brief_type)
+);
+
+-- library namespace
+CREATE TABLE IF NOT EXISTS library_items (
+  id         BIGSERIAL PRIMARY KEY,
+  kind       TEXT,
+  title      TEXT NOT NULL,
+  summary    TEXT,
+  media_url  TEXT,
+  tags       TEXT[],
+  status     TEXT DEFAULT 'draft',
+  created_at TIMESTAMPTZ DEFAULT now()
+);

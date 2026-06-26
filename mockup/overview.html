@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KAIROS — Command Center</title>
+<link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600;700&family=Fira+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+<style>
+  :root{
+    --bg:#f4f6fb; --bg-1:#eef2f9; --surface:#ffffff; --surface-2:#f1f5fb;
+    --border:#dbe3ef; --border-soft:#e6ecf5;
+    --text:#14213a; --text-2:#4a5b78; --text-3:#8493ad;
+    --primary:#2563eb; --primary-deep:#1e40af; --accent:#c2620a; --accent-soft:#d97706;
+    --green:#059669; --amber:#d97706; --red:#dc2626; --violet:#7c3aed; --cyan:#0891b2;
+    --radius:14px;
+    --shadow:0 1px 2px rgba(16,24,40,.04),0 1px 3px rgba(16,24,40,.07);
+    --shadow-lg:0 4px 14px rgba(16,24,40,.07),0 2px 4px rgba(16,24,40,.04);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{background:var(--bg);color:var(--text);font-family:'Fira Sans',sans-serif;font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}
+  .num{font-family:'Fira Code',monospace;font-variant-numeric:tabular-nums}
+  a{color:inherit;text-decoration:none}
+
+  /* ───────── Shell: rail | service ───────── */
+  .shell{display:grid;grid-template-columns:64px 1fr;min-height:100vh}
+  .rail{background:linear-gradient(180deg,#101a2e,#0c1320);display:flex;flex-direction:column;align-items:center;padding:14px 0;gap:6px;position:sticky;top:0;height:100vh}
+  .rail-logo{width:40px;height:40px;border-radius:11px;background:radial-gradient(circle at 30% 30%,#60a5fa,#1e40af);display:grid;place-items:center;margin-bottom:10px;box-shadow:0 4px 14px rgba(37,99,235,.4)}
+  .rail-group{display:flex;flex-direction:column;gap:8px;width:100%;align-items:center}
+  .rail-foot{margin-top:auto;display:flex;flex-direction:column;gap:10px;align-items:center}
+  .rail-btn{position:relative;width:44px;height:44px;border:none;border-radius:13px;background:rgba(255,255,255,.04);color:#9fb3d4;display:grid;place-items:center;cursor:pointer;transition:.18s}
+  .rail-btn svg{width:21px;height:21px;stroke:currentColor;fill:none;stroke-width:1.8}
+  .rail-btn:hover{background:rgba(255,255,255,.1);color:#fff}
+  .rail-btn.active{background:rgba(59,130,246,.22);color:#fff}
+  .rail-btn.active::before{content:"";position:absolute;left:-14px;top:9px;width:4px;height:26px;border-radius:0 4px 4px 0;background:#60a5fa}
+  .rail-btn::after{content:attr(data-label);position:absolute;left:54px;top:50%;transform:translateY(-50%);background:#1a2740;color:#e6edf7;font-size:12px;font-family:'Fira Sans';font-weight:500;padding:5px 10px;border-radius:7px;white-space:nowrap;opacity:0;pointer-events:none;transition:.15s;box-shadow:var(--shadow-lg);z-index:50}
+  .rail-btn:hover::after{opacity:1}
+  .avatar{width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,#f5a524,#d97706);display:grid;place-items:center;color:#fff;font-weight:700;font-size:13px;font-family:'Fira Code'}
+
+  /* a service occupies the 1fr column; sidebar + main */
+  .service{display:grid;grid-template-columns:232px 1fr;min-height:100vh}
+  .service[hidden]{display:none}
+
+  /* Sidebar (shared) */
+  .side{background:#fff;border-right:1px solid var(--border);padding:22px 14px;position:sticky;top:0;height:100vh;display:flex;flex-direction:column;gap:6px;overflow-y:auto}
+  .side-head{display:flex;flex-direction:column;padding:2px 8px 16px;border-bottom:1px solid var(--border-soft);margin-bottom:8px}
+  .side-head b{font-size:15px;font-weight:700}
+  .side-head span{font-size:10px;color:var(--text-3);font-family:'Fira Code';letter-spacing:1px;text-transform:uppercase;margin-top:2px}
+  .nav-label{font-size:10px;text-transform:uppercase;letter-spacing:1.4px;color:var(--text-3);padding:14px 10px 6px}
+  .nav-item{display:flex;align-items:center;gap:11px;padding:9px 11px;border-radius:9px;color:var(--text-2);font-weight:500;cursor:pointer;transition:all .18s;font-size:13px}
+  .nav-item:hover{background:var(--surface-2);color:var(--text)}
+  .nav-item.active{background:linear-gradient(90deg,rgba(37,99,235,.12),rgba(37,99,235,.03));color:var(--primary-deep);box-shadow:inset 2px 0 0 var(--primary);font-weight:600}
+  .nav-item svg{width:17px;height:17px;flex-shrink:0;stroke:currentColor;stroke-width:1.7;fill:none}
+  .nav-item .badge{margin-left:auto;font-family:'Fira Code';font-size:10px;background:var(--accent-soft);color:#fff;border-radius:20px;padding:1px 7px;font-weight:700}
+  .side-foot{margin-top:auto;font-size:11px;color:var(--text-3);padding:12px 10px 0;border-top:1px solid var(--border-soft);font-family:'Fira Code'}
+  .pulse{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--green);margin-right:6px;box-shadow:0 0 6px rgba(5,150,105,.6);animation:pulse 2s infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+
+  /* edition list (brief) */
+  .edition{display:flex;align-items:center;gap:8px;padding:9px 11px;border-radius:9px;cursor:pointer;color:var(--text-2);font-family:'Fira Code';font-size:12.5px;transition:.16s}
+  .edition:hover{background:var(--surface-2);color:var(--text)}
+  .edition.active{background:linear-gradient(90deg,rgba(37,99,235,.12),rgba(37,99,235,.03));color:var(--primary-deep);box-shadow:inset 2px 0 0 var(--primary);font-weight:600}
+  .ed-tag{margin-left:auto;font-size:9px;font-weight:700;padding:1px 6px;border-radius:5px}
+  .ed-tag.thu{background:rgba(8,145,178,.13);color:var(--cyan)}
+  .ed-tag.mon{background:rgba(217,119,6,.14);color:var(--accent)}
+
+  /* Main */
+  .main{padding:0 0 48px;min-width:0}
+  .topbar{position:sticky;top:0;z-index:20;background:rgba(244,246,251,.85);backdrop-filter:blur(14px);border-bottom:1px solid var(--border);padding:16px 30px;display:flex;align-items:center;gap:18px;flex-wrap:wrap}
+  .topbar h2{font-size:19px;font-weight:600}
+  .topbar h2 small{color:var(--text-3);font-weight:400;font-size:13px;margin-left:8px}
+
+  .seg{display:inline-flex;background:var(--surface-2);border:1px solid var(--border);border-radius:11px;padding:3px;gap:2px}
+  .seg-btn{display:flex;align-items:center;gap:7px;border:none;background:transparent;color:var(--text-2);font-family:'Fira Sans';font-size:12.5px;font-weight:600;padding:7px 14px;border-radius:8px;cursor:pointer;transition:.16s}
+  .seg-btn:hover{color:var(--text)}
+  .seg-btn.active{background:#fff;color:var(--primary-deep);box-shadow:var(--shadow)}
+  .seg-btn .dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+  .dot.all{background:linear-gradient(135deg,#f5a524,#7c3aed)} .dot.poki{background:#f5a524} .dot.crazygames{background:#7c3aed}
+
+  .filters{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap}
+  .chip{display:flex;align-items:center;gap:7px;background:#fff;border:1px solid var(--border);border-radius:9px;padding:7px 12px;font-size:12.5px;color:var(--text-2);cursor:pointer;transition:.18s;font-weight:500;box-shadow:var(--shadow)}
+  .chip:hover{border-color:var(--primary);color:var(--primary)}
+  .chip svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:1.8}
+
+  .content{padding:24px 30px;display:flex;flex-direction:column;gap:22px}
+
+  .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
+  .kpi{background:#fff;border:1px solid var(--border-soft);border-radius:var(--radius);padding:18px 18px 16px;position:relative;overflow:hidden;box-shadow:var(--shadow)}
+  .kpi::after{content:"";position:absolute;right:-30px;top:-30px;width:90px;height:90px;border-radius:50%;background:radial-gradient(circle,rgba(37,99,235,.07),transparent 70%)}
+  .kpi.accent::after{background:radial-gradient(circle,rgba(217,119,6,.10),transparent 70%)}
+  .kpi .label{font-size:11.5px;color:var(--text-3);text-transform:uppercase;letter-spacing:.6px;font-weight:600;display:flex;align-items:center;gap:7px}
+  .kpi .label svg{width:14px;height:14px;stroke:var(--text-3);fill:none;stroke-width:1.7}
+  .kpi .val{font-family:'Fira Code';font-size:30px;font-weight:600;margin:9px 0 4px;letter-spacing:-.5px;color:var(--text)}
+  .kpi .delta{font-family:'Fira Code';font-size:12px;font-weight:600;display:inline-flex;align-items:center;gap:4px}
+  .delta.up{color:var(--green)} .delta.down{color:var(--red)} .delta.flat{color:var(--text-3)}
+  .kpi.accent .val{color:var(--accent)}
+
+  .grid{display:grid;gap:18px}
+  .g-2{grid-template-columns:1.55fr 1fr}
+  .g-2b{grid-template-columns:1fr 1.1fr}
+  .card{background:var(--surface);border:1px solid var(--border-soft);border-radius:var(--radius);padding:18px 20px;display:flex;flex-direction:column;box-shadow:var(--shadow)}
+  .card h3{font-size:14px;font-weight:600;display:flex;align-items:center;gap:8px;color:var(--text)}
+  .card h3 .sub{font-weight:400;color:var(--text-3);font-size:12px;margin-left:auto;font-family:'Fira Code'}
+  .card h3 svg{width:16px;height:16px;stroke:var(--primary);fill:none;stroke-width:1.8}
+  .chart{width:100%;flex:1;min-height:240px}
+
+  .insights{display:flex;flex-direction:column;gap:0}
+  .insight{display:flex;gap:13px;padding:13px 4px;border-bottom:1px solid var(--border-soft);cursor:pointer;transition:.16s}
+  .insight:last-child{border-bottom:none}
+  .insight:hover{background:var(--surface-2);border-radius:8px;padding-left:12px;padding-right:12px}
+  .ic{width:32px;height:32px;border-radius:9px;flex-shrink:0;display:grid;place-items:center;background:var(--surface-2)}
+  .ic svg{width:17px;height:17px;fill:none;stroke-width:1.9}
+  .ic.up{background:rgba(5,150,105,.10)} .ic.up svg{stroke:var(--green)}
+  .ic.down{background:rgba(220,38,38,.09)} .ic.down svg{stroke:var(--red)}
+  .ic.gap{background:rgba(217,119,6,.11)} .ic.gap svg{stroke:var(--accent-soft)}
+  .ic.gem{background:rgba(8,145,178,.11)} .ic.gem svg{stroke:var(--cyan)}
+  .insight .body{flex:1}
+  .insight .body p{font-size:13.5px;line-height:1.45;color:var(--text)}
+  .insight .body .meta{font-size:11px;color:var(--text-3);font-family:'Fira Code';margin-top:3px;display:flex;gap:10px}
+  .tag-op{font-size:10px;font-family:'Fira Code';padding:1px 7px;border-radius:5px;font-weight:600}
+  .tag-op.opp{background:rgba(217,119,6,.13);color:var(--accent)} .tag-op.dec{background:rgba(220,38,38,.11);color:var(--red)} .tag-op.gem{background:rgba(8,145,178,.12);color:var(--cyan)}
+
+  .gaplist{display:flex;flex-direction:column;gap:9px;margin-top:4px}
+  .gap{display:flex;align-items:center;gap:12px;padding:11px 13px;background:var(--bg-1);border:1px solid var(--border-soft);border-radius:10px;transition:.16s;cursor:pointer}
+  .gap:hover{border-color:var(--accent-soft);transform:translateX(2px);background:#fff;box-shadow:var(--shadow)}
+  .gap .rank{font-family:'Fira Code';font-size:13px;color:var(--accent);font-weight:700;width:22px}
+  .gap .name{font-weight:600;font-size:13px}
+  .gap .name small{display:block;color:var(--text-3);font-weight:400;font-size:11px;font-family:'Fira Code';margin-top:1px}
+  .gap .bars{margin-left:auto;display:flex;flex-direction:column;gap:4px;width:120px}
+  .bar{height:5px;border-radius:3px;background:var(--border);overflow:hidden}
+  .bar i{display:block;height:100%;border-radius:3px}
+  .bar.demand i{background:linear-gradient(90deg,var(--green),var(--cyan))} .bar.supply i{background:var(--text-3)}
+  .gap .barlbl{font-size:9px;color:var(--text-3);font-family:'Fira Code';display:flex;justify-content:space-between}
+  .foot-note{text-align:center;color:var(--text-3);font-size:11px;font-family:'Fira Code';padding-top:8px}
+
+  /* ───────── Brief reader ───────── */
+  .section-title{font-size:11px;text-transform:uppercase;letter-spacing:1.2px;color:var(--text-3);font-weight:700;display:flex;align-items:center;gap:9px;margin:6px 0 -6px}
+  .section-title .n{width:20px;height:20px;border-radius:6px;background:var(--primary);color:#fff;display:grid;place-items:center;font-family:'Fira Code';font-size:11px}
+  .ref-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .ref-card{background:#fff;border:1px solid var(--border-soft);border-radius:12px;padding:15px 16px;box-shadow:var(--shadow);transition:.16s;cursor:pointer}
+  .ref-card:hover{border-color:var(--primary);transform:translateY(-2px);box-shadow:var(--shadow-lg)}
+  .ref-card .rtag{font-size:9.5px;font-family:'Fira Code';font-weight:700;letter-spacing:.5px;color:var(--primary);background:rgba(37,99,235,.1);padding:2px 7px;border-radius:5px}
+  .ref-card h4{font-size:14.5px;margin:9px 0 3px;font-weight:600}
+  .ref-card .src{font-family:'Fira Code';font-size:11px;color:var(--text-3);margin-bottom:8px}
+  .ref-card p{font-size:13px;color:var(--text-2);line-height:1.5}
+  .brief-bullets{display:flex;flex-direction:column;gap:0}
+  .action{display:flex;align-items:center;gap:11px;padding:11px 14px;background:#fff;border:1px solid var(--border-soft);border-radius:10px;margin-bottom:8px;box-shadow:var(--shadow)}
+  .action .box{width:18px;height:18px;border:2px solid var(--border);border-radius:5px;flex-shrink:0}
+  .action p{font-size:13.5px}
+
+  /* ───────── Library empty state ───────── */
+  .empty{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:64px 20px 40px;gap:8px;color:var(--text-3);min-height:60vh}
+  .empty .big-ic{width:72px;height:72px;border-radius:20px;background:linear-gradient(160deg,var(--surface-2),#e3e9f5);display:grid;place-items:center;margin-bottom:10px}
+  .empty .big-ic svg{width:34px;height:34px;stroke:var(--text-3);fill:none;stroke-width:1.5}
+  .empty h3{font-size:18px;color:var(--text);font-weight:600}
+  .empty p{font-size:13.5px;max-width:380px}
+  .ghost-row{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;width:100%;max-width:740px;margin-top:22px}
+  .ghost{height:120px;border:2px dashed var(--border);border-radius:13px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;color:var(--text-3);font-size:11.5px;font-family:'Fira Code';background:rgba(255,255,255,.4)}
+  .ghost svg{width:22px;height:22px;stroke:var(--text-3);fill:none;stroke-width:1.6;opacity:.7}
+  .btn-soft{margin-top:24px;display:inline-flex;align-items:center;gap:8px;background:var(--primary);color:#fff;border:none;border-radius:10px;padding:10px 18px;font-family:'Fira Sans';font-size:13px;font-weight:600;cursor:not-allowed;opacity:.55}
+  .btn-soft svg{width:15px;height:15px;stroke:#fff;fill:none;stroke-width:2}
+  .soon{font-size:11px;font-family:'Fira Code';margin-top:10px;color:var(--text-3);background:var(--surface-2);padding:4px 10px;border-radius:20px}
+
+  @media(max-width:1080px){.kpis{grid-template-columns:repeat(2,1fr)}.g-2,.g-2b,.ref-grid{grid-template-columns:1fr}.service{grid-template-columns:1fr}.side{display:none}.ghost-row{grid-template-columns:repeat(2,1fr)}}
+</style>
+</head>
+<body>
+<div class="shell">
+  <!-- ═══════════ SERVICE RAIL ═══════════ -->
+  <nav class="rail">
+    <div class="rail-logo">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg>
+    </div>
+    <div class="rail-group">
+      <button class="rail-btn active" data-svc="radar" data-label="GameRadar — Market Intel"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 12l6-3"/><path d="M12 3v3M21 12h-3"/><circle cx="12" cy="12" r="2.4" fill="currentColor" stroke="none"/></svg></button>
+      <button class="rail-btn" data-svc="brief" data-label="News Brief"><svg viewBox="0 0 24 24"><path d="M4 5h13v14a1 1 0 0 1-1 1H6a2 2 0 0 1-2-2z"/><path d="M17 8h3v10a2 2 0 0 1-2 2"/><path d="M7 9h7M7 13h7M7 17h4"/></svg></button>
+      <button class="rail-btn" data-svc="library" data-label="Library"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></button>
+    </div>
+    <div class="rail-foot">
+      <button class="rail-btn" data-label="Settings"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1.3l2-1.5-2-3.4-2.3 1a7 7 0 0 0-2.3-1.3L13.5 2h-3l-.5 2.5a7 7 0 0 0-2.3 1.3l-2.3-1-2 3.4 2 1.5a7 7 0 0 0 0 2.6l-2 1.5 2 3.4 2.3-1a7 7 0 0 0 2.3 1.3l.5 2.5h3l.5-2.5a7 7 0 0 0 2.3-1.3l2.3 1 2-3.4-2-1.5A7 7 0 0 0 19 12z"/></svg></button>
+      <div class="avatar">R</div>
+    </div>
+  </nav>
+
+  <!-- ═══════════ SERVICE 1: GAMERADAR ═══════════ -->
+  <section class="service" data-svc="radar">
+    <aside class="side">
+      <div class="side-head"><b>GameRadar</b><span>market intel</span></div>
+      <div class="nav-label">Discover</div>
+      <a class="nav-item active"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg>Overview</a>
+      <a class="nav-item"><svg viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/></svg>Genre Explorer</a>
+      <a class="nav-item"><svg viewBox="0 0 24 24"><circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="8" r="2.5"/><circle cx="9" cy="17" r="2.5"/><path d="M8 7l8 1M8 8l1 7M16 10l-6 6"/></svg>Tag Explorer</a>
+      <a class="nav-item"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.5"/><path d="M5 21c0-3.9 3.1-7 7-7s7 3.1 7 7"/></svg>Developers</a>
+      <a class="nav-item"><svg viewBox="0 0 24 24"><path d="M3 17l6-6 4 4 8-8"/><path d="M17 7h4v4"/></svg>Trends</a>
+      <div class="nav-label">Opportunity</div>
+      <a class="nav-item"><svg viewBox="0 0 24 24"><path d="M12 3l2.5 5.5L20 9l-4 4 1 6-5-3-5 3 1-6-4-4 5.5-.5z"/></svg>Hidden Gems<span class="badge" id="navGems">31</span></a>
+      <a class="nav-item"><svg viewBox="0 0 24 24"><path d="M5 12h14M12 5v14"/><circle cx="12" cy="12" r="9"/></svg>New Releases<span class="badge" id="navNew">88</span></a>
+      <a class="nav-item"><svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 10 10"/><path d="M12 2v10l7-7"/></svg>Market Gaps<span class="badge" id="navGaps">12</span></a>
+      <div class="side-foot"><span class="pulse"></span>Crawl OK · <span id="footGames">18,402</span> games<br>Last run 2026-06-26 04:12</div>
+    </aside>
+
+    <main class="main">
+      <div class="topbar">
+        <h2>Market Overview <small id="subtitle">Poki + CrazyGames · last 90 days</small></h2>
+        <div class="seg" id="platformSeg" role="tablist" aria-label="Platform">
+          <button class="seg-btn active" data-p="all" role="tab" aria-selected="true"><span class="dot all"></span>All</button>
+          <button class="seg-btn" data-p="poki" role="tab" aria-selected="false"><span class="dot poki"></span>Poki</button>
+          <button class="seg-btn" data-p="crazygames" role="tab" aria-selected="false"><span class="dot crazygames"></span>CrazyGames</button>
+        </div>
+        <div class="filters">
+          <div class="chip"><svg viewBox="0 0 24 24"><path d="M4 6h16M7 12h10M10 18h4"/></svg>Genre</div>
+          <div class="chip"><svg viewBox="0 0 24 24"><path d="M20.6 7.3l-8-4.6a1 1 0 0 0-1 0l-8 4.6"/><path d="M4 7v10l8 4.6 8-4.6V7"/></svg>Rating ≥ 4.0</div>
+          <div class="chip"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>Search</div>
+        </div>
+      </div>
+      <div class="content">
+        <div class="kpis">
+          <div class="kpi"><div class="label"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18M3 9h6"/></svg>Games tracked</div><div class="val num" id="kGames">18,402</div><span class="delta up num" id="kNew">▲ 88 new this week</span></div>
+          <div class="kpi"><div class="label"><svg viewBox="0 0 24 24"><path d="M12 2l3 7h7l-5.5 4 2 7L12 16l-6.5 4 2-7L2 9h7z"/></svg>Avg rating</div><div class="val num" id="kRating">4.21</div><span class="delta flat num" id="kRatingDelta">▬ stable vs last mo.</span></div>
+          <div class="kpi"><div class="label"><svg viewBox="0 0 24 24"><path d="M3 17l6-6 4 4 8-8"/></svg>Fastest genre</div><div class="val num" id="kFastest" style="font-size:24px;padding-top:4px">Survivor-likes</div><span class="delta up num" id="kFastestDelta">▲ +34% features / 4w</span></div>
+          <div class="kpi accent"><div class="label"><svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 10 10"/><path d="M12 2v10l7-7"/></svg>Open market gaps</div><div class="val num" id="kGaps">12</div><span class="delta up num" id="kGapsDelta">▲ 3 newly surfaced</span></div>
+        </div>
+        <div class="grid g-2">
+          <div class="card"><h3><svg viewBox="0 0 24 24"><path d="M3 17l6-6 4 4 8-8"/><path d="M17 7h4v4"/></svg>Genre momentum <span class="sub">weekly homepage features</span></h3><div id="momentum" class="chart"></div></div>
+          <div class="card"><h3><svg viewBox="0 0 24 24"><path d="M12 2a7 7 0 0 0-4 12.7V17h8v-2.3A7 7 0 0 0 12 2z"/><path d="M9 21h6"/></svg>AI Insights <span class="sub">auto-generated</span></h3><div class="insights" id="insightFeed"></div></div>
+        </div>
+        <div class="grid g-2b">
+          <div class="card"><h3><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="1"/><path d="M3 11h11M14 3v18M14 13h7"/></svg>Tag frequency <span class="sub">top tags by game count</span></h3><div id="treemap" class="chart"></div></div>
+          <div class="card"><h3><svg viewBox="0 0 24 24"><path d="M3 3v18h18"/><circle cx="8" cy="15" r="1.4"/><circle cx="13" cy="9" r="1.4"/><circle cx="17" cy="12" r="1.4"/><circle cx="11" cy="17" r="1.4"/></svg>Hidden-gem finder <span class="sub">rating × visibility</span></h3><div id="scatter" class="chart"></div></div>
+        </div>
+        <div class="grid g-2">
+          <div class="card"><h3><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="1"/><path d="M3 9h18M3 15h18M9 3v18M15 3v18"/></svg>Feature heatmap <span class="sub">genre × week intensity</span></h3><div id="heatmap" class="chart" style="min-height:260px"></div></div>
+          <div class="card"><h3><svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 10 10"/><path d="M12 2v10l7-7"/></svg>Top market gaps <span class="sub">demand ▸ supply</span></h3><div class="gaplist" id="gapList"></div></div>
+        </div>
+        <div class="foot-note">KAIROS · GameRadar service · sample data · platform-filtered via <span class="num">source_id</span></div>
+      </div>
+    </main>
+  </section>
+
+  <!-- ═══════════ SERVICE 2: NEWS BRIEF ═══════════ -->
+  <section class="service" data-svc="brief" hidden>
+    <aside class="side">
+      <div class="side-head"><b>News Brief</b><span>indie + gaming · mon/thu</span></div>
+      <div class="nav-label">This week</div>
+      <a class="edition active"><span>Jun 26</span><span class="ed-tag thu">THU</span></a>
+      <a class="edition"><span>Jun 23</span><span class="ed-tag mon">MON</span></a>
+      <div class="nav-label">Earlier</div>
+      <a class="edition"><span>Jun 19</span><span class="ed-tag thu">THU</span></a>
+      <a class="edition"><span>Jun 16</span><span class="ed-tag mon">MON</span></a>
+      <a class="edition"><span>Jun 12</span><span class="ed-tag thu">THU</span></a>
+      <a class="edition"><span>Jun 9</span><span class="ed-tag mon">MON</span></a>
+      <div class="side-foot"><span class="pulse"></span>Next: Mon Jun 30 · 07:00<br>Routine: indie-brief-pipeline</div>
+    </aside>
+
+    <main class="main">
+      <div class="topbar">
+        <h2>Indie &amp; Gaming Brief <small>Edition 2026-06-26 · Thursday</small></h2>
+        <div class="filters">
+          <div class="chip"><svg viewBox="0 0 24 24"><path d="M12 2l3 7h7l-5.5 4 2 7L12 16l-6.5 4 2-7L2 9h7z"/></svg>14 sources</div>
+          <div class="chip"><svg viewBox="0 0 24 24"><path d="M14 3h7v7M21 3l-9 9M10 5H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5"/></svg>Open in Notion</div>
+        </div>
+      </div>
+      <div class="content">
+        <div class="section-title"><span class="n">1</span>Design references — Tier 1</div>
+        <div class="ref-grid">
+          <div class="ref-card"><span class="rtag">MECHANIC</span><h4>Vampire Survivors' "weapon evolution" loop</h4><div class="src">gamedeveloper.com · postmortem</div><p>Auto-attack + evolution pairs create a 3-minute dopamine cadence. Transfers cleanly to a short-session web build.</p></div>
+          <div class="ref-card"><span class="rtag">UX</span><h4>Cozy onboarding without tutorials</h4><div class="src">GDC talk · 22 min</div><p>Diegetic first-five-minutes beats explicit tutorials for casual-web retention. Worth a prototype test.</p></div>
+        </div>
+
+        <div class="section-title"><span class="n">2</span>Solo-dev benchmarks — Tier 2</div>
+        <div class="ref-grid">
+          <div class="ref-card"><span class="rtag">SHIPPED</span><h4>1-dev survivor-like → 4.6★ on CrazyGames</h4><div class="src">devlog · 6-week build</div><p>WebGL build under 18 MB, Phaser. Confirms a one-person scope can hit the rising survivor-like wave.</p></div>
+          <div class="ref-card"><span class="rtag">REVENUE</span><h4>Rewarded-ad pacing for web</h4><div class="src">solo-dev thread</div><p>Offer-on-death + offer-on-revive monetizes without nagging. ~$2.1 RPM cited for action genre.</p></div>
+        </div>
+
+        <div class="section-title"><span class="n">3</span>Market signals</div>
+        <div class="brief-bullets insights">
+          <div class="insight"><div class="ic up"><svg viewBox="0 0 24 24"><path d="M3 17l6-6 4 4 8-8"/><path d="M17 7h4v4"/></svg></div><div class="body"><p>Survivor-likes keep climbing on CrazyGames — <b>cross-check the Radar gap list</b> before committing.</p><div class="meta"><span class="tag-op opp">SUSTAINED</span><span>4th week up</span></div></div></div>
+          <div class="insight"><div class="ic gap"><svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 10 10"/><path d="M12 2v10l7-7"/></svg></div><div class="body"><p>Cozy + automation hybrids are under-served vs. demand on Poki.</p><div class="meta"><span class="tag-op opp">OPPORTUNITY</span><span>matches Radar gap #3</span></div></div></div>
+          <div class="insight"><div class="ic gem"><svg viewBox="0 0 24 24"><path d="M12 3l2.5 5.5L20 9l-4 4 1 6-5-3-5 3 1-6-4-4 5.5-.5z"/></svg></div><div class="body"><p>Three new WebGL perf tools dropped this week — relevant if load-time is your blocker.</p><div class="meta"><span class="tag-op gem">TOOLING</span><span>see refs</span></div></div></div>
+        </div>
+
+        <div class="section-title"><span class="n">4</span>Action items</div>
+        <div>
+          <div class="action"><div class="box"></div><p>Prototype a short-session survivor-like loop (validate against Radar gap #2).</p></div>
+          <div class="action"><div class="box"></div><p>Test diegetic onboarding on next build — no tutorial popups.</p></div>
+        </div>
+        <div class="foot-note">KAIROS · News Brief service · sample edition · persisted to <span class="num">brief_editions</span> by the Mon/Thu routine</div>
+      </div>
+    </main>
+  </section>
+
+  <!-- ═══════════ SERVICE 3: LIBRARY ═══════════ -->
+  <section class="service" data-svc="library" hidden>
+    <aside class="side">
+      <div class="side-head"><b>Library</b><span>work showcase</span></div>
+      <div class="nav-label">Collections</div>
+      <a class="nav-item active"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/></svg>All items<span class="badge" style="background:var(--text-3)">0</span></a>
+      <a class="nav-item"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>Prototypes<span class="badge" style="background:var(--text-3)">0</span></a>
+      <a class="nav-item"><svg viewBox="0 0 24 24"><path d="M4 4h16v16H4z"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>Design Docs<span class="badge" style="background:var(--text-3)">0</span></a>
+      <a class="nav-item"><svg viewBox="0 0 24 24"><circle cx="9" cy="9" r="2"/><path d="M4 4h16v16H4z"/><path d="M4 16l5-4 4 3 3-2 4 3"/></svg>Art Explorations<span class="badge" style="background:var(--text-3)">0</span></a>
+      <a class="nav-item"><svg viewBox="0 0 24 24"><path d="M12 3l8 4-8 4-8-4z"/><path d="M4 12l8 4 8-4M4 17l8 4 8-4"/></svg>References<span class="badge" style="background:var(--text-3)">0</span></a>
+      <div class="side-foot">Empty · wire up in V2</div>
+    </aside>
+    <main class="main">
+      <div class="topbar"><h2>Library <small>prototypes · design docs · art exploration</small></h2></div>
+      <div class="content">
+        <div class="empty">
+          <div class="big-ic"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 17.5h7M17.5 14v7"/></svg></div>
+          <h3>Your library is empty</h3>
+          <p>A home for your prototypes, design docs, and art-style explorations — so your own work lives next to the market intel that informs it.</p>
+          <div class="ghost-row">
+            <div class="ghost"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>Prototypes</div>
+            <div class="ghost"><svg viewBox="0 0 24 24"><path d="M4 4h16v16H4z"/><path d="M8 8h8M8 12h8"/></svg>Design Docs</div>
+            <div class="ghost"><svg viewBox="0 0 24 24"><circle cx="9" cy="9" r="2"/><path d="M4 4h16v16H4z"/><path d="M4 16l5-4 4 3 3-2 4 3"/></svg>Art</div>
+            <div class="ghost"><svg viewBox="0 0 24 24"><path d="M12 3l8 4-8 4-8-4z"/><path d="M4 12l8 4 8-4"/></svg>References</div>
+          </div>
+          <button class="btn-soft"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Add item</button>
+          <div class="soon">Planned for V2 — schema ready (library_items)</div>
+        </div>
+      </div>
+    </main>
+  </section>
+</div>
+
+<script>
+const AX='#64748b', GRID='#e6ecf5';
+const tip={backgroundColor:'#ffffff',borderColor:'#dbe3ef',textStyle:{color:'#14213a',fontFamily:"'Fira Code',monospace",fontSize:11},extraCssText:'box-shadow:0 4px 14px rgba(16,24,40,.10)'};
+const FONT="'Fira Code', monospace";
+const baseGrid={left:46,right:18,top:24,bottom:30};
+const weeks=['W18','W19','W20','W21','W22','W23','W24','W25','W26'];
+const TREE_COLORS=['#1e3a8a','#1e40af','#2563eb','#3b82f6','#0e7490','#0891b2','#0ea5b7','#b45309','#c2620a','#d97706','#7c3aed','#9333ea'];
+
+const DATA={
+  all:{subtitle:'Poki + CrazyGames · last 90 days',games:'18,402',footGames:'18,402',newWk:'▲ 88 new this week',rating:'4.21',ratingCls:'flat',ratingDelta:'▬ stable vs last mo.',fastest:'Survivor-likes',fastestDelta:'▲ +34% features / 4w',gaps:'12',gapsDelta:'▲ 3 newly surfaced',navGems:'31',navNew:'88',navGaps:'12',
+    momentum:[{name:'Survivor-like',color:'#059669',area:true,data:[22,26,29,31,38,44,49,58,64]},{name:'.io / multiplayer',color:'#2563eb',data:[40,42,41,45,44,47,46,48,50]},{name:'Driving',color:'#d97706',data:[33,32,34,31,30,29,31,28,27]},{name:'Puzzle',color:'#dc2626',data:[55,52,49,47,44,40,37,34,31]}],
+    tags:[['Action',2840],['Puzzle',2110],['Multiplayer',1760],['Casual',1540],['Racing',1180],['Shooter',1090],['Adventure',980],['Strategy',760],['Idle',540],['Survivor',430],['Horror',360],['Sports',320]],
+    scatterSeed:99,heatRows:['Survivor','Puzzle','Driving','.io','Idle','Horror','Shooter'],heatTrend:[1.6,0.5,0.9,1.1,1.2,1.0,1.05],heatSeed:7,
+    gaps:[['Physics Roguelite','physics × roguelite × short-session',88,7],['Co-op Bullet Heaven','survivor-like × multiplayer × mobile',81,12],['Cozy Idle Sim','idle × cozy × portrait',74,19],['Drift × Tower Defense','driving × strategy × short-session',69,9]],
+    insights:[['down','dec','DECLINING','−38% · n=412','Puzzle games have declined for <b>four consecutive weeks</b> in homepage features.'],['gap','opp','OPPORTUNITY','demand p88 · supply p07','Only <b>6 successful physics-roguelites</b> exist — high demand, almost no supply.'],['up','opp','RISING','+28% QoQ','Stylized <b>low-poly</b> games increased <b>28%</b> in new releases this quarter.'],['gem','gem','UNDER-FEATURED','rating p82 · feature p41','Driving games rate <b>4.34</b> on average but receive <b>40% fewer features</b>.'],['up','opp','STICKY','11.2d vs 5.4d','The average <b>survival</b> game stays featured for <b>11 days</b> — 2× the platform mean.']]},
+  poki:{subtitle:'Poki · last 90 days',games:'7,640',footGames:'7,640',newWk:'▲ 39 new this week',rating:'4.28',ratingCls:'up',ratingDelta:'▲ +0.04 vs last mo.',fastest:'Idle / Cozy',fastestDelta:'▲ +29% features / 4w',gaps:'7',gapsDelta:'▲ 2 newly surfaced',navGems:'18',navNew:'39',navGaps:'7',
+    momentum:[{name:'Idle / Cozy',color:'#059669',area:true,data:[18,20,23,26,30,34,38,43,48]},{name:'Casual',color:'#2563eb',data:[44,45,44,46,45,47,46,48,47]},{name:'Driving',color:'#d97706',data:[20,19,21,20,18,19,17,18,16]},{name:'Puzzle',color:'#dc2626',data:[62,60,58,57,55,53,52,50,49]}],
+    tags:[['Puzzle',1820],['Casual',1610],['Action',760],['Girls',980],['Idle',720],['Adventure',610],['Dress-up',540],['Match-3',410],['Cooking',360],['Racing',320],['Multiplayer',430],['Cards',230]],
+    scatterSeed:211,heatRows:['Idle','Puzzle','Casual','Cooking','Girls','Adventure','Match-3'],heatTrend:[1.5,0.6,1.0,0.95,0.9,1.05,0.85],heatSeed:23,
+    gaps:[['Cozy Idle Sim','idle × cozy × portrait',79,14],['Physics Puzzle-roguelite','physics × puzzle × short-session',76,8],['Cooking × Merge','cooking × merge × portrait',71,16],['Dress-up RPG','girls × rpg × progression',66,12]],
+    insights:[['up','opp','RISING','+29% / 4w','<b>Idle / cozy</b> games are Poki\'s fastest-growing category this month.'],['gap','opp','OPPORTUNITY','demand p79 · supply p14','<b>Cozy idle sims</b> over-index in demand but few studios serve them on Poki.'],['down','dec','DECLINING','−21% · n=1.8k','Classic <b>match-3</b> is slowly losing homepage features to merge hybrids.'],['gem','gem','PORTRAIT','82% portrait','Poki skews <b>mobile-portrait</b> — short, one-thumb sessions win features.'],['up','opp','STICKY','9.1d vs 5.4d','Top <b>cooking</b> games stay featured ~9 days, above the platform mean.']]},
+  crazygames:{subtitle:'CrazyGames · last 90 days',games:'10,762',footGames:'10,762',newWk:'▲ 49 new this week',rating:'4.15',ratingCls:'flat',ratingDelta:'▬ stable vs last mo.',fastest:'Survivor-likes',fastestDelta:'▲ +41% features / 4w',gaps:'9',gapsDelta:'▲ 2 newly surfaced',navGems:'22',navNew:'49',navGaps:'9',
+    momentum:[{name:'Survivor-like',color:'#059669',area:true,data:[15,18,22,26,31,37,43,52,61]},{name:'.io / multiplayer',color:'#2563eb',data:[48,50,52,55,57,60,62,65,68]},{name:'Shooter',color:'#d97706',data:[38,40,39,41,42,41,43,42,44]},{name:'Puzzle',color:'#dc2626',data:[30,28,27,25,24,22,21,20,19]}],
+    tags:[['Action',2480],['.io',1520],['Multiplayer',1330],['Shooter',1180],['Driving',1040],['Adventure',690],['Casual',610],['Strategy',560],['Stickman',420],['Survivor',380],['Horror',340],['Sports',300]],
+    scatterSeed:533,heatRows:['Survivor','.io','Shooter','Driving','Horror','Action','Stickman'],heatTrend:[1.7,1.3,1.05,0.95,1.0,1.1,1.0],heatSeed:41,
+    gaps:[['Co-op Bullet Heaven','survivor-like × multiplayer × web',86,11],['Physics Roguelite','physics × roguelite × short-session',84,6],['Drift × Tower Defense','driving × strategy × short-session',72,9],['Extraction Shooter (lite)','shooter × loot × session',70,13]],
+    insights:[['up','opp','SURGING','+41% / 4w','<b>Survivor-likes</b> are exploding on CrazyGames — fastest feature growth on the platform.'],['gap','opp','OPPORTUNITY','demand p86 · supply p11','<b>Co-op bullet heavens</b> are in high demand with very thin web supply.'],['up','opp','RISING','+18% QoQ','<b>.io / multiplayer</b> remains the structural backbone of homepage features.'],['gem','gem','UNDER-FEATURED','rating p80 · feature p43','<b>Driving</b> games rate well but are under-featured versus shooters.'],['up','opp','STICKY','12.4d vs 6.1d','Top <b>survival</b> titles hold features ~12 days — the stickiest genre here.']]}
+};
+
+function mk(id){const c=echarts.init(document.getElementById(id),null,{renderer:'canvas'});window.addEventListener('resize',()=>c.resize());return c;}
+const cMom=mk('momentum'),cTree=mk('treemap'),cScat=mk('scatter'),cHeat=mk('heatmap');
+const CHARTS=[cMom,cTree,cScat,cHeat];
+function rng(seed){let s=seed;return()=>{s=(s*9301+49297)%233280;return s/233280;};}
+
+function buildMomentum(d){return{tooltip:{trigger:'axis',...tip},legend:{top:0,right:0,textStyle:{color:AX,fontSize:11,fontFamily:FONT},icon:'roundRect',itemWidth:11,itemHeight:4},grid:{...baseGrid,top:34},xAxis:{type:'category',data:weeks,axisLine:{lineStyle:{color:GRID}},axisLabel:{color:AX,fontFamily:FONT,fontSize:10}},yAxis:{type:'value',splitLine:{lineStyle:{color:GRID}},axisLabel:{color:AX,fontFamily:FONT,fontSize:10}},series:d.momentum.map(s=>({name:s.name,type:'line',smooth:true,symbol:'none',data:s.data,lineStyle:{width:s.area?3:2.5,color:s.color},areaStyle:s.area?{color:s.color,opacity:.12}:null}))};}
+function buildTree(d){return{tooltip:{...tip,formatter:p=>`${p.name}<br><b>${p.value}</b> games`},series:[{type:'treemap',roam:false,nodeClick:false,breadcrumb:{show:false},width:'100%',height:'100%',top:6,bottom:6,left:0,right:0,itemStyle:{borderColor:'#fff',borderWidth:2,gapWidth:2},label:{color:'#fff',fontFamily:FONT,fontSize:11,fontWeight:600,textShadowColor:'rgba(0,0,0,.25)',textShadowBlur:3},levels:[{color:TREE_COLORS,colorMappingBy:'index'}],data:d.tags.map(t=>({name:t[0],value:t[1]}))}]};}
+function buildScatter(d){const r=rng(d.scatterSeed);const pts=(n,rMin,rMax,vMin,vMax)=>{const a=[];for(let i=0;i<n;i++)a.push([Math.round(vMin+r()*(vMax-vMin)),+(rMin+r()*(rMax-rMin)).toFixed(2)]);return a;};return{tooltip:{...tip,formatter:p=>`rating <b>${p.value[1]}</b><br>${p.value[0].toLocaleString()} votes`},grid:{...baseGrid,left:40,top:18},xAxis:{type:'log',name:'votes (visibility)',nameTextStyle:{color:AX,fontFamily:FONT,fontSize:10},axisLine:{lineStyle:{color:GRID}},axisLabel:{color:AX,fontFamily:FONT,fontSize:9},splitLine:{lineStyle:{color:GRID}}},yAxis:{type:'value',min:2.5,max:5,name:'rating',nameTextStyle:{color:AX,fontFamily:FONT,fontSize:10},axisLine:{lineStyle:{color:GRID}},axisLabel:{color:AX,fontFamily:FONT,fontSize:9},splitLine:{lineStyle:{color:GRID}}},series:[{name:'crowd',type:'scatter',symbolSize:6,itemStyle:{color:'rgba(100,116,139,.40)'},data:pts(140,2.8,4.8,3000,900000)},{name:'gems',type:'scatter',symbolSize:9,itemStyle:{color:'#0891b2',borderColor:'#fff',borderWidth:1,shadowBlur:6,shadowColor:'rgba(8,145,178,.5)'},data:pts(26,4.45,4.95,120,4500),markArea:{itemStyle:{color:'rgba(8,145,178,.07)'},data:[[{xAxis:100,yAxis:4.4},{xAxis:5000,yAxis:5}]]}}]};}
+function buildHeat(d){const r=rng(d.heatSeed);const data=[];for(let y=0;y<d.heatRows.length;y++)for(let x=0;x<weeks.length;x++){let base=4+r()*6;base*=(1+(x/weeks.length)*(d.heatTrend[y]-1));data.push([x,y,Math.round(base)]);}return{tooltip:{...tip,formatter:p=>`${d.heatRows[p.value[1]]} · ${weeks[p.value[0]]}<br><b>${p.value[2]}</b> features`},grid:{left:84,right:14,top:10,bottom:46},xAxis:{type:'category',data:weeks,axisLine:{lineStyle:{color:GRID}},axisLabel:{color:AX,fontFamily:FONT,fontSize:10},splitArea:{show:false}},yAxis:{type:'category',data:d.heatRows,axisLine:{lineStyle:{color:GRID}},axisLabel:{color:AX,fontFamily:FONT,fontSize:10}},visualMap:{min:0,max:16,calculable:true,orient:'horizontal',left:'center',bottom:4,itemWidth:10,itemHeight:90,textStyle:{color:AX,fontFamily:FONT,fontSize:10},inRange:{color:['#eef2f9','#bfdbfe','#60a5fa','#2563eb','#1e3a8a']}},series:[{type:'heatmap',data,label:{show:true,color:'#334155',fontFamily:FONT,fontSize:9},itemStyle:{borderColor:'#fff',borderWidth:2},emphasis:{itemStyle:{shadowBlur:8,shadowColor:'rgba(37,99,235,.4)'}}}]};}
+const ICONS={up:'<path d="M3 17l6-6 4 4 8-8"/><path d="M17 7h4v4"/>',down:'<path d="M3 7l6 6 4-4 8 8"/><path d="M21 21h-4v-4"/>',gap:'<path d="M12 2a10 10 0 1 0 10 10"/><path d="M12 2v10l7-7"/>',gem:'<path d="M12 3l2.5 5.5L20 9l-4 4 1 6-5-3-5 3 1-6-4-4 5.5-.5z"/>'};
+function renderGaps(d){document.getElementById('gapList').innerHTML=d.gaps.map((g,i)=>`<div class="gap"><span class="rank num">${i+1}</span><div class="name">${g[0]}<small>${g[1]}</small></div><div class="bars"><div class="barlbl"><span>demand</span><span>${g[2]}</span></div><div class="bar demand"><i style="width:${g[2]}%"></i></div><div class="barlbl"><span>supply</span><span>${g[3]}</span></div><div class="bar supply"><i style="width:${g[3]}%"></i></div></div></div>`).join('');}
+function renderInsights(d){document.getElementById('insightFeed').innerHTML=d.insights.map(x=>`<div class="insight"><div class="ic ${x[0]}"><svg viewBox="0 0 24 24">${ICONS[x[0]]}</svg></div><div class="body"><p>${x[4]}</p><div class="meta"><span class="tag-op ${x[1]}">${x[2]}</span><span>${x[3]}</span></div></div></div>`).join('');}
+function setText(id,v){document.getElementById(id).textContent=v;}
+function render(p){const d=DATA[p];setText('subtitle',d.subtitle);setText('footGames',d.footGames);setText('kGames',d.games);setText('kNew',d.newWk);setText('kRating',d.rating);setText('kFastest',d.fastest);setText('kFastestDelta',d.fastestDelta);setText('kGaps',d.gaps);setText('kGapsDelta',d.gapsDelta);setText('navGems',d.navGems);setText('navNew',d.navNew);setText('navGaps',d.navGaps);const rd=document.getElementById('kRatingDelta');rd.textContent=d.ratingDelta;rd.className='delta '+d.ratingCls+' num';cMom.setOption(buildMomentum(d),true);cTree.setOption(buildTree(d),true);cScat.setOption(buildScatter(d),true);cHeat.setOption(buildHeat(d),true);renderGaps(d);renderInsights(d);}
+
+document.getElementById('platformSeg').addEventListener('click',e=>{const b=e.target.closest('.seg-btn');if(!b)return;document.querySelectorAll('#platformSeg .seg-btn').forEach(x=>{x.classList.remove('active');x.setAttribute('aria-selected','false');});b.classList.add('active');b.setAttribute('aria-selected','true');render(b.dataset.p);});
+
+/* service switching */
+document.querySelector('.rail').addEventListener('click',e=>{
+  const b=e.target.closest('.rail-btn[data-svc]'); if(!b) return;
+  const svc=b.dataset.svc;
+  document.querySelectorAll('.rail-btn[data-svc]').forEach(x=>x.classList.remove('active'));
+  b.classList.add('active');
+  document.querySelectorAll('.service').forEach(s=>s.hidden=(s.dataset.svc!==svc));
+  if(svc==='radar') setTimeout(()=>CHARTS.forEach(c=>c.resize()),30);
+});
+
+render('all');
+</script>
+</body>
+</html>

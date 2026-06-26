@@ -1,0 +1,15 @@
+# Netlify build for KAIROS. Repo root is browser-game-intel/; app lives in app/.
+[build]
+  base = "app"
+  command = "npm run build"
+  publish = "web/dist"
+
+[functions]
+  directory = "netlify/functions"
+  node_bundler = "esbuild"
+
+# SPA fallback (the /api/* function declares its own path and takes precedence).
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
