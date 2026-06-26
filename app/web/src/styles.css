@@ -147,7 +147,7 @@ button{font-family:inherit}
 .soon{font-size:11px;font-family:'Fira Code';margin-top:10px;color:var(--text-3);background:var(--surface-2);padding:4px 10px;border-radius:20px}
 
 /* ── Rich brief cards (cover image + branded banners), light mode ── */
-.bcard-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:16px}
+.bcard-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px}
 .bcard{background:#fff;border:1px solid var(--border-soft);border-radius:13px;overflow:hidden;box-shadow:var(--shadow);display:flex;flex-direction:column;transition:.16s}
 .bcard:hover{transform:translateY(-2px);box-shadow:var(--shadow-lg);border-color:var(--border)}
 .thumb{position:relative;width:100%;aspect-ratio:46/20;overflow:hidden;background:var(--surface-2)}

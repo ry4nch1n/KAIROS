@@ -123,13 +123,6 @@ export function Brief({ hidden }: { hidden: boolean }) {
             <div className="card"><div className="skeleton" style={{ height: 200 }} /></div>
           ) : (
             <>
-              {p.phase_badge && (
-                <div className="card" style={{ padding: "12px 16px", flexDirection: "row", alignItems: "center", gap: 10 }}>
-                  <span className="tag-op opp">PHASE</span>
-                  <span style={{ fontSize: 13, color: "var(--text-2)" }}>{p.phase_badge}</span>
-                </div>
-              )}
-
               {p.top_signals && p.top_signals.length > 0 && (
                 <>
                   <div className="section-title"><span className="n">1</span>Top signals</div>

@@ -4,6 +4,7 @@
 [build]
   command = "npm --prefix app install && npm --prefix app run build"
   publish = "app/web/dist"
+  edge_functions = "app/netlify/edge-functions"
 
 [build.environment]
   NODE_VERSION = "22"
