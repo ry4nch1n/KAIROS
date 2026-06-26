@@ -34,7 +34,7 @@ for (const url of urls) {
 }
 console.log("");
 
-const date = new Date().toISOString();
+const date = new Date().toISOString().slice(0, 10); // date-only => one crawl per day (idempotent)
 const res = await loadGames(db, adapter.name, adapter.baseUrl, raw, date);
 console.log(`✔ loaded crawlId=${res.crawlId} inserted=${res.inserted}/${raw.length}`);
 process.exit(0);
