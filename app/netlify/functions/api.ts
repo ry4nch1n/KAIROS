@@ -27,6 +27,14 @@ export default async (req: Request) => {
       await q.publishEdition(db, body);
       return json({ ok: true, editionDate: body.editionDate });
     }
+    if (req.method === "DELETE" && path.startsWith("/brief/edition/")) {
+      const token = process.env.PUBLISH_TOKEN;
+      const auth = req.headers.get("authorization") || "";
+      if (!token || auth !== `Bearer ${token}`) return json({ error: "unauthorized" }, 401);
+      const date = decodeURIComponent(path.replace("/brief/edition/", ""));
+      await db.query("DELETE FROM brief_editions WHERE edition_date = $1", [date]);
+      return json({ ok: true, deleted: date });
+    }
     if (path === "/overview") return json(await q.getOverview(db, platform));
     if (path === "/hidden-gems") return json(await q.getHiddenGems(db, platform));
     if (path === "/brief/editions") return json(await q.getBriefEditions(db));

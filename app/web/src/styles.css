@@ -146,6 +146,39 @@ button{font-family:inherit}
 .btn-soft svg{width:15px;height:15px;stroke:#fff;fill:none;stroke-width:2}
 .soon{font-size:11px;font-family:'Fira Code';margin-top:10px;color:var(--text-3);background:var(--surface-2);padding:4px 10px;border-radius:20px}
 
+/* ── Rich brief cards (cover image + branded banners), light mode ── */
+.bcard-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:16px}
+.bcard{background:#fff;border:1px solid var(--border-soft);border-radius:13px;overflow:hidden;box-shadow:var(--shadow);display:flex;flex-direction:column;transition:.16s}
+.bcard:hover{transform:translateY(-2px);box-shadow:var(--shadow-lg);border-color:var(--border)}
+.thumb{position:relative;width:100%;aspect-ratio:46/20;overflow:hidden;background:var(--surface-2)}
+.thumb img{width:100%;height:100%;object-fit:cover;display:block}
+.thumb .ph{position:absolute;left:8px;bottom:8px;font-family:'Fira Code';font-size:10px;font-weight:600;color:#fff;background:rgba(15,22,35,.55);backdrop-filter:blur(4px);padding:2px 8px;border-radius:6px}
+.thumb.noimg{display:grid;place-items:center;background:linear-gradient(135deg,#e7edf6,#dbe3ef)}
+.thumb.noimg .ph{position:static;background:transparent;color:var(--text-3);font-size:12px;backdrop-filter:none}
+.thumb.banner{display:grid;place-items:center}
+.thumb.banner .bwordmark{color:#fff;font-weight:700;font-size:15px;letter-spacing:.3px;text-shadow:0 1px 6px rgba(0,0,0,.25)}
+.pf-uefn{background:linear-gradient(135deg,#4f46e5,#7c3aed)}
+.pf-crazy{background:linear-gradient(135deg,#7c3aed,#db2777)}
+.pf-poki{background:linear-gradient(135deg,#f5a524,#d97706)}
+.pf-itch{background:linear-gradient(135deg,#fa5c5c,#db2777)}
+.pf-web{background:linear-gradient(135deg,#2563eb,#0891b2)}
+.bbody{padding:13px 15px 14px;display:flex;flex-direction:column;gap:3px;flex:1}
+.btags{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:3px}
+.btag{font-size:10px;font-family:'Fira Code';font-weight:600;padding:2px 8px;border-radius:6px}
+.btag.teal{background:rgba(13,148,136,.12);color:#0d9488} .btag.green{background:rgba(5,150,105,.12);color:var(--green)}
+.btag.blue{background:rgba(37,99,235,.12);color:var(--primary)} .btag.indigo{background:rgba(79,70,229,.12);color:#4f46e5}
+.btag.amber{background:rgba(217,119,6,.13);color:var(--accent)} .btag.gray{background:var(--surface-2);color:var(--text-3)}
+.btag.purple{background:rgba(124,58,237,.12);color:var(--violet)} .btag.pink{background:rgba(219,39,119,.12);color:#db2777}
+.btag.cyan{background:rgba(8,145,178,.12);color:var(--cyan)}
+.bfig{font-size:10px;font-family:'Fira Code';font-weight:700;padding:2px 8px;border-radius:6px;background:rgba(5,150,105,.1);color:var(--green)}
+.bcard h3{font-size:14.5px;font-weight:600;margin:2px 0 1px;color:var(--text)}
+.bmeta{font-family:'Fira Code';font-size:10.5px;color:var(--text-3)}
+.bblurb{font-size:13px;color:var(--text-2);line-height:1.5;margin-top:5px}
+.brel{font-size:12.5px;color:var(--text-3);font-style:italic;line-height:1.45;margin-top:6px;padding-left:9px;border-left:2px solid var(--border)}
+.bcardfoot{margin-top:auto;padding-top:9px}
+.bcardfoot a{font-family:'Fira Code';font-size:11px;color:var(--primary)}
+@media(max-width:1080px){.bcard-grid{grid-template-columns:1fr}}
+
 .skeleton{background:linear-gradient(90deg,var(--surface-2) 25%,#e7edf6 50%,var(--surface-2) 75%);background-size:200% 100%;animation:shimmer 1.3s infinite;border-radius:8px}
 @keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
 .loading-chart{width:100%;min-height:240px}

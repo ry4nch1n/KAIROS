@@ -10,23 +10,47 @@ function md(s: string): string {
   const esc = s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   return esc.replace(/\*\*(.+?)\*\*/g, "<b>$1</b>");
 }
-const greenPill = { color: "var(--green)", background: "rgba(5,150,105,.1)" } as const;
 const srcLink = { fontFamily: "'Fira Code'", fontSize: 11, color: "var(--primary)", marginTop: 8, display: "inline-block" } as const;
+const steamCover = (appid?: string | null) => (appid ? `https://cdn.cloudflare.steamstatic.com/steam/apps/${appid}/header.jpg` : null);
+const CAT: Record<string, string> = { "Contained-systemic": "teal", "Cozy/management": "green", "Automation/logistics": "blue", "City-builder": "indigo", "Bigger-budget": "amber", "Market signal": "gray", "Foundational update": "purple", "Loop reference": "amber" };
+const KIND: Record<string, string> = { "UEFN/Creative": "pink", "Browser game": "cyan", "Browser platform": "gray", "Loop signal": "teal" };
+const isUrl = (s?: string | null) => typeof s === "string" && /^https?:\/\//i.test(s.trim());
 
-function NotableCard({ n }: { n: BriefNotable }) {
+function platformOf(it: BriefNotable) {
+  const s = `${it.source || ""} ${it.name || ""} ${it.kind || ""}`.toLowerCase();
+  if (/uefn|fortnite|epic\s*games|creative/.test(s) || (it.kind || "").startsWith("UEFN")) return { label: "UEFN · Fortnite Creative", cls: "pf-uefn", icon: "🏝️" };
+  if (/crazygames/.test(s)) return { label: "CrazyGames", cls: "pf-crazy", icon: "🕹️" };
+  if (/\bpoki\b/.test(s)) return { label: "Poki", cls: "pf-poki", icon: "🎮" };
+  if (/itch\.io|itch /.test(s)) return { label: "itch.io", cls: "pf-itch", icon: "🎮" };
+  if ((it.kind || "") === "Loop signal") return { label: "Loop signal", cls: "pf-uefn", icon: "📈" };
+  return { label: it.kind || "Browser", cls: "pf-web", icon: "🌐" };
+}
+
+function RichCard({ item, kind }: { item: BriefNotable; kind: "notable" | "browser" }) {
+  const [err, setErr] = useState(false);
+  const img = kind === "notable" ? item.cover_url || steamCover(item.steam_appid) : isUrl(item.image_url) ? item.image_url! : null;
+  const badge = kind === "notable" ? item.category : item.kind;
+  const badgeCls = kind === "notable" ? CAT[item.category || ""] || "gray" : KIND[item.kind || ""] || "cyan";
+  const meta = (kind === "notable" ? [item.status, item.date, item.team ? `team ${item.team}` : ""] : [item.status, item.date]).filter(Boolean).join(" · ");
+  const pf = platformOf(item);
   return (
-    <div className="ref-card">
-      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 2 }}>
-        {n.status && <span className="rtag">{n.status}</span>}
-        {(n.kind || n.category) && <span className="rtag" style={{ background: "rgba(124,58,237,.1)", color: "var(--violet)" }}>{n.kind || n.category}</span>}
-        {n.figure && <span className="rtag" style={greenPill}>{n.figure}</span>}
+    <article className="bcard">
+      {img && !err ? (
+        <div className="thumb"><img src={img} alt={item.name} loading="lazy" onError={() => setErr(true)} />{badge && <span className="ph">{badge}</span>}</div>
+      ) : kind === "browser" ? (
+        <div className={"thumb banner " + pf.cls}><span className="bwordmark">{pf.icon} {pf.label}</span></div>
+      ) : (
+        <div className="thumb noimg"><span className="ph">{badge || item.name}</span></div>
+      )}
+      <div className="bbody">
+        <div className="btags">{badge && <span className={"btag " + badgeCls}>{badge}</span>}{item.figure && <span className="bfig">{item.figure}</span>}</div>
+        <h3>{item.name}</h3>
+        {meta && <div className="bmeta">{meta}</div>}
+        {item.blurb && <p className="bblurb">{item.blurb}</p>}
+        {item.relevance && <p className="brel">{item.relevance}</p>}
+        {item.source && <div className="bcardfoot"><a href={item.source} target="_blank" rel="noreferrer">source ↗</a></div>}
       </div>
-      <h4>{n.name}</h4>
-      {(n.team || n.date) && <div className="src">{[n.team, n.date].filter(Boolean).join(" · ")}</div>}
-      {n.blurb && <p>{n.blurb}</p>}
-      {n.relevance && <p style={{ marginTop: 6, color: "var(--text-3)", fontStyle: "italic" }}>{n.relevance}</p>}
-      {n.source && <a href={n.source} target="_blank" rel="noreferrer" style={srcLink}>source ↗</a>}
-    </div>
+    </article>
   );
 }
 
@@ -123,14 +147,14 @@ export function Brief({ hidden }: { hidden: boolean }) {
               {p.new_notable && p.new_notable.length > 0 && (
                 <>
                   <div className="section-title"><span className="n">2</span>New &amp; notable</div>
-                  <div className="ref-grid">{p.new_notable.map((n, i) => <NotableCard key={i} n={n} />)}</div>
+                  <div className="bcard-grid">{p.new_notable.map((n, i) => <RichCard key={i} item={n} kind="notable" />)}</div>
                 </>
               )}
 
               {p.browser && p.browser.length > 0 && (
                 <>
                   <div className="section-title"><span className="n">3</span>Browser &amp; UEFN</div>
-                  <div className="ref-grid">{p.browser.map((n, i) => <NotableCard key={i} n={n} />)}</div>
+                  <div className="bcard-grid">{p.browser.map((n, i) => <RichCard key={i} item={n} kind="browser" />)}</div>
                 </>
               )}
 
