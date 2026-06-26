@@ -15,10 +15,12 @@ export function Brief({ hidden }: { hidden: boolean }) {
   const [list, setList] = useState<BriefEditionMeta[]>([]);
   const [sel, setSel] = useState<string | null>(null);
   const [ed, setEd] = useState<BriefEdition | null>(null);
+  const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     api.briefEditions().then((l) => {
       setList(l);
+      setLoaded(true);
       if (l.length) setSel(l[0].editionDate);
     });
   }, []);
@@ -86,7 +88,15 @@ export function Brief({ hidden }: { hidden: boolean }) {
         </div>
 
         <div className="content">
-          {!ed ? (
+          {loaded && list.length === 0 ? (
+            <div className="empty">
+              <div className="big-ic">
+                <svg viewBox="0 0 24 24"><path d="M4 5h13v14a1 1 0 0 1-1 1H6a2 2 0 0 1-2-2z" /><path d="M17 8h3v10a2 2 0 0 1-2 2" /><path d="M7 9h7M7 13h7M7 17h4" /></svg>
+              </div>
+              <h3>No brief editions yet</h3>
+              <p>Editions appear here automatically once your Mon/Thu indie-brief routine publishes them to the database.</p>
+            </div>
+          ) : !ed ? (
             <div className="card"><div className="skeleton" style={{ height: 200 }} /></div>
           ) : (
             <>
