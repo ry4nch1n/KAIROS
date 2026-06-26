@@ -20,9 +20,9 @@ jobs:
         run: npm run crawl:crazygames
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          CRAWL_LIMIT: "500"
+          CRAWL_LIMIT: "250"
       - name: Crawl Poki into Neon (append-only snapshot)
         run: npm run crawl:poki
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          CRAWL_LIMIT: "500"
+          CRAWL_LIMIT: "250"
