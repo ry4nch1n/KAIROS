@@ -17,8 +17,8 @@ export default async (req: Request) => {
   const path = url.pathname.replace(/^\/api/, "");
   const platform = pp(url.searchParams.get("platform"));
   try {
-    const db = await appDb();
     if (path === "/health") return json({ ok: true });
+    const db = await appDb();
     if (path === "/overview") return json(await q.getOverview(db, platform));
     if (path === "/hidden-gems") return json(await q.getHiddenGems(db, platform));
     if (path === "/brief/editions") return json(await q.getBriefEditions(db));

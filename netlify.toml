@@ -1,15 +1,15 @@
-# Netlify build for KAIROS. Repo root is browser-game-intel/; app lives in app/.
+# Netlify build for KAIROS. Repo root = browser-game-intel/; the app is in app/.
+# No `base` — all paths are root-relative and the command installs/builds inside app/,
+# so resolution is identical for CLI deploys and git-linked cloud builds.
 [build]
-  base = "app"
-  command = "npm run build"
-  publish = "web/dist"
+  command = "npm --prefix app install && npm --prefix app run build"
+  publish = "app/web/dist"
 
 [build.environment]
   NODE_VERSION = "22"
-  NPM_FLAGS = "--include=dev"
 
 [functions]
-  directory = "netlify/functions"
+  directory = "app/netlify/functions"
   node_bundler = "esbuild"
 
 # SPA fallback (the /api/* function declares its own path and takes precedence).
