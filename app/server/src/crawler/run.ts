@@ -1,10 +1,11 @@
 // Live crawl CLI:  tsx src/crawler/run.ts crazygames    (CRAWL_LIMIT env to cap)
 import { crazygames } from "./crazygames.ts";
+import { poki } from "./poki.ts";
 import { loadGames } from "./load.ts";
 import { politeFetch, sleep, type SourceAdapter } from "./base.ts";
 import { appDb, applySchema, usingNeon } from "../db/db.ts";
 
-const ADAPTERS: Record<string, SourceAdapter> = { crazygames };
+const ADAPTERS: Record<string, SourceAdapter> = { crazygames, poki };
 
 const which = process.argv[2] || "crazygames";
 const limit = Number(process.env.CRAWL_LIMIT || 30);

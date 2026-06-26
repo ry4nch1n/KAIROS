@@ -8,6 +8,7 @@
     "seed": "tsx src/db/seed.ts",
     "migrate": "tsx src/db/migrate.ts",
     "crawl:crazygames": "tsx src/crawler/run.ts crazygames",
+    "crawl:poki": "tsx src/crawler/run.ts poki",
     "test": "vitest run"
   },
   "dependencies": {
