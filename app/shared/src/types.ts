@@ -87,24 +87,48 @@ export interface BriefEditionMeta {
   sourceCount: number;
 }
 
-export interface BriefRef {
-  rtag: string;
-  title: string;
-  src: string;
-  body: string;
+// Matches the real indie-brief edition JSON (build-brief.js / brief-content-<date>.json).
+export interface BriefNotable {
+  name: string;
+  status?: string | null;
+  date?: string | null;
+  category?: string;
+  blurb?: string;
+  relevance?: string;
+  figure?: string | null;
+  team?: string | null;
+  kind?: string | null;
+  cover_url?: string | null;
+  image_url?: string | null;
+  source?: string;
+  steam_appid?: string | null;
 }
-export interface BriefSignal {
-  kind: InsightKind;
-  tag: string;
-  meta: string;
-  text: string;
+export interface BriefToolingItem {
+  group?: string;
+  headline: string;
+  detail?: string;
+  version_or_date?: string | null;
+  relevance?: string;
+  source?: string;
+}
+export interface BriefMarketItem {
+  headline: string;
+  figure?: string | null;
+  detail?: string;
+  date?: string | null;
+  source?: string;
 }
 export interface BriefPayload {
-  title: string;
-  refsTier1: BriefRef[];
-  refsTier2: BriefRef[];
-  signals: BriefSignal[];
-  actions: string[];
+  weekday?: string;
+  phase_badge?: string;
+  edition_label?: string;
+  top_signals?: string[];
+  new_notable?: BriefNotable[];
+  browser?: BriefNotable[];
+  tooling?: { headline?: string; items?: BriefToolingItem[] };
+  market?: BriefMarketItem[];
+  reference_shelf?: string;
+  founder_take?: string[];
 }
 export interface BriefEdition extends BriefEditionMeta {
   payload: BriefPayload;

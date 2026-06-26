@@ -246,6 +246,36 @@ export async function getBriefEditions(db: Querier): Promise<BriefEditionMeta[]>
   }));
 }
 
+export interface PublishInput {
+  editionDate: string;
+  weekday?: string;
+  briefType?: string;
+  payload: unknown;
+  renderedHtml?: string | null;
+  localPath?: string | null;
+  sourceCount?: number | null;
+}
+
+export async function publishEdition(db: Querier, e: PublishInput): Promise<void> {
+  if (!e?.editionDate || !e?.payload) throw new Error("editionDate and payload required");
+  await db.query(
+    `INSERT INTO brief_editions(edition_date, weekday, brief_type, payload, rendered_html, local_path, source_count)
+     VALUES ($1,$2,$3,$4,$5,$6,$7)
+     ON CONFLICT (edition_date, brief_type) DO UPDATE SET
+       weekday = EXCLUDED.weekday, payload = EXCLUDED.payload, rendered_html = EXCLUDED.rendered_html,
+       local_path = EXCLUDED.local_path, source_count = EXCLUDED.source_count, created_at = now()`,
+    [
+      e.editionDate,
+      e.weekday ?? null,
+      e.briefType ?? "indie",
+      JSON.stringify(e.payload),
+      e.renderedHtml ?? null,
+      e.localPath ?? null,
+      e.sourceCount ?? null,
+    ]
+  );
+}
+
 export async function getBriefEdition(db: Querier, editionDate: string): Promise<BriefEdition | null> {
   const rows = await db.query(
     `SELECT id, edition_date, weekday, brief_type, source_count, payload FROM brief_editions WHERE edition_date = $1 ORDER BY brief_type LIMIT 1`,

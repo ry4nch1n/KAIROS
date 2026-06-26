@@ -13,8 +13,21 @@ function parsePlatform(v: unknown): Platform {
 export function createApp(db: Querier) {
   const app = express();
   app.use(cors());
+  app.use(express.json({ limit: "1mb" }));
 
   app.get("/api/health", (_req, res) => res.json({ ok: true }));
+
+  app.post("/api/brief/publish", async (req, res) => {
+    const token = process.env.PUBLISH_TOKEN;
+    const auth = req.headers.authorization || "";
+    if (!token || auth !== `Bearer ${token}`) return res.status(401).json({ error: "unauthorized" });
+    try {
+      await q.publishEdition(db, req.body);
+      res.json({ ok: true, editionDate: req.body?.editionDate });
+    } catch (e) {
+      res.status(400).json({ error: String(e) });
+    }
+  });
 
   app.get("/api/overview", async (req, res) => {
     try {

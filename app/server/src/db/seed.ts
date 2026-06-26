@@ -211,37 +211,49 @@ export async function seed(db: Querier): Promise<void> {
   }
 
   // brief editions (2 samples)
+  // Real indie-brief edition shape (matches build-brief.js brief-content-<date>.json)
   const ed1 = {
-    title: "Indie & Gaming Brief",
-    refsTier1: [
-      { rtag: "MECHANIC", title: "Vampire Survivors' weapon-evolution loop", src: "gamedeveloper.com · postmortem", body: "Auto-attack + evolution pairs create a 3-minute dopamine cadence. Transfers cleanly to short-session web." },
-      { rtag: "UX", title: "Cozy onboarding without tutorials", src: "GDC talk · 22 min", body: "Diegetic first-five-minutes beats explicit tutorials for casual-web retention." },
+    weekday: "Thursday",
+    phase_badge: "Recovery + discovery · Jun 2026 · study UEFN loops, no production",
+    top_signals: [
+      "**Survivor-likes still climbing** on CrazyGames — 4th week up; cross-check the Radar gap list.",
+      "**Cozy automation** breaking out: management hybrids over-index in demand on browser portals.",
+      "**WebGL load-time bar dropping**: three new size-reduction tools shipped this week.",
     ],
-    refsTier2: [
-      { rtag: "SHIPPED", title: "1-dev survivor-like -> 4.6 on CrazyGames", src: "devlog · 6-week build", body: "WebGL build under 18 MB, Phaser. A one-person scope can hit the rising survivor-like wave." },
-      { rtag: "REVENUE", title: "Rewarded-ad pacing for web", src: "solo-dev thread", body: "Offer-on-death + offer-on-revive monetizes without nagging. ~$2.1 RPM cited for action." },
+    new_notable: [
+      { name: "Vampire Survivors-like (1-dev)", status: "Launched", category: "Loop reference", blurb: "Auto-attack + weapon-evolution loop in a 6-week Phaser build.", relevance: "For you: confirms a solo scope can hit the rising survivor-like wave on web.", figure: "4.6★ CrazyGames", team: "solo", source: "https://crazygames.com" },
+      { name: "Cozy Merge Factory", status: "Demo", category: "Automation/logistics", blurb: "Merge + light logistics with a relaxing pace.", relevance: "For you: matches Radar gap #3 (cozy idle on Poki).", figure: "12k wishlists", source: "https://store.steampowered.com" },
     ],
-    signals: [
-      { kind: "up", tag: "SUSTAINED", meta: "4th week up", text: "Survivor-likes keep climbing on CrazyGames - cross-check the Radar gap list." },
-      { kind: "gap", tag: "OPPORTUNITY", meta: "matches Radar gap #3", text: "Cozy + automation hybrids are under-served vs demand on Poki." },
+    browser: [
+      { name: "Smash Karts", kind: "Browser game", status: "Trending", blurb: ".io kart battler holding the CrazyGames homepage.", relevance: "For you: short-session multiplayer loop worth dissecting.", figure: "50M plays", source: "https://crazygames.com" },
     ],
-    actions: [
-      "Prototype a short-session survivor-like loop (validate against Radar gap #2).",
-      "Test diegetic onboarding on next build - no tutorial popups.",
+    tooling: {
+      headline: "WebGL build-size tooling had a strong week — relevant if load-time is your blocker.",
+      items: [
+        { group: "Web/Browser", headline: "Draco + texture atlasing preset", detail: "Cut a typical build by ~35%.", relevance: "For you: faster first-load = better web retention.", source: "https://example.com" },
+      ],
+    },
+    market: [
+      { headline: "CrazyGames rev-share at 70% for top earners", figure: "70%", detail: "Confirmed in their dev docs update.", source: "https://crazygames.com" },
+    ],
+    reference_shelf: "Vampire Survivors, Dome Keeper, Luck be a Landlord, Mini Motorways — see Routine Notes › Reference Shelf.",
+    founder_take: [
+      "Browser-first remains the cheapest way to prove a loop; the survivor-like wave is real but crowding fast.",
+      "Lean into a contained-systemic cozy hybrid where the Radar shows demand-supply gaps — Ship · Prove · Sustain.",
     ],
   };
   const ed2 = {
-    title: "Indie & Gaming Brief",
-    refsTier1: [
-      { rtag: "MARKET", title: "Low-poly stylization rising on portals", src: "trend roundup", body: "Stylized low-poly is up ~28% QoQ in new releases - cheaper to produce solo." },
+    weekday: "Monday",
+    phase_badge: "Recovery + discovery · Jun 2026",
+    top_signals: ["**Low-poly stylization** up ~28% QoQ in new releases — cheaper to produce solo."],
+    new_notable: [
+      { name: "Tiny Glade-like builder", status: "Announced", category: "Cozy/management", blurb: "Relaxing diorama builder.", relevance: "For you: low-poly cozy reference.", source: "https://store.steampowered.com" },
     ],
-    refsTier2: [
-      { rtag: "TOOLING", title: "WebGL size-reduction checklist", src: "engine blog", body: "Texture atlasing + Draco cut a typical build by ~35%." },
-    ],
-    signals: [
-      { kind: "down", tag: "DECLINING", meta: "-21%", text: "Classic match-3 is slowly losing features to merge hybrids." },
-    ],
-    actions: ["Audit art pipeline for low-poly reuse."],
+    browser: [],
+    tooling: { headline: "Engine size tooling continues to improve.", items: [] },
+    market: [{ headline: "Match-3 losing features to merge hybrids", figure: "-21%", detail: "Across browser portals.", source: "https://example.com" }],
+    reference_shelf: "Tiny Glade, Dorfromantik, Terra Nil.",
+    founder_take: ["Audit the art pipeline for low-poly reuse before committing to a visual direction."],
   };
 
   await db.query(

@@ -117,8 +117,8 @@ describe("A10 brief editions", () => {
       expect(list[i - 1].editionDate >= list[i].editionDate).toBe(true);
     const ed = await q.getBriefEdition(db, list[0].editionDate);
     expect(ed).not.toBeNull();
-    expect(Array.isArray(ed!.payload.refsTier1)).toBe(true);
-    expect(ed!.payload.title.length).toBeGreaterThan(0);
+    expect(Array.isArray(ed!.payload.top_signals)).toBe(true);
+    expect(Array.isArray(ed!.payload.new_notable)).toBe(true);
   });
 });
 
