@@ -11,6 +11,7 @@
     "db:seed": "npm -w server run seed",
     "db:migrate": "npm -w server run migrate",
     "crawl:crazygames": "npm -w server run crawl:crazygames",
+    "crawl:poki": "npm -w server run crawl:poki",
     "test": "npm -w server run test"
   },
   "devDependencies": {
