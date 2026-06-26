@@ -8,10 +8,12 @@ export interface Querier {
   exec(sql: string): Promise<void>;
 }
 
-const SCHEMA = readFileSync(fileURLToPath(new URL("./schema.sql", import.meta.url)), "utf8");
-
+// Lazy: only read the .sql when applySchema is actually called (migrate/seed/local).
+// Keeping this out of module scope is essential — the bundled serverless function
+// imports this file for appDb() and must not touch the filesystem at load time.
 export async function applySchema(db: Querier): Promise<void> {
-  await db.exec(SCHEMA);
+  const schema = readFileSync(fileURLToPath(new URL("./schema.sql", import.meta.url)), "utf8");
+  await db.exec(schema);
 }
 
 // ── PGlite (local) ──
