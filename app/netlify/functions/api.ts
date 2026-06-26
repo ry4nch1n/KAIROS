@@ -37,6 +37,9 @@ export default async (req: Request) => {
     }
     if (path === "/overview") return json(await q.getOverview(db, platform));
     if (path === "/hidden-gems") return json(await q.getHiddenGems(db, platform));
+    if (path === "/genres") return json(await q.getGenres(db, platform));
+    if (path === "/developers") return json(await q.getDevelopers(db, platform));
+    if (path === "/new-releases") return json(await q.getNewReleases(db, platform));
     if (path === "/brief/editions") return json(await q.getBriefEditions(db));
     const m = path.match(/^\/brief\/edition\/(.+)$/);
     if (m) {

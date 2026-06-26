@@ -3,6 +3,7 @@ import type { Querier } from "../db/db.ts";
 import type {
   Platform, Overview, OverviewKPI, GenreMomentum, TagFreq, ScatterPoint,
   HiddenGem, MarketGap, FeatureHeatmap, Insight, BriefEditionMeta, BriefEdition,
+  GenreRow, DeveloperRow, NewRelease,
 } from "shared";
 
 const WEEK_LABEL_BASE = 15;
@@ -165,6 +166,70 @@ export async function getMarketGaps(db: Querier, platform: Platform): Promise<Ma
     })
     .sort((a, b) => b.score - a.score)
     .slice(0, 6);
+}
+
+export async function getGenres(db: Querier, platform: Platform): Promise<GenreRow[]> {
+  const rows = await db.query(
+    `SELECT l.genre AS genre, count(*)::int AS games,
+            avg(l.rating)::float AS avg_rating, avg(l.votes)::float AS avg_votes,
+            avg(fd.df)::float AS days_featured
+     FROM v_latest l
+     JOIN games g ON g.id = l.game_id
+     JOIN sources src ON src.id = g.source_id
+     LEFT JOIN (SELECT game_id, count(*) FILTER (WHERE featured) AS df FROM game_snapshots GROUP BY game_id) fd ON fd.game_id = g.id
+     WHERE g.is_live AND l.genre IS NOT NULL ${pf(platform)}
+     GROUP BY l.genre ORDER BY games DESC`
+  );
+  const gw = await genreWeekFeatures(db, platform);
+  return rows.map((r) => ({
+    genre: r.genre,
+    games: num(r.games),
+    avgRating: +num(r.avg_rating).toFixed(2),
+    avgVotes: Math.round(num(r.avg_votes)),
+    daysFeatured: +num(r.days_featured).toFixed(1),
+    deltaPct: gw.byGenre[r.genre] ? Math.round(trendStats(gw.byGenre[r.genre]).deltaPct) : 0,
+  }));
+}
+
+export async function getDevelopers(db: Querier, platform: Platform): Promise<DeveloperRow[]> {
+  const rows = await db.query(
+    `SELECT g.developer AS developer, count(DISTINCT g.id)::int AS games,
+            avg(l.rating)::float AS avg_rating, avg(l.votes)::float AS avg_votes,
+            mode() WITHIN GROUP (ORDER BY l.genre) AS top_genre
+     FROM v_latest l
+     JOIN games g ON g.id = l.game_id
+     JOIN sources src ON src.id = g.source_id
+     WHERE g.is_live AND g.developer IS NOT NULL AND g.developer <> '' ${pf(platform)}
+     GROUP BY g.developer
+     ORDER BY games DESC, avg_rating DESC LIMIT 60`
+  );
+  return rows.map((r) => ({
+    developer: r.developer,
+    games: num(r.games),
+    avgRating: +num(r.avg_rating).toFixed(2),
+    avgVotes: Math.round(num(r.avg_votes)),
+    topGenre: r.top_genre ?? "—",
+  }));
+}
+
+export async function getNewReleases(db: Querier, platform: Platform): Promise<NewRelease[]> {
+  const rows = await db.query(
+    `SELECT g.id AS id, g.title AS title, g.url AS url, l.genre AS genre, l.rating AS rating, l.votes AS votes
+     FROM games g
+     JOIN sources src ON src.id = g.source_id
+     JOIN v_latest l ON l.game_id = g.id
+     JOIN (SELECT game_id, min(captured_at) AS fs FROM game_snapshots GROUP BY game_id) m ON m.game_id = g.id
+     WHERE g.is_live AND m.fs = (SELECT max(captured_at) FROM game_snapshots) ${pf(platform)}
+     ORDER BY l.votes DESC NULLS LAST LIMIT 60`
+  );
+  return rows.map((r) => ({
+    gameId: num(r.id),
+    title: r.title,
+    genre: r.genre ?? "—",
+    rating: num(r.rating),
+    votes: num(r.votes),
+    url: r.url,
+  }));
 }
 
 export async function getInsights(db: Querier, platform: Platform): Promise<Insight[]> {

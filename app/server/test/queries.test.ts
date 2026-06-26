@@ -122,6 +122,24 @@ describe("A10 brief editions", () => {
   });
 });
 
+describe("A_explorer queries", () => {
+  it("genres rollup has counts + ratings", async () => {
+    const genres = await q.getGenres(db, "all");
+    expect(genres.length).toBeGreaterThan(0);
+    expect(genres[0].games).toBeGreaterThan(0);
+    expect(genres[0].avgRating).toBeGreaterThan(0);
+  });
+  it("developers rollup (mode genre) runs", async () => {
+    const devs = await q.getDevelopers(db, "all");
+    expect(Array.isArray(devs)).toBe(true);
+    if (devs.length) expect(devs[0].games).toBeGreaterThan(0);
+  });
+  it("new releases returns rows", async () => {
+    const nr = await q.getNewReleases(db, "all");
+    expect(Array.isArray(nr)).toBe(true);
+  });
+});
+
 describe("A_insights", () => {
   it("generates natural-language insights from real stats", async () => {
     const ins = await q.getInsights(db, "all");

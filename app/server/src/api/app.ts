@@ -40,6 +40,9 @@ export function createApp(db: Querier) {
   app.get("/api/hidden-gems", async (req, res) => {
     res.json(await q.getHiddenGems(db, parsePlatform(req.query.platform)));
   });
+  app.get("/api/genres", async (req, res) => res.json(await q.getGenres(db, parsePlatform(req.query.platform))));
+  app.get("/api/developers", async (req, res) => res.json(await q.getDevelopers(db, parsePlatform(req.query.platform))));
+  app.get("/api/new-releases", async (req, res) => res.json(await q.getNewReleases(db, parsePlatform(req.query.platform))));
 
   app.get("/api/brief/editions", async (_req, res) => {
     res.json(await q.getBriefEditions(db));

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { Overview, Platform } from "shared";
+import type { Overview, Platform, GenreRow, DeveloperRow, NewRelease, HiddenGem } from "shared";
 import { api } from "../lib/api.ts";
 import { EChart } from "../components/EChart.tsx";
 import { momentumOption, treemapOption, scatterOption, heatmapOption } from "../components/charts.ts";
@@ -12,78 +12,201 @@ const PLATFORMS: { id: Platform; label: string }[] = [
   { id: "crazygames", label: "CrazyGames" },
 ];
 
-const NAV_DISCOVER = ["Overview", "Genre Explorer", "Tag Explorer", "Developers", "Trends"];
+type View = "overview" | "genres" | "tags" | "developers" | "trends" | "hidden-gems" | "new-releases" | "market-gaps";
+const I = {
+  overview: <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9" /><rect x="14" y="3" width="7" height="5" /><rect x="14" y="12" width="7" height="9" /><rect x="3" y="16" width="7" height="5" /></svg>,
+  genres: <svg viewBox="0 0 24 24"><path d="M3 3v18h18" /><path d="M7 14l4-4 3 3 5-6" /></svg>,
+  tags: <svg viewBox="0 0 24 24"><circle cx="6" cy="6" r="2.5" /><circle cx="18" cy="8" r="2.5" /><circle cx="9" cy="17" r="2.5" /><path d="M8 7l8 1M8 8l1 7M16 10l-6 6" /></svg>,
+  developers: <svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.5" /><path d="M5 21c0-3.9 3.1-7 7-7s7 3.1 7 7" /></svg>,
+  trends: <svg viewBox="0 0 24 24"><path d="M3 17l6-6 4 4 8-8" /><path d="M17 7h4v4" /></svg>,
+  gems: <svg viewBox="0 0 24 24"><path d="M12 3l2.5 5.5L20 9l-4 4 1 6-5-3-5 3 1-6-4-4 5.5-.5z" /></svg>,
+  releases: <svg viewBox="0 0 24 24"><path d="M5 12h14M12 5v14" /><circle cx="12" cy="12" r="9" /></svg>,
+  gaps: <svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 10 10" /><path d="M12 2v10l7-7" /></svg>,
+};
 
+const Skel = ({ h = 300 }: { h?: number }) => <div className="card"><div className="skeleton" style={{ height: h }} /></div>;
+const head = (icon: JSX.Element, title: string, sub?: string) => (
+  <h3>{icon}{title}{sub && <span className="sub">{sub}</span>}</h3>
+);
+const deltaCls = (d: number) => (d > 3 ? "delta-up" : d < -3 ? "delta-dn" : "delta-fl");
+
+/* ───────────── views ───────────── */
+function OverviewView({ ov }: { ov: Overview }) {
+  return (
+    <>
+      <div className="kpis">
+        <div className="kpi"><div className="label">{I.overview}Games tracked</div><div className="val num">{fmt(ov.kpi.gamesTracked)}</div><span className="delta up num">▲ {ov.kpi.newThisWeek} new this week</span></div>
+        <div className="kpi"><div className="label">★ Avg rating</div><div className="val num">{ov.kpi.avgRating.toFixed(2)}</div><span className="delta flat num">▬ rolling 12-week</span></div>
+        <div className="kpi"><div className="label">{I.trends}Fastest genre</div><div className="val num" style={{ fontSize: 24, paddingTop: 4 }}>{ov.kpi.fastestGenre}</div><span className="delta up num">▲ +{ov.kpi.fastestGenreDeltaPct}% features / 12w</span></div>
+        <div className="kpi accent"><div className="label">{I.gaps}Open market gaps</div><div className="val num">{ov.kpi.openGaps}</div><span className="delta up num">demand ≫ supply</span></div>
+      </div>
+      <div className="grid g-2">
+        <div className="card">{head(I.trends, "Genre momentum", "weekly homepage features")}<EChart option={momentumOption(ov.momentum)} /></div>
+        <div className="card">{head(I.gems, "AI Insights", "auto-generated")}
+          <div className="insights">{ov.insights.map((ins, i) => (
+            <div className="insight" key={i}><div className={"ic " + ins.kind}><InsightSvg kind={ins.kind} /></div>
+              <div className="body"><p dangerouslySetInnerHTML={{ __html: ins.text }} /><div className="meta"><span className={"tag-op " + tagClass(ins.kind)}>{ins.tag}</span><span>{ins.meta}</span></div></div></div>
+          ))}</div>
+        </div>
+      </div>
+      <div className="grid g-2b">
+        <div className="card">{head(I.tags, "Tag frequency", "top tags by game count")}<EChart option={treemapOption(ov.tags)} /></div>
+        <div className="card">{head(I.gems, "Hidden-gem finder", "rating × visibility")}<EChart option={scatterOption(ov.scatter)} /></div>
+      </div>
+      <div className="grid g-2">
+        <div className="card">{head(I.overview, "Feature heatmap", "genre × week")}<EChart option={heatmapOption(ov.heatmap)} style={{ minHeight: 260 }} /></div>
+        <div className="card">{head(I.gaps, "Top market gaps", "demand ▸ supply")}<GapList gaps={ov.gaps} /></div>
+      </div>
+    </>
+  );
+}
+
+function GapList({ gaps }: { gaps: Overview["gaps"] }) {
+  return (
+    <div className="gaplist">
+      {gaps.map((g, i) => (
+        <div className="gap" key={i}><span className="rank num">{i + 1}</span>
+          <div className="name">{g.label}<small>score {g.score}</small></div>
+          <div className="bars">
+            <div className="barlbl"><span>demand</span><span>{g.demand}</span></div><div className="bar demand"><i style={{ width: g.demand + "%" }} /></div>
+            <div className="barlbl"><span>supply</span><span>{g.supply}</span></div><div className="bar supply"><i style={{ width: g.supply + "%" }} /></div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function GenresView({ rows }: { rows: GenreRow[] }) {
+  const max = Math.max(1, ...rows.map((r) => r.games));
+  return (
+    <div className="card">{head(I.genres, "Genre Explorer", `${rows.length} genres`)}
+      <table className="dtable"><thead><tr><th>Genre</th><th className="r">Games</th><th className="r">Avg rating</th><th className="r">Avg votes</th><th className="r">Days feat.</th><th className="r">Momentum</th></tr></thead>
+        <tbody>{rows.map((r) => (
+          <tr key={r.genre}><td className="gname">{r.genre}<span className="minibar"><i style={{ width: (r.games / max) * 100 + "%" }} /></span></td>
+            <td className="r">{r.games}</td><td className="r">{r.avgRating.toFixed(2)}</td><td className="r">{fmt(r.avgVotes)}</td><td className="r">{r.daysFeatured}</td>
+            <td className={"r " + deltaCls(r.deltaPct)}>{r.deltaPct > 0 ? "+" : ""}{r.deltaPct}%</td></tr>
+        ))}</tbody></table>
+    </div>
+  );
+}
+
+function TagsView({ ov }: { ov: Overview }) {
+  const max = Math.max(1, ...ov.tags.map((t) => t.count));
+  return (
+    <div className="grid g-2b">
+      <div className="card">{head(I.tags, "Tag treemap", "by game count")}<EChart option={treemapOption(ov.tags)} style={{ minHeight: 360 }} /></div>
+      <div className="card">{head(I.tags, "Tag frequency", `${ov.tags.length} tags`)}
+        <table className="dtable"><thead><tr><th>Tag</th><th className="r">Games</th></tr></thead>
+          <tbody>{ov.tags.map((t) => (<tr key={t.tag}><td className="gname">{t.tag}<span className="minibar"><i style={{ width: (t.count / max) * 100 + "%" }} /></span></td><td className="r">{fmt(t.count)}</td></tr>))}</tbody></table>
+      </div>
+    </div>
+  );
+}
+
+function DevelopersView({ rows }: { rows: DeveloperRow[] }) {
+  if (!rows.length)
+    return (
+      <div className="card"><div className="empty"><div className="big-ic">{I.developers}</div><h3>No developer data yet</h3>
+        <p>CrazyGames doesn't expose developer names — Poki does. Once the Poki crawl runs, repeat publishers show up here.</p></div></div>
+    );
+  return (
+    <div className="card">{head(I.developers, "Developer Explorer", `${rows.length} developers`)}
+      <table className="dtable"><thead><tr><th>Developer</th><th className="r">Games</th><th className="r">Avg rating</th><th className="r">Avg votes</th><th>Top genre</th></tr></thead>
+        <tbody>{rows.map((r) => (<tr key={r.developer}><td className="gname">{r.developer}</td><td className="r">{r.games}</td><td className="r">{r.avgRating.toFixed(2)}</td><td className="r">{fmt(r.avgVotes)}</td><td>{r.topGenre}</td></tr>))}</tbody></table>
+    </div>
+  );
+}
+
+function TrendsView({ ov }: { ov: Overview }) {
+  return (
+    <>
+      <div className="card">{head(I.trends, "Genre momentum", "weekly homepage features over time")}<EChart option={momentumOption(ov.momentum)} style={{ minHeight: 340 }} /></div>
+      <div className="card">{head(I.overview, "Feature heatmap", "genre × week intensity")}<EChart option={heatmapOption(ov.heatmap)} style={{ minHeight: 300 }} /></div>
+    </>
+  );
+}
+
+function GemsView({ ov, rows }: { ov: Overview; rows: HiddenGem[] | null }) {
+  return (
+    <>
+      <div className="card">{head(I.gems, "Hidden-gem finder", "high rating × low visibility")}<EChart option={scatterOption(ov.scatter)} style={{ minHeight: 320 }} /></div>
+      <div className="card">{head(I.gems, "Hidden gems", rows ? `${rows.length} found` : "…")}
+        {!rows ? <div className="skeleton" style={{ height: 200 }} /> : (
+          <table className="dtable"><thead><tr><th>Game</th><th>Genre</th><th className="r">Rating</th><th className="r">Votes</th></tr></thead>
+            <tbody>{rows.map((r) => (<tr key={r.gameId}><td className="gname">{r.title}</td><td>{r.genre}</td><td className="r" style={{ color: "var(--green)", fontWeight: 600 }}>{r.rating.toFixed(2)}</td><td className="r">{fmt(r.votes)}</td></tr>))}</tbody></table>
+        )}
+      </div>
+    </>
+  );
+}
+
+function NewReleasesView({ rows }: { rows: NewRelease[] }) {
+  return (
+    <div className="card">{head(I.releases, "New Releases", `${rows.length} first seen latest crawl`)}
+      <table className="dtable"><thead><tr><th>Game</th><th>Genre</th><th className="r">Rating</th><th className="r">Votes</th></tr></thead>
+        <tbody>{rows.map((r) => (<tr key={r.gameId}><td><a className="gname" href={r.url} target="_blank" rel="noreferrer">{r.title}</a></td><td>{r.genre}</td><td className="r">{r.rating ? r.rating.toFixed(2) : "—"}</td><td className="r">{fmt(r.votes)}</td></tr>))}</tbody></table>
+    </div>
+  );
+}
+
+/* ───────────── shell ───────────── */
 export function Radar({ hidden }: { hidden: boolean }) {
   const [platform, setPlatform] = useState<Platform>("all");
+  const [view, setView] = useState<View>("overview");
   const [ov, setOv] = useState<Overview | null>(null);
+  const [extra, setExtra] = useState<any>(null);
   const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {
     let on = true;
-    setOv(null);
-    setErr(null);
-    api.overview(platform).then(
-      (d) => on && setOv(d),
-      (e) => on && setErr(String(e))
-    );
-    return () => {
-      on = false;
-    };
+    setOv(null); setErr(null);
+    api.overview(platform).then((d) => on && setOv(d), (e) => on && setErr(String(e)));
+    return () => { on = false; };
   }, [platform]);
 
-  const Skeleton = ({ h = 240 }: { h?: number }) => <div className="skeleton" style={{ height: h, width: "100%" }} />;
+  useEffect(() => {
+    let on = true;
+    setExtra(null);
+    const f = view === "genres" ? api.genres(platform) : view === "developers" ? api.developers(platform)
+      : view === "new-releases" ? api.newReleases(platform) : view === "hidden-gems" ? api.hiddenGems(platform) : null;
+    if (f) f.then((d) => on && setExtra(d));
+    return () => { on = false; };
+  }, [view, platform]);
+
+  const gems = ov ? ov.scatter.filter((p) => p.gem).length : 0;
+  const navItem = (key: View, icon: JSX.Element, label: string, badge?: number) => (
+    <a className={"nav-item" + (view === key ? " active" : "")} onClick={() => setView(key)} key={key}>
+      {icon}{label}{badge != null && <span className="badge">{badge}</span>}
+    </a>
+  );
+
+  const subtitle = ov ? ov.subtitle : "loading…";
 
   return (
     <section className="service" data-svc="radar" hidden={hidden}>
       <aside className="side">
-        <div className="side-head">
-          <b>GameRadar</b>
-          <span>market intel</span>
-        </div>
+        <div className="side-head"><b>GameRadar</b><span>market intel</span></div>
         <div className="nav-label">Discover</div>
-        {NAV_DISCOVER.map((n, i) => (
-          <a className={"nav-item" + (i === 0 ? " active" : "")} key={n}>
-            <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9" /><rect x="14" y="3" width="7" height="5" /><rect x="14" y="12" width="7" height="9" /><rect x="3" y="16" width="7" height="5" /></svg>
-            {n}
-          </a>
-        ))}
+        {navItem("overview", I.overview, "Overview")}
+        {navItem("genres", I.genres, "Genre Explorer")}
+        {navItem("tags", I.tags, "Tag Explorer")}
+        {navItem("developers", I.developers, "Developers")}
+        {navItem("trends", I.trends, "Trends")}
         <div className="nav-label">Opportunity</div>
-        <a className="nav-item">
-          <svg viewBox="0 0 24 24"><path d="M12 3l2.5 5.5L20 9l-4 4 1 6-5-3-5 3 1-6-4-4 5.5-.5z" /></svg>
-          Hidden Gems
-        </a>
-        <a className="nav-item">
-          <svg viewBox="0 0 24 24"><path d="M5 12h14M12 5v14" /><circle cx="12" cy="12" r="9" /></svg>
-          New Releases{ov && <span className="badge">{ov.kpi.newThisWeek}</span>}
-        </a>
-        <a className="nav-item">
-          <svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 10 10" /><path d="M12 2v10l7-7" /></svg>
-          Market Gaps{ov && <span className="badge">{ov.kpi.openGaps}</span>}
-        </a>
-        <div className="side-foot">
-          <span className="pulse"></span>Crawl OK · {ov ? fmt(ov.kpi.gamesTracked) : "…"} games
-          <br />
-          Local PGlite · seeded
-        </div>
+        {navItem("hidden-gems", I.gems, "Hidden Gems", ov ? gems : undefined)}
+        {navItem("new-releases", I.releases, "New Releases", ov ? ov.kpi.newThisWeek : undefined)}
+        {navItem("market-gaps", I.gaps, "Market Gaps", ov ? ov.kpi.openGaps : undefined)}
+        <div className="side-foot"><span className="pulse"></span>Crawl OK · {ov ? fmt(ov.kpi.gamesTracked) : "…"} games<br />live · Neon</div>
       </aside>
 
       <main className="main">
         <div className="topbar">
-          <h2>
-            Market Overview <small>{ov ? ov.subtitle : "loading…"}</small>
-          </h2>
+          <h2>Market Overview <small>{subtitle}</small></h2>
           <div className="seg" role="tablist" aria-label="Platform">
             {PLATFORMS.map((p) => (
-              <button
-                key={p.id}
-                className={"seg-btn" + (platform === p.id ? " active" : "")}
-                role="tab"
-                aria-selected={platform === p.id}
-                onClick={() => setPlatform(p.id)}
-              >
-                <span className={"dot " + p.id}></span>
-                {p.label}
+              <button key={p.id} className={"seg-btn" + (platform === p.id ? " active" : "")} role="tab" aria-selected={platform === p.id} onClick={() => setPlatform(p.id)}>
+                <span className={"dot " + p.id}></span>{p.label}
               </button>
             ))}
           </div>
@@ -91,101 +214,15 @@ export function Radar({ hidden }: { hidden: boolean }) {
 
         <div className="content">
           {err && <div className="card" style={{ color: "var(--red)" }}>Failed to load: {err}</div>}
-
-          {/* KPI strip */}
-          <div className="kpis">
-            <div className="kpi">
-              <div className="label"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" /><path d="M9 3v18M3 9h6" /></svg>Games tracked</div>
-              <div className="val num">{ov ? fmt(ov.kpi.gamesTracked) : "—"}</div>
-              <span className="delta up num">▲ {ov ? ov.kpi.newThisWeek : 0} new this week</span>
-            </div>
-            <div className="kpi">
-              <div className="label"><svg viewBox="0 0 24 24"><path d="M12 2l3 7h7l-5.5 4 2 7L12 16l-6.5 4 2-7L2 9h7z" /></svg>Avg rating</div>
-              <div className="val num">{ov ? ov.kpi.avgRating.toFixed(2) : "—"}</div>
-              <span className="delta flat num">▬ rolling 12-week</span>
-            </div>
-            <div className="kpi">
-              <div className="label"><svg viewBox="0 0 24 24"><path d="M3 17l6-6 4 4 8-8" /></svg>Fastest genre</div>
-              <div className="val num" style={{ fontSize: 24, paddingTop: 4 }}>{ov ? ov.kpi.fastestGenre : "—"}</div>
-              <span className="delta up num">▲ +{ov ? ov.kpi.fastestGenreDeltaPct : 0}% features / 12w</span>
-            </div>
-            <div className="kpi accent">
-              <div className="label"><svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 10 10" /><path d="M12 2v10l7-7" /></svg>Open market gaps</div>
-              <div className="val num">{ov ? ov.kpi.openGaps : "—"}</div>
-              <span className="delta up num">demand ≫ supply</span>
-            </div>
-          </div>
-
-          {/* momentum + insights */}
-          <div className="grid g-2">
-            <div className="card">
-              <h3><svg viewBox="0 0 24 24"><path d="M3 17l6-6 4 4 8-8" /><path d="M17 7h4v4" /></svg>Genre momentum <span className="sub">weekly homepage features</span></h3>
-              {ov ? <EChart option={momentumOption(ov.momentum)} /> : <Skeleton />}
-            </div>
-            <div className="card">
-              <h3><svg viewBox="0 0 24 24"><path d="M12 2a7 7 0 0 0-4 12.7V17h8v-2.3A7 7 0 0 0 12 2z" /><path d="M9 21h6" /></svg>AI Insights <span className="sub">auto-generated</span></h3>
-              {!ov ? (
-                <Skeleton h={200} />
-              ) : (
-                <div className="insights">
-                  {ov.insights.map((ins, i) => (
-                    <div className="insight" key={i}>
-                      <div className={"ic " + ins.kind}><InsightSvg kind={ins.kind} /></div>
-                      <div className="body">
-                        <p dangerouslySetInnerHTML={{ __html: ins.text }} />
-                        <div className="meta">
-                          <span className={"tag-op " + tagClass(ins.kind)}>{ins.tag}</span>
-                          <span>{ins.meta}</span>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* treemap + scatter */}
-          <div className="grid g-2b">
-            <div className="card">
-              <h3><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="1" /><path d="M3 11h11M14 3v18M14 13h7" /></svg>Tag frequency <span className="sub">top tags by game count</span></h3>
-              {ov ? <EChart option={treemapOption(ov.tags)} /> : <Skeleton />}
-            </div>
-            <div className="card">
-              <h3><svg viewBox="0 0 24 24"><path d="M3 3v18h18" /><circle cx="8" cy="15" r="1.4" /><circle cx="13" cy="9" r="1.4" /><circle cx="17" cy="12" r="1.4" /><circle cx="11" cy="17" r="1.4" /></svg>Hidden-gem finder <span className="sub">rating × visibility</span></h3>
-              {ov ? <EChart option={scatterOption(ov.scatter)} /> : <Skeleton />}
-            </div>
-          </div>
-
-          {/* heatmap + gaps */}
-          <div className="grid g-2">
-            <div className="card">
-              <h3><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="1" /><path d="M3 9h18M3 15h18M9 3v18M15 3v18" /></svg>Feature heatmap <span className="sub">genre × week intensity</span></h3>
-              {ov ? <EChart option={heatmapOption(ov.heatmap)} style={{ minHeight: 260 }} /> : <Skeleton h={260} />}
-            </div>
-            <div className="card">
-              <h3><svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 10 10" /><path d="M12 2v10l7-7" /></svg>Top market gaps <span className="sub">demand ▸ supply</span></h3>
-              {!ov ? (
-                <Skeleton h={200} />
-              ) : (
-                <div className="gaplist">
-                  {ov.gaps.map((g, i) => (
-                    <div className="gap" key={i}>
-                      <span className="rank num">{i + 1}</span>
-                      <div className="name">{g.label}<small>score {g.score}</small></div>
-                      <div className="bars">
-                        <div className="barlbl"><span>demand</span><span>{g.demand}</span></div>
-                        <div className="bar demand"><i style={{ width: g.demand + "%" }} /></div>
-                        <div className="barlbl"><span>supply</span><span>{g.supply}</span></div>
-                        <div className="bar supply"><i style={{ width: g.supply + "%" }} /></div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-          <div className="foot-note">KAIROS · GameRadar · live from API · platform via source_id</div>
+          {view === "overview" && (ov ? <OverviewView ov={ov} /> : <Skel />)}
+          {view === "genres" && (extra ? <GenresView rows={extra} /> : <Skel />)}
+          {view === "tags" && (ov ? <TagsView ov={ov} /> : <Skel />)}
+          {view === "developers" && (extra ? <DevelopersView rows={extra} /> : <Skel />)}
+          {view === "trends" && (ov ? <TrendsView ov={ov} /> : <Skel />)}
+          {view === "hidden-gems" && (ov ? <GemsView ov={ov} rows={extra} /> : <Skel />)}
+          {view === "new-releases" && (extra ? <NewReleasesView rows={extra} /> : <Skel />)}
+          {view === "market-gaps" && (ov ? <div className="card">{head(I.gaps, "Market Gaps", "demand ≫ supply — ranked opportunities")}<GapList gaps={ov.gaps} /></div> : <Skel />)}
+          <div className="foot-note">KAIROS · GameRadar · live from Neon · platform via source_id</div>
         </div>
       </main>
     </section>

@@ -134,6 +134,30 @@ export interface BriefEdition extends BriefEditionMeta {
   payload: BriefPayload;
 }
 
+export interface GenreRow {
+  genre: string;
+  games: number;
+  avgRating: number;
+  avgVotes: number;
+  daysFeatured: number;
+  deltaPct: number;
+}
+export interface DeveloperRow {
+  developer: string;
+  games: number;
+  avgRating: number;
+  avgVotes: number;
+  topGenre: string;
+}
+export interface NewRelease {
+  gameId: number;
+  title: string;
+  genre: string;
+  rating: number;
+  votes: number;
+  url: string;
+}
+
 export interface LibraryItem {
   id: number;
   kind: string;
