@@ -5,6 +5,9 @@ import { api } from "../lib/api.ts";
 function fmt(date: string): string {
   return new Date(date + "T00:00:00Z").toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
 }
+const DAYS_SHORT = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
+const DAYS_LONG = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+const dow = (date: string) => new Date(date + "T00:00:00Z").getUTCDay(); // 0=Sun..6=Sat
 // Minimal, safe markdown: escape HTML then render **bold**.
 function md(s: string): string {
   const esc = s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -79,15 +82,15 @@ export function Brief({ hidden }: { hidden: boolean }) {
   const isThisWeek = (d: string) => (latest ? (new Date(latest).getTime() - new Date(d).getTime()) / 86400000 <= 7 : false);
   const thisWeek = list.filter((e) => isThisWeek(e.editionDate));
   const earlier = list.filter((e) => !isThisWeek(e.editionDate));
-  const wkClass = (w: string) => (String(w).toLowerCase().startsWith("thu") ? "thu" : "mon");
-  const wkShort = (w: string) => String(w).slice(0, 3).toUpperCase();
-
-  const editionRow = (e: BriefEditionMeta) => (
-    <a key={e.id} className={"edition" + (sel === e.editionDate ? " active" : "")} onClick={() => setSel(e.editionDate)}>
-      <span>{fmt(e.editionDate)}</span>
-      <span className={"ed-tag " + wkClass(e.weekday)}>{wkShort(e.weekday)}</span>
-    </a>
-  );
+  const editionRow = (e: BriefEditionMeta) => {
+    const di = dow(e.editionDate);
+    return (
+      <a key={e.id} className={"edition" + (sel === e.editionDate ? " active" : "")} onClick={() => setSel(e.editionDate)}>
+        <span>{fmt(e.editionDate)}</span>
+        <span className={"ed-tag " + (di === 4 ? "thu" : di === 1 ? "mon" : "day")}>{DAYS_SHORT[di]}</span>
+      </a>
+    );
+  };
 
   const p = ed?.payload;
   return (
@@ -103,7 +106,7 @@ export function Brief({ hidden }: { hidden: boolean }) {
 
       <main className="main">
         <div className="topbar">
-          <h2>Indie &amp; Gaming Brief <small>{ed ? `Edition ${ed.editionDate}${p?.weekday ? " · " + p.weekday : ""}` : "…"}</small></h2>
+          <h2>Indie &amp; Gaming Brief <small>{ed ? `Edition ${ed.editionDate} · ${DAYS_LONG[dow(ed.editionDate)]}` : "…"}</small></h2>
           <div className="filters">
             {ed && ed.sourceCount > 0 && (
               <div className="chip"><svg viewBox="0 0 24 24"><path d="M12 2l3 7h7l-5.5 4 2 7L12 16l-6.5 4 2-7L2 9h7z" /></svg>{ed.sourceCount} sources</div>

@@ -52,6 +52,7 @@ button{font-family:inherit}
 .ed-tag{margin-left:auto;font-size:9px;font-weight:700;padding:1px 6px;border-radius:5px}
 .ed-tag.thu{background:rgba(8,145,178,.13);color:var(--cyan)}
 .ed-tag.mon{background:rgba(217,119,6,.14);color:var(--accent)}
+.ed-tag.day{background:rgba(37,99,235,.1);color:var(--primary)}
 
 .main{padding:0 0 48px;min-width:0}
 .topbar{position:sticky;top:0;z-index:20;background:rgba(244,246,251,.85);backdrop-filter:blur(14px);border-bottom:1px solid var(--border);padding:16px 30px;display:flex;align-items:center;gap:18px;flex-wrap:wrap}
