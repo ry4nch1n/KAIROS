@@ -1,7 +1,7 @@
 name: Daily Crawl
 on:
   schedule:
-    - cron: "0 4 * * *" # 04:00 UTC daily
+    - cron: "0 20 * * *" # 20:00 UTC = 04:00 SGT (UTC+8) daily
   workflow_dispatch: {} # lets you trigger a run by hand from the Actions tab
 
 jobs:
