@@ -132,14 +132,26 @@ describe("A_explorer queries", () => {
     expect(genres[0].p90Rating).toBeGreaterThan(0);
     expect(typeof genres[0].votesPerDay).toBe("number");
   });
-  it("developers rollup (mode genre) runs", async () => {
+  it("developers rollup is sorted by games desc with bounded ratings", async () => {
     const devs = await q.getDevelopers(db, "all");
-    expect(Array.isArray(devs)).toBe(true);
-    if (devs.length) expect(devs[0].games).toBeGreaterThan(0);
+    expect(devs.length).toBeGreaterThan(0);
+    for (let i = 1; i < devs.length; i++) expect(devs[i - 1].games).toBeGreaterThanOrEqual(devs[i].games);
+    for (const d of devs) {
+      expect(d.avgRating).toBeGreaterThan(0);
+      expect(d.avgRating).toBeLessThanOrEqual(5);
+      expect(typeof d.topGenre).toBe("string");
+    }
   });
-  it("new releases returns rows", async () => {
+  it("new releases respects the first_seen 14-day window", async () => {
     const nr = await q.getNewReleases(db, "all");
-    expect(Array.isArray(nr)).toBe(true);
+    const total = (await db.query("SELECT count(*)::int n FROM games"))[0].n;
+    const inWindow = (await db.query(
+      `SELECT count(DISTINCT g.id)::int n FROM games g JOIN v_latest l ON l.game_id=g.id
+       WHERE g.is_live AND g.first_seen_at >= (SELECT max(first_seen_at) FROM games) - interval '14 days'`
+    ))[0].n;
+    expect(nr.length).toBeGreaterThan(0);
+    expect(nr.length).toBeLessThan(total);            // the window must exclude older games
+    expect(nr.length).toBe(Math.min(inWindow, 60));   // matches the window count (LIMIT 60)
   });
 });
 
