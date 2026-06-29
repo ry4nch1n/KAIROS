@@ -1,6 +1,6 @@
 // ECharts option builders from API shapes. Mirrors the approved light-mode mockup.
 import type { EChartsOption } from "echarts";
-import type { GenreMomentum, TagFreq, ScatterPoint, FeatureHeatmap } from "shared";
+import type { GenreMomentum, TagFreq, ScatterPoint, FeatureHeatmap, GenreLandscapePoint } from "shared";
 
 const AX = "#64748b", GRID = "#e6ecf5", FONT = "'Fira Code', monospace";
 const LINE_COLORS = ["#059669", "#2563eb", "#d97706", "#dc2626"];
@@ -91,5 +91,18 @@ export function heatmapOption(h: FeatureHeatmap): EChartsOption {
         emphasis: { itemStyle: { shadowBlur: 8, shadowColor: "rgba(37,99,235,.4)" } },
       },
     ],
+  };
+}
+
+export function landscapeOption(pts: GenreLandscapePoint[]): EChartsOption {
+  const maxV = Math.max(1, ...pts.map((p) => p.totalVotes));
+  const data = pts.map((p) => ({ value: [p.supply, p.p75Rating, p.totalVotes, p.genre], symbolSize: 12 + 34 * Math.sqrt(p.totalVotes / maxV) }));
+  return {
+    tooltip: { ...tip, formatter: (p: any) => `<b>${p.value[3]}</b><br>${p.value[0]} games · P75 rating ${p.value[1]}<br>${Number(p.value[2]).toLocaleString()} total votes` },
+    grid: { ...baseGrid, left: 44, top: 18 },
+    xAxis: { type: "value", name: "supply (games) →", nameLocation: "middle", nameGap: 26, nameTextStyle: { color: AX, fontFamily: FONT, fontSize: 10 }, axisLine: { lineStyle: { color: GRID } }, axisLabel: { color: AX, fontFamily: FONT, fontSize: 9 }, splitLine: { lineStyle: { color: GRID } } },
+    yAxis: { type: "value", name: "quality ceiling (P75 rating)", min: 3, max: 5, nameTextStyle: { color: AX, fontFamily: FONT, fontSize: 10 }, axisLine: { lineStyle: { color: GRID } }, axisLabel: { color: AX, fontFamily: FONT, fontSize: 9 }, splitLine: { lineStyle: { color: GRID } } },
+    series: [{ type: "scatter", data, itemStyle: { color: "rgba(37,99,235,.55)", borderColor: "#1e3a8a", borderWidth: 1 },
+      label: { show: true, formatter: (p: any) => p.value[3], position: "top", color: AX, fontFamily: FONT, fontSize: 9 } }],
   };
 }

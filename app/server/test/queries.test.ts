@@ -151,3 +151,16 @@ describe("A_insights", () => {
     }
   });
 });
+
+describe("A_landscape quality-saturation", () => {
+  it("one point per genre with supply, p75 rating, total votes", async () => {
+    const pts = await q.getGenreLandscape(db, "all");
+    expect(pts.length).toBeGreaterThan(0);
+    for (const p of pts) {
+      expect(p.supply).toBeGreaterThan(0);
+      expect(p.p75Rating).toBeGreaterThan(0);
+      expect(p.p75Rating).toBeLessThanOrEqual(5);
+      expect(p.totalVotes).toBeGreaterThanOrEqual(0);
+    }
+  });
+});

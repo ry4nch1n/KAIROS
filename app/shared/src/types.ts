@@ -64,6 +64,8 @@ export interface Insight {
   text: string; // may contain <b> emphasis
 }
 
+export interface GenreLandscapePoint { genre: string; supply: number; p75Rating: number; avgRating: number; totalVotes: number; }
+
 export interface Overview {
   kpi: OverviewKPI;
   momentum: GenreMomentum;
@@ -72,6 +74,7 @@ export interface Overview {
   heatmap: FeatureHeatmap;
   gaps: MarketGap[];
   insights: Insight[];
+  landscape: GenreLandscapePoint[];
   platform: Platform;
   subtitle: string;
 }

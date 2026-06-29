@@ -3,7 +3,7 @@ import type { Querier } from "../db/db.ts";
 import type {
   Platform, Overview, OverviewKPI, GenreMomentum, TagFreq, ScatterPoint,
   HiddenGem, MarketGap, FeatureHeatmap, Insight, BriefEditionMeta, BriefEdition,
-  GenreRow, DeveloperRow, NewRelease,
+  GenreRow, DeveloperRow, NewRelease, GenreLandscapePoint,
 } from "shared";
 
 const WEEK_LABEL_BASE = 15;
@@ -326,17 +326,30 @@ async function getKPI(db: Querier, platform: Platform, gaps: MarketGap[]): Promi
   };
 }
 
+export async function getGenreLandscape(db: Querier, platform: Platform): Promise<GenreLandscapePoint[]> {
+  const rows = await db.query(
+    `SELECT l.genre AS genre, count(*)::int AS supply,
+            percentile_cont(0.75) WITHIN GROUP (ORDER BY l.rating)::float AS p75,
+            avg(l.rating)::float AS avgr, coalesce(sum(l.votes),0)::float AS tv
+     FROM v_latest l JOIN games g ON g.id = l.game_id JOIN sources src ON src.id = g.source_id
+     WHERE g.is_live AND l.genre IS NOT NULL AND l.rating IS NOT NULL ${pf(platform)}
+     GROUP BY l.genre ORDER BY supply DESC`
+  );
+  return rows.map((r) => ({ genre: r.genre, supply: num(r.supply), p75Rating: +num(r.p75).toFixed(2), avgRating: +num(r.avgr).toFixed(2), totalVotes: Math.round(num(r.tv)) }));
+}
+
 export async function getOverview(db: Querier, platform: Platform): Promise<Overview> {
-  const [momentum, tags, scatter, heatmap, gaps, insights] = await Promise.all([
+  const [momentum, tags, scatter, heatmap, gaps, insights, landscape] = await Promise.all([
     getGenreMomentum(db, platform),
     getTagFrequency(db, platform),
     getScatter(db, platform),
     getFeatureHeatmap(db, platform),
     getMarketGaps(db, platform),
     getInsights(db, platform),
+    getGenreLandscape(db, platform),
   ]);
   const kpi = await getKPI(db, platform, gaps);
-  return { kpi, momentum, tags, scatter, heatmap, gaps, insights, platform, subtitle: subtitleFor(platform) };
+  return { kpi, momentum, tags, scatter, heatmap, gaps, insights, landscape, platform, subtitle: subtitleFor(platform) };
 }
 
 // ── Brief ──

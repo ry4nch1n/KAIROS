@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import type { Overview, Platform, GenreRow, DeveloperRow, NewRelease, HiddenGem } from "shared";
 import { api } from "../lib/api.ts";
 import { EChart } from "../components/EChart.tsx";
-import { momentumOption, treemapOption, scatterOption, heatmapOption } from "../components/charts.ts";
+import { momentumOption, treemapOption, scatterOption, heatmapOption, landscapeOption } from "../components/charts.ts";
 import { InsightSvg, tagClass } from "../components/icons.tsx";
 
 const fmt = (n: number) => n.toLocaleString("en-US");
@@ -40,6 +40,7 @@ function OverviewView({ ov }: { ov: Overview }) {
         <div className="kpi"><div className="label">{I.trends}Rising genre</div><div className="val num" style={{ fontSize: 24, paddingTop: 4 }}>{ov.kpi.risingGenre}</div><span className="delta up num">▲ +{ov.kpi.risingVotesPerDay} votes/day</span></div>
         <div className="kpi accent"><div className="label">{I.gaps}Open market gaps</div><div className="val num">{ov.kpi.openGaps}</div><span className="delta up num">demand ≫ supply</span></div>
       </div>
+      <div className="card hero">{head(I.genres, "Genre landscape", "supply × quality × audience — top-left = green-field")}<EChart option={landscapeOption(ov.landscape)} style={{ minHeight: 320 }} /></div>
       <div className="grid g-2">
         <div className="card">{head(I.trends, "Genre momentum", "median votes by genre over time")}
           {ov.momentum.building
