@@ -119,6 +119,7 @@ button{font-family:inherit}
 .gap-stats{margin-left:auto;display:flex;flex-wrap:wrap;gap:6px 12px;font-size:11px;color:var(--text-3);font-family:'Fira Code'}
 .gap-stats b{color:var(--text-1)}
 .gap-legend{font-size:10px;color:var(--text-3);font-style:italic;margin:0 0 6px;padding:0}
+.gap-examples{font-size:11px;color:#6b7280;margin-top:4px;line-height:1.4}
 .foot-note{text-align:center;color:var(--text-3);font-size:11px;font-family:'Fira Code';padding-top:8px}
 
 .section-title{font-size:11px;text-transform:uppercase;letter-spacing:1.2px;color:var(--text-3);font-weight:700;display:flex;align-items:center;gap:9px;margin:6px 0 -6px}

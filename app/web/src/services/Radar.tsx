@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import type { Overview, Platform, GenreRow, DeveloperRow, NewRelease, HiddenGem } from "shared";
 import { api } from "../lib/api.ts";
 import { EChart } from "../components/EChart.tsx";
-import { momentumOption, treemapOption, scatterOption, heatmapOption, landscapeOption } from "../components/charts.ts";
+import { momentumOption, treemapOption, scatterOption, heatmapOption, landscapeOption, velocityBarOption } from "../components/charts.ts";
 import { InsightSvg, tagClass } from "../components/icons.tsx";
 
 const fmt = (n: number) => n.toLocaleString("en-US");
@@ -42,11 +42,7 @@ function OverviewView({ ov }: { ov: Overview }) {
       </div>
       <div className="card hero">{head(I.genres, "Genre landscape", "supply × quality × audience — top-left = green-field")}<EChart option={landscapeOption(ov.landscape)} style={{ minHeight: 320 }} /></div>
       <div className="grid g-2">
-        <div className="card">{head(I.trends, "Genre momentum", "median votes by genre over time")}
-          {ov.momentum.building
-            ? <div className="empty-inline">History building — need ≥2 crawl days</div>
-            : <EChart option={momentumOption(ov.momentum)} />}
-        </div>
+        <div className="card">{head(I.trends, "Genre vote-velocity", "votes/day by genre — gainers vs flat/decliners")}<EChart option={velocityBarOption(ov.velocityBars)} /></div>
         <div className="card">{head(I.gems, "AI Insights", "auto-generated")}
           <div className="insights">{ov.insights.map((ins, i) => (
             <div className="insight" key={i}><div className={"ic " + ins.kind}><InsightSvg kind={ins.kind} /></div>
@@ -61,6 +57,10 @@ function OverviewView({ ov }: { ov: Overview }) {
       <div className="grid g-2">
         <div className="card">{head(I.overview, "Rating-band density", "genre × rating band (game counts)")}<EChart option={heatmapOption(ov.heatmap)} style={{ minHeight: 260 }} /></div>
         <div className="card">{head(I.gaps, "Top market gaps", "appetite × quality × supply")}<GapList gaps={ov.gaps} /></div>
+      </div>
+      <div className="card">{head(I.tags, "Genre glossary", "what these genres contain — example games")}
+        <table className="dtable"><thead><tr><th>Genre</th><th className="r">Games</th><th>Example games</th></tr></thead>
+          <tbody>{ov.glossary.map((r) => (<tr key={r.genre}><td className="gname">{r.genre}</td><td className="r">{fmt(r.games)}</td><td style={{ color: "var(--ink-3, #6b7280)" }}>{r.examples.join(" · ") || "—"}</td></tr>))}</tbody></table>
       </div>
     </>
   );
@@ -78,6 +78,7 @@ function GapList({ gaps }: { gaps: Overview["gaps"] }) {
             <span><b>{g.supplyN}</b> games</span>
             <span>top rating <b>{g.qualityCeil.toFixed(2)}</b></span>
           </div>
+          {g.examples?.length ? <div className="gap-examples num">e.g. {g.examples.join(" · ")}</div> : null}
         </div>
       ))}
     </div>

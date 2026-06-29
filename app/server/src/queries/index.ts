@@ -3,7 +3,7 @@ import type { Querier } from "../db/db.ts";
 import type {
   Platform, Overview, OverviewKPI, GenreMomentum, TagFreq, ScatterPoint,
   HiddenGem, MarketGap, FeatureHeatmap, Insight, BriefEditionMeta, BriefEdition,
-  GenreRow, DeveloperRow, NewRelease, GenreLandscapePoint,
+  GenreRow, DeveloperRow, NewRelease, GenreLandscapePoint, GenreVelocityBar, GenreGlossaryRow,
 } from "shared";
 
 const fmtDate = (d: any) => new Date(d).toISOString().slice(5, 10); // "MM-DD"
@@ -127,20 +127,23 @@ export async function getHiddenGems(db: Querier, platform: Platform): Promise<Hi
 }
 
 export async function getMarketGaps(db: Querier, platform: Platform): Promise<MarketGap[]> {
-  const rows = await db.query(
-    `SELECT l.genre AS genre, t.name AS tag,
-            count(DISTINCT g.id)::int AS supply_n,
-            percentile_cont(0.5) WITHIN GROUP (ORDER BY l.votes)::float AS appetite,
-            percentile_cont(0.9) WITHIN GROUP (ORDER BY l.rating)::float AS quality_ceil
-     FROM v_latest l
-     JOIN games g ON g.id = l.game_id
-     JOIN sources src ON src.id = g.source_id
-     JOIN game_tags gt ON gt.game_id = g.id
-     JOIN tags t ON t.id = gt.tag_id
-     WHERE g.is_live AND l.genre IS NOT NULL ${pf(platform)}
-     GROUP BY l.genre, t.name
-     HAVING count(DISTINCT g.id) >= 2`
-  );
+  const [rows, gex] = await Promise.all([
+    db.query(
+      `SELECT l.genre AS genre, t.name AS tag,
+              count(DISTINCT g.id)::int AS supply_n,
+              percentile_cont(0.5) WITHIN GROUP (ORDER BY l.votes)::float AS appetite,
+              percentile_cont(0.9) WITHIN GROUP (ORDER BY l.rating)::float AS quality_ceil
+       FROM v_latest l
+       JOIN games g ON g.id = l.game_id
+       JOIN sources src ON src.id = g.source_id
+       JOIN game_tags gt ON gt.game_id = g.id
+       JOIN tags t ON t.id = gt.tag_id
+       WHERE g.is_live AND l.genre IS NOT NULL ${pf(platform)}
+       GROUP BY l.genre, t.name
+       HAVING count(DISTINCT g.id) >= 2`
+    ),
+    gapExamples(db, platform),
+  ]);
   if (rows.length < 2) return [];
   const z = (vals: number[]) => { const m = vals.reduce((a, b) => a + b, 0) / vals.length;
     const sd = Math.sqrt(vals.reduce((a, b) => a + (b - m) ** 2, 0) / vals.length) || 1;
@@ -155,6 +158,7 @@ export async function getMarketGaps(db: Querier, platform: Platform): Promise<Ma
       appetite: Math.round(num(r.appetite)),
       qualityCeil: +num(r.quality_ceil).toFixed(2),
       score: +(zApp(num(r.appetite)) + zQual(num(r.quality_ceil)) - zSup(num(r.supply_n))).toFixed(2),
+      examples: gex.get(`${r.genre}${r.tag}`) ?? [],
     }))
     .sort((a, b) => b.score - a.score)
     .slice(0, 6);
@@ -271,20 +275,66 @@ async function getKPI(db: Querier, platform: Platform, gaps: MarketGap[]): Promi
   };
 }
 
-export async function getGenreLandscape(db: Querier, platform: Platform): Promise<GenreLandscapePoint[]> {
+async function genreExamples(db: Querier, platform: Platform): Promise<Map<string, string[]>> {
   const rows = await db.query(
-    `SELECT l.genre AS genre, count(*)::int AS supply,
-            percentile_cont(0.75) WITHIN GROUP (ORDER BY l.rating)::float AS p75,
-            avg(l.rating)::float AS avgr, coalesce(sum(l.votes),0)::float AS tv
-     FROM v_latest l JOIN games g ON g.id = l.game_id JOIN sources src ON src.id = g.source_id
-     WHERE g.is_live AND l.genre IS NOT NULL AND l.rating IS NOT NULL ${pf(platform)}
-     GROUP BY l.genre ORDER BY supply DESC`
+    `SELECT genre, title FROM (
+       SELECT l.genre AS genre, g.title AS title,
+              row_number() OVER (PARTITION BY l.genre ORDER BY l.votes DESC NULLS LAST) AS rn
+       FROM v_latest l JOIN games g ON g.id=l.game_id JOIN sources src ON src.id=g.source_id
+       WHERE g.is_live AND l.genre IS NOT NULL ${pf(platform)}
+     ) t WHERE rn <= 3 ORDER BY genre, rn`
   );
-  return rows.map((r) => ({ genre: r.genre, supply: num(r.supply), p75Rating: +num(r.p75).toFixed(2), avgRating: +num(r.avgr).toFixed(2), totalVotes: Math.round(num(r.tv)) }));
+  const m = new Map<string, string[]>();
+  for (const r of rows) { const a = m.get(r.genre) ?? []; a.push(r.title); m.set(r.genre, a); }
+  return m;
+}
+
+async function gapExamples(db: Querier, platform: Platform): Promise<Map<string, string[]>> {
+  const rows = await db.query(
+    `SELECT genre, tag, title FROM (
+       SELECT l.genre AS genre, t.name AS tag, g.title AS title,
+              row_number() OVER (PARTITION BY l.genre, t.name ORDER BY l.votes DESC NULLS LAST) AS rn
+       FROM v_latest l JOIN games g ON g.id=l.game_id JOIN sources src ON src.id=g.source_id
+       JOIN game_tags gt ON gt.game_id=g.id JOIN tags t ON t.id=gt.tag_id
+       WHERE g.is_live AND l.genre IS NOT NULL ${pf(platform)}
+     ) x WHERE rn <= 3 ORDER BY genre, tag, rn`
+  );
+  const m = new Map<string, string[]>();
+  for (const r of rows) { const k = `${r.genre}${r.tag}`; const a = m.get(k) ?? []; a.push(r.title); m.set(k, a); }
+  return m;
+}
+
+export async function getGenreVelocityBars(db: Querier, platform: Platform): Promise<GenreVelocityBar[]> {
+  const gd = await genreVotesByDate(db, platform);
+  const counts = await db.query(
+    `SELECT l.genre AS genre, count(*)::int AS n FROM v_latest l JOIN games g ON g.id=l.game_id JOIN sources src ON src.id=g.source_id WHERE g.is_live AND l.genre IS NOT NULL ${pf(platform)} GROUP BY l.genre`
+  );
+  const vol = new Map(counts.map((r) => [r.genre, num(r.n)]));
+  const MIN_VOL = 4;
+  return gd.order
+    .filter((g) => (vol.get(g) ?? 0) >= MIN_VOL)
+    .map((g) => ({ genre: g, votesPerDay: Math.round(velocity(gd.byGenre[g], gd.daySpan)) }))
+    .sort((a, b) => b.votesPerDay - a.votesPerDay)
+    .slice(0, 12);
+}
+
+export async function getGenreLandscape(db: Querier, platform: Platform): Promise<GenreLandscapePoint[]> {
+  const [rows, ex] = await Promise.all([
+    db.query(
+      `SELECT l.genre AS genre, count(*)::int AS supply,
+              percentile_cont(0.75) WITHIN GROUP (ORDER BY l.rating)::float AS p75,
+              avg(l.rating)::float AS avgr, coalesce(sum(l.votes),0)::float AS tv
+       FROM v_latest l JOIN games g ON g.id = l.game_id JOIN sources src ON src.id = g.source_id
+       WHERE g.is_live AND l.genre IS NOT NULL AND l.rating IS NOT NULL ${pf(platform)}
+       GROUP BY l.genre ORDER BY supply DESC`
+    ),
+    genreExamples(db, platform),
+  ]);
+  return rows.map((r) => ({ genre: r.genre, supply: num(r.supply), p75Rating: +num(r.p75).toFixed(2), avgRating: +num(r.avgr).toFixed(2), totalVotes: Math.round(num(r.tv)), examples: ex.get(r.genre) ?? [] }));
 }
 
 export async function getOverview(db: Querier, platform: Platform): Promise<Overview> {
-  const [momentum, tags, scatter, heatmap, gaps, insights, landscape] = await Promise.all([
+  const [momentum, tags, scatter, heatmap, gaps, insights, landscape, velocityBars] = await Promise.all([
     getGenreMomentum(db, platform),
     getTagFrequency(db, platform),
     getScatter(db, platform),
@@ -292,9 +342,12 @@ export async function getOverview(db: Querier, platform: Platform): Promise<Over
     getMarketGaps(db, platform),
     getInsights(db, platform),
     getGenreLandscape(db, platform),
+    getGenreVelocityBars(db, platform),
   ]);
   const kpi = await getKPI(db, platform, gaps);
-  return { kpi, momentum, tags, scatter, heatmap, gaps, insights, landscape, platform, subtitle: subtitleFor(platform) };
+  const glossary: GenreGlossaryRow[] = [...landscape].sort((a, b) => b.supply - a.supply).slice(0, 12)
+    .map((p) => ({ genre: p.genre, games: p.supply, examples: p.examples }));
+  return { kpi, momentum, tags, scatter, heatmap, gaps, insights, landscape, velocityBars, glossary, platform, subtitle: subtitleFor(platform) };
 }
 
 // ── Brief ──

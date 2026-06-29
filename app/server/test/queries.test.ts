@@ -167,3 +167,19 @@ describe("A_landscape quality-saturation", () => {
     }
   });
 });
+
+describe("iter2 fixes", () => {
+  it("velocity bars are sorted desc with numeric votes/day", async () => {
+    const bars = await q.getGenreVelocityBars(db, "all");
+    expect(bars.length).toBeGreaterThan(0);
+    for (let i = 1; i < bars.length; i++) expect(bars[i - 1].votesPerDay).toBeGreaterThanOrEqual(bars[i].votesPerDay);
+    expect(typeof bars[0].votesPerDay).toBe("number");
+  });
+  it("landscape points and overview glossary carry example games", async () => {
+    const ov = await q.getOverview(db, "all");
+    expect(ov.landscape.every((p) => Array.isArray(p.examples) && p.examples.length <= 3)).toBe(true);
+    expect(ov.glossary.length).toBeGreaterThan(0);
+    expect(ov.glossary[0].examples.length).toBeGreaterThan(0);
+    expect(ov.gaps.every((g) => Array.isArray(g.examples))).toBe(true);
+  });
+});

@@ -43,6 +43,7 @@ export interface MarketGap {
   appetite: number;
   qualityCeil: number;
   score: number;
+  examples: string[];
 }
 
 export interface HeatCell {
@@ -64,7 +65,10 @@ export interface Insight {
   text: string; // may contain <b> emphasis
 }
 
-export interface GenreLandscapePoint { genre: string; supply: number; p75Rating: number; avgRating: number; totalVotes: number; }
+export interface GenreLandscapePoint { genre: string; supply: number; p75Rating: number; avgRating: number; totalVotes: number; examples: string[]; }
+
+export interface GenreVelocityBar { genre: string; votesPerDay: number; }
+export interface GenreGlossaryRow { genre: string; games: number; examples: string[]; }
 
 export interface Overview {
   kpi: OverviewKPI;
@@ -75,6 +79,8 @@ export interface Overview {
   gaps: MarketGap[];
   insights: Insight[];
   landscape: GenreLandscapePoint[];
+  velocityBars: GenreVelocityBar[];
+  glossary: GenreGlossaryRow[];
   platform: Platform;
   subtitle: string;
 }

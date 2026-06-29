@@ -1,6 +1,6 @@
 // ECharts option builders from API shapes. Mirrors the approved light-mode mockup.
 import type { EChartsOption } from "echarts";
-import type { GenreMomentum, TagFreq, ScatterPoint, FeatureHeatmap, GenreLandscapePoint } from "shared";
+import type { GenreMomentum, TagFreq, ScatterPoint, FeatureHeatmap, GenreLandscapePoint, GenreVelocityBar } from "shared";
 
 const AX = "#64748b", GRID = "#e6ecf5", FONT = "'Fira Code', monospace";
 const LINE_COLORS = ["#059669", "#2563eb", "#d97706", "#dc2626"];
@@ -76,6 +76,7 @@ export function scatterOption(points: ScatterPoint[]): EChartsOption {
 }
 
 export function heatmapOption(h: FeatureHeatmap): EChartsOption {
+  const maxV = Math.max(1, ...h.cells.map((c) => c.value));
   return {
     tooltip: { ...tip, formatter: (p: any) => `${h.genres[p.value[1]]} · ${h.weeks[p.value[0]]}<br><b>${p.value[2]}</b> games` },
     grid: { left: 84, right: 14, top: 10, bottom: 46 },
@@ -86,7 +87,7 @@ export function heatmapOption(h: FeatureHeatmap): EChartsOption {
       {
         type: "heatmap",
         data: h.cells.map((c) => [c.week, c.genreIndex, c.value]),
-        label: { show: true, color: "#334155", fontFamily: FONT, fontSize: 9 },
+        label: { show: true, fontFamily: FONT, fontSize: 9, formatter: (p: any) => p.value[2], color: (p: any) => (p.value[2] > maxV * 0.5 ? "#ffffff" : "#334155") },
         itemStyle: { borderColor: "#fff", borderWidth: 2 },
         emphasis: { itemStyle: { shadowBlur: 8, shadowColor: "rgba(37,99,235,.4)" } },
       },
@@ -96,13 +97,23 @@ export function heatmapOption(h: FeatureHeatmap): EChartsOption {
 
 export function landscapeOption(pts: GenreLandscapePoint[]): EChartsOption {
   const maxV = Math.max(1, ...pts.map((p) => p.totalVotes));
-  const data = pts.map((p) => ({ value: [p.supply, p.p75Rating, p.totalVotes, p.genre], symbolSize: 12 + 34 * Math.sqrt(p.totalVotes / maxV) }));
+  const data = pts.map((p) => ({ value: [p.supply, p.p75Rating, p.totalVotes, p.genre, (p.examples ?? []).join(", ")], symbolSize: 12 + 34 * Math.sqrt(p.totalVotes / maxV) }));
   return {
-    tooltip: { ...tip, formatter: (p: any) => `<b>${p.value[3]}</b><br>${p.value[0]} games · P75 rating ${p.value[1]}<br>${Number(p.value[2]).toLocaleString()} total votes` },
+    tooltip: { ...tip, formatter: (p: any) => `<b>${p.value[3]}</b><br>${p.value[0]} games · P75 rating ${p.value[1]}<br>${Number(p.value[2]).toLocaleString()} total votes${p.value[4] ? `<br><span style="opacity:.7">e.g. ${p.value[4]}</span>` : ""}` },
     grid: { ...baseGrid, left: 44, top: 18 },
-    xAxis: { type: "value", name: "supply (games) →", nameLocation: "middle", nameGap: 26, nameTextStyle: { color: AX, fontFamily: FONT, fontSize: 10 }, axisLine: { lineStyle: { color: GRID } }, axisLabel: { color: AX, fontFamily: FONT, fontSize: 9 }, splitLine: { lineStyle: { color: GRID } } },
+    xAxis: { type: "log", name: "supply (games) →", nameLocation: "middle", nameGap: 26, nameTextStyle: { color: AX, fontFamily: FONT, fontSize: 10 }, axisLine: { lineStyle: { color: GRID } }, axisLabel: { color: AX, fontFamily: FONT, fontSize: 9 }, splitLine: { lineStyle: { color: GRID } } },
     yAxis: { type: "value", name: "quality ceiling (P75 rating)", min: 3, max: 5, nameTextStyle: { color: AX, fontFamily: FONT, fontSize: 10 }, axisLine: { lineStyle: { color: GRID } }, axisLabel: { color: AX, fontFamily: FONT, fontSize: 9 }, splitLine: { lineStyle: { color: GRID } } },
-    series: [{ type: "scatter", data, itemStyle: { color: "rgba(37,99,235,.55)", borderColor: "#1e3a8a", borderWidth: 1 },
-      label: { show: true, formatter: (p: any) => p.value[3], position: "top", color: AX, fontFamily: FONT, fontSize: 9 } }],
+    series: [{ type: "scatter", data, itemStyle: { color: "rgba(37,99,235,.55)", borderColor: "#1e3a8a", borderWidth: 1 }, label: { show: false } }],
+  };
+}
+
+export function velocityBarOption(bars: GenreVelocityBar[]): EChartsOption {
+  const data = [...bars].reverse(); // largest on top for a horizontal bar
+  return {
+    tooltip: { ...tip, formatter: (p: any) => `${p.name}<br><b>${Number(p.value).toLocaleString()}</b> votes/day` },
+    grid: { left: 116, right: 36, top: 10, bottom: 26 },
+    xAxis: { type: "value", name: "votes/day", nameTextStyle: { color: AX, fontFamily: FONT, fontSize: 10 }, axisLabel: { color: AX, fontFamily: FONT, fontSize: 9 }, splitLine: { lineStyle: { color: GRID } } },
+    yAxis: { type: "category", data: data.map((b) => b.genre), axisLabel: { color: AX, fontFamily: FONT, fontSize: 10 }, axisLine: { lineStyle: { color: GRID } } },
+    series: [{ type: "bar", barWidth: "62%", data: data.map((b) => ({ value: b.votesPerDay, itemStyle: { color: b.votesPerDay >= 0 ? "#059669" : "#dc2626" } })), label: { show: true, position: "right", color: AX, fontFamily: FONT, fontSize: 9, formatter: (p: any) => Number(p.value).toLocaleString() } }],
   };
 }
