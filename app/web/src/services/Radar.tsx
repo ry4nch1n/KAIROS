@@ -88,11 +88,12 @@ function GenresView({ rows }: { rows: GenreRow[] }) {
   const max = Math.max(1, ...rows.map((r) => r.games));
   return (
     <div className="card">{head(I.genres, "Genre Explorer", `${rows.length} genres`)}
-      <table className="dtable"><thead><tr><th>Genre</th><th className="r">Games</th><th className="r">Avg rating</th><th className="r">Avg votes</th><th className="r">Days feat.</th><th className="r">Momentum</th></tr></thead>
+      <table className="dtable"><thead><tr><th>Genre</th><th className="r">Games</th><th className="r">Avg rating</th><th className="r">Median votes</th><th className="r">P90 votes (top-10% bar)</th><th className="r">P90 rating</th><th className="r">Votes/day</th></tr></thead>
         <tbody>{rows.map((r) => (
           <tr key={r.genre}><td className="gname">{r.genre}<span className="minibar"><i style={{ width: (r.games / max) * 100 + "%" }} /></span></td>
-            <td className="r">{r.games}</td><td className="r">{r.avgRating.toFixed(2)}</td><td className="r">{fmt(r.avgVotes)}</td><td className="r">{r.daysFeatured}</td>
-            <td className={"r " + deltaCls(r.deltaPct)}>{r.deltaPct > 0 ? "+" : ""}{r.deltaPct}%</td></tr>
+            <td className="r">{r.games}</td><td className="r">{r.avgRating.toFixed(2)}</td><td className="r">{fmt(r.medianVotes)}</td><td className="r">{fmt(r.p90Votes)}</td>
+            <td className="r">{r.p90Rating.toFixed(2)}</td>
+            <td className={"r " + deltaCls(r.votesPerDay)}>{r.votesPerDay > 0 ? "+" : ""}{fmt(r.votesPerDay)}</td></tr>
         ))}</tbody></table>
     </div>
   );

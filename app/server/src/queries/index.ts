@@ -6,8 +6,6 @@ import type {
   GenreRow, DeveloperRow, NewRelease, GenreLandscapePoint,
 } from "shared";
 
-const WEEK_LABEL_BASE = 15;
-
 const fmtDate = (d: any) => new Date(d).toISOString().slice(5, 10); // "MM-DD"
 
 interface GenreDates { dates: string[]; order: string[]; byGenre: Record<string, number[]>; daySpan: number; }
@@ -55,59 +53,6 @@ function subtitleFor(platform: Platform): string {
   return "Poki + CrazyGames · last 90 days";
 }
 const num = (v: any) => (v === null || v === undefined ? 0 : Number(v));
-
-// ── genre × week featured counts (shared by momentum + heatmap + insights) ──
-interface GenreWeeks {
-  weeks: string[];
-  order: string[]; // genres by total featured desc
-  byGenre: Record<string, number[]>;
-  totals: Record<string, number>;
-}
-async function genreWeekFeatures(db: Querier, platform: Platform): Promise<GenreWeeks> {
-  const rows = await db.query(
-    `SELECT s.genre AS genre, s.captured_at AS wk,
-            count(*) FILTER (WHERE s.featured)::int AS feats
-     FROM game_snapshots s
-     JOIN games g ON g.id = s.game_id
-     JOIN sources src ON src.id = g.source_id
-     WHERE g.is_live ${pf(platform)}
-     GROUP BY s.genre, s.captured_at`
-  );
-  const times = [...new Set(rows.map((r) => new Date(r.wk).getTime()))].sort((a, b) => a - b);
-  const weekIndex = new Map(times.map((t, i) => [t, i]));
-  const weeks = times.map((_, i) => "W" + (WEEK_LABEL_BASE + i));
-  const byGenre: Record<string, number[]> = {};
-  const totals: Record<string, number> = {};
-  for (const r of rows) {
-    const g = r.genre as string;
-    if (!byGenre[g]) byGenre[g] = new Array(times.length).fill(0);
-    const i = weekIndex.get(new Date(r.wk).getTime())!;
-    byGenre[g][i] = num(r.feats);
-    totals[g] = (totals[g] ?? 0) + num(r.feats);
-  }
-  const order = Object.keys(totals).sort((a, b) => totals[b] - totals[a]);
-  return { weeks, order, byGenre, totals };
-}
-
-// Least-squares trend over the whole window — robust to single-week noise.
-// deltaPct = rise of the fitted line over the window, as % of the average level.
-function trendStats(series: number[]): { deltaPct: number; total: number; slope: number; mean: number } {
-  const n = series.length;
-  const total = series.reduce((a, b) => a + b, 0);
-  if (n < 2) return { deltaPct: 0, total, slope: 0, mean: total };
-  let sx = 0, sy = 0, sxx = 0, sxy = 0;
-  for (let i = 0; i < n; i++) {
-    sx += i; sy += series[i]; sxx += i * i; sxy += i * series[i];
-  }
-  const denom = n * sxx - sx * sx;
-  const slope = denom !== 0 ? (n * sxy - sx * sy) / denom : 0;
-  const mean = sy / n;
-  const deltaPct = mean > 0 ? (slope * (n - 1)) / mean * 100 : 0;
-  return { deltaPct, total, slope, mean };
-}
-function growthPct(series: number[]): number {
-  return trendStats(series).deltaPct;
-}
 
 export async function getGenreMomentum(db: Querier, platform: Platform): Promise<GenreMomentum> {
   const gd = await genreVotesByDate(db, platform);
@@ -217,24 +162,20 @@ export async function getMarketGaps(db: Querier, platform: Platform): Promise<Ma
 
 export async function getGenres(db: Querier, platform: Platform): Promise<GenreRow[]> {
   const rows = await db.query(
-    `SELECT l.genre AS genre, count(*)::int AS games,
-            avg(l.rating)::float AS avg_rating, avg(l.votes)::float AS avg_votes,
-            avg(fd.df)::float AS days_featured
-     FROM v_latest l
-     JOIN games g ON g.id = l.game_id
-     JOIN sources src ON src.id = g.source_id
-     LEFT JOIN (SELECT game_id, count(*) FILTER (WHERE featured) AS df FROM game_snapshots GROUP BY game_id) fd ON fd.game_id = g.id
+    `SELECT l.genre AS genre, count(*)::int AS games, avg(l.rating)::float AS avg_rating,
+            percentile_cont(0.5) WITHIN GROUP (ORDER BY l.votes)::float AS med_votes,
+            percentile_cont(0.9) WITHIN GROUP (ORDER BY l.votes)::float AS p90_votes,
+            percentile_cont(0.9) WITHIN GROUP (ORDER BY l.rating)::float AS p90_rating
+     FROM v_latest l JOIN games g ON g.id = l.game_id JOIN sources src ON src.id = g.source_id
      WHERE g.is_live AND l.genre IS NOT NULL ${pf(platform)}
      GROUP BY l.genre ORDER BY games DESC`
   );
-  const gw = await genreWeekFeatures(db, platform);
+  const gd = await genreVotesByDate(db, platform);
   return rows.map((r) => ({
-    genre: r.genre,
-    games: num(r.games),
-    avgRating: +num(r.avg_rating).toFixed(2),
-    avgVotes: Math.round(num(r.avg_votes)),
-    daysFeatured: +num(r.days_featured).toFixed(1),
-    deltaPct: gw.byGenre[r.genre] ? Math.round(trendStats(gw.byGenre[r.genre]).deltaPct) : 0,
+    genre: r.genre, games: num(r.games), avgRating: +num(r.avg_rating).toFixed(2),
+    medianVotes: Math.round(num(r.med_votes)), p90Votes: Math.round(num(r.p90_votes)),
+    p90Rating: +num(r.p90_rating).toFixed(2),
+    votesPerDay: gd.byGenre[r.genre] ? Math.round(velocity(gd.byGenre[r.genre], gd.daySpan)) : 0,
   }));
 }
 

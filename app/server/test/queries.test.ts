@@ -125,11 +125,12 @@ describe("A10 brief editions", () => {
 });
 
 describe("A_explorer queries", () => {
-  it("genres rollup has counts + ratings", async () => {
+  it("genres rollup has benchmarks", async () => {
     const genres = await q.getGenres(db, "all");
     expect(genres.length).toBeGreaterThan(0);
     expect(genres[0].games).toBeGreaterThan(0);
-    expect(genres[0].avgRating).toBeGreaterThan(0);
+    expect(genres[0].p90Votes).toBeGreaterThanOrEqual(genres[0].medianVotes);
+    expect(genres[0].p90Rating).toBeGreaterThan(0);
   });
   it("developers rollup (mode genre) runs", async () => {
     const devs = await q.getDevelopers(db, "all");

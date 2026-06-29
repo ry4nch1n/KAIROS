@@ -138,9 +138,10 @@ export interface GenreRow {
   genre: string;
   games: number;
   avgRating: number;
-  avgVotes: number;
-  daysFeatured: number;
-  deltaPct: number;
+  medianVotes: number;
+  p90Votes: number;
+  p90Rating: number;
+  votesPerDay: number;
 }
 export interface DeveloperRow {
   developer: string;
