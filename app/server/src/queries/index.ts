@@ -478,10 +478,10 @@ async function getTagGlossary(db: Querier, platform: Platform, tagNames: string[
 }
 
 export async function getOverview(db: Querier, platform: Platform): Promise<Overview> {
-  const gd = await genreVotesByDate(db, platform);
-  const vol = await genreCounts(db, platform);
-  const gemRows = await gemBase(db, platform);
-  const [tags, heatmap, gaps, landscape] = await Promise.all([
+  const [gd, vol, gemRows, tags, heatmap, gaps, landscape] = await Promise.all([
+    genreVotesByDate(db, platform),
+    genreCounts(db, platform),
+    gemBase(db, platform),
     getTagFrequency(db, platform),
     getFeatureHeatmap(db, platform),
     getMarketGaps(db, platform),
