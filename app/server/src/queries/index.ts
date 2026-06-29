@@ -149,6 +149,13 @@ async function genreVotesByDate(db: Querier, platform: Platform): Promise<GenreD
   return { dates, order, byGenre, daySpan };
 }
 
+async function genreCounts(db: Querier, platform: Platform): Promise<Map<string, number>> {
+  const rows = await db.query(
+    `SELECT l.genre AS genre, count(*)::int AS n FROM v_latest l JOIN games g ON g.id=l.game_id JOIN sources src ON src.id=g.source_id WHERE g.is_live AND l.genre IS NOT NULL ${pf(platform)} GROUP BY l.genre`
+  );
+  return new Map(rows.map((r) => [r.genre, num(r.n)]));
+}
+
 // velocity = (last - first) / spanDays, guarded for <2 points or zero span
 function velocity(values: number[], daySpan: number): number {
   if (values.length < 2 || daySpan <= 0) return 0;
@@ -168,10 +175,10 @@ function subtitleFor(platform: Platform): string {
 }
 const num = (v: any) => (v === null || v === undefined ? 0 : Number(v));
 
-export async function getGenreMomentum(db: Querier, platform: Platform): Promise<GenreMomentum> {
-  const gd = await genreVotesByDate(db, platform);
+export async function getGenreMomentum(db: Querier, platform: Platform, gd?: GenreDates): Promise<GenreMomentum> {
+  gd ??= await genreVotesByDate(db, platform);
   const top = gd.order.slice(0, 4);
-  return { dates: gd.dates, building: gd.dates.length < 2, series: top.map((genre) => ({ genre, values: gd.byGenre[genre] })) };
+  return { dates: gd.dates, series: top.map((genre) => ({ genre, values: gd.byGenre[genre] })) };
 }
 
 const RATING_BANDS = ["<3.5", "3.5–4.0", "4.0–4.4", "4.4–4.7", "≥4.7"];
@@ -226,13 +233,13 @@ async function gemBase(db: Querier, platform: Platform) {
   );
 }
 
-export async function getScatter(db: Querier, platform: Platform): Promise<ScatterPoint[]> {
-  const rows = await gemBase(db, platform);
+export async function getScatter(db: Querier, platform: Platform, rows?: Record<string, any>[]): Promise<ScatterPoint[]> {
+  rows ??= await gemBase(db, platform);
   return rows.map((r) => ({ title: r.title, genre: r.genre ?? "—", rating: num(r.rating), votes: num(r.votes), gem: !!r.gem }));
 }
 
-export async function getHiddenGems(db: Querier, platform: Platform): Promise<HiddenGem[]> {
-  const rows = await gemBase(db, platform);
+export async function getHiddenGems(db: Querier, platform: Platform, rows?: Record<string, any>[]): Promise<HiddenGem[]> {
+  rows ??= await gemBase(db, platform);
   return rows
     .filter((r) => r.gem)
     .sort((a, b) => (num(b.rp) - num(b.vp)) - (num(a.rp) - num(a.vp)))
@@ -330,8 +337,8 @@ export async function getNewReleases(db: Querier, platform: Platform): Promise<N
   return rows.map((r) => ({ gameId: num(r.id), title: r.title, genre: r.genre ?? "—", rating: num(r.rating), votes: num(r.votes), url: r.url }));
 }
 
-export async function getInsights(db: Querier, platform: Platform): Promise<Insight[]> {
-  const gd = await genreVotesByDate(db, platform);
+export async function getInsights(db: Querier, platform: Platform, deps?: { gd?: GenreDates; gaps?: MarketGap[]; landscape?: GenreLandscapePoint[]; gems?: HiddenGem[] }): Promise<Insight[]> {
+  const gd = deps?.gd ?? await genreVotesByDate(db, platform);
   const vels = gd.order.map((genre) => ({ genre, v: velocity(gd.byGenre[genre], gd.daySpan) }));
   const out: Insight[] = [];
   // (1) Rising genre by votes/day
@@ -340,15 +347,15 @@ export async function getInsights(db: Querier, platform: Platform): Promise<Insi
     out.push({ kind: "up", tag: "RISING", meta: `+${Math.round(top.v)} votes/day`, text: `<b>${top.genre}</b> is gaining the most votes/day across the window.` });
   }
   // (2) Top opportunity gap
-  const gaps = await getMarketGaps(db, platform);
+  const gaps = deps?.gaps ?? await getMarketGaps(db, platform);
   if (gaps.length)
     out.push({ kind: "gap", tag: "OPPORTUNITY", meta: `${gaps[0].supplyN} games · ${gaps[0].appetite} median votes`, text: `<b>${gaps[0].label}</b> shows high demand with thin supply.` });
   // (3) Hidden-gems count
-  const gems = await getHiddenGems(db, platform);
+  const gems = deps?.gems ?? await getHiddenGems(db, platform);
   if (gems.length)
     out.push({ kind: "gem", tag: "HIDDEN GEMS", meta: `${gems.length} found`, text: `<b>${gems.length} hidden gems</b> rank in the top 25% on rating with low vote volume.` });
   // (4) Optional highest-quality genre by P75 rating
-  const landscape = await getGenreLandscape(db, platform);
+  const landscape = deps?.landscape ?? await getGenreLandscape(db, platform);
   if (landscape.length) {
     const best = landscape.reduce((b, c) => (c.p75Rating > b.p75Rating ? c : b), landscape[0]);
     out.push({ kind: "up", tag: "TOP QUALITY", meta: `P75 rating ${best.p75Rating.toFixed(2)}`, text: `<b>${best.genre}</b> has the highest P75 rating across all genres.` });
@@ -356,7 +363,7 @@ export async function getInsights(db: Querier, platform: Platform): Promise<Insi
   return out;
 }
 
-async function getKPI(db: Querier, platform: Platform, gaps: MarketGap[]): Promise<OverviewKPI> {
+async function getKPI(db: Querier, platform: Platform, gaps: MarketGap[], deps?: { gd?: GenreDates; vol?: Map<string, number> }): Promise<OverviewKPI> {
   const g = await db.query(
     `SELECT count(*)::int AS n FROM games g JOIN sources src ON src.id = g.source_id WHERE g.is_live ${pf(platform)}`
   );
@@ -367,12 +374,9 @@ async function getKPI(db: Querier, platform: Platform, gaps: MarketGap[]): Promi
     `SELECT count(*)::int AS n FROM games g JOIN sources src ON src.id = g.source_id
      WHERE g.is_live ${pf(platform)} AND g.first_seen_at >= (SELECT max(first_seen_at) FROM games) - interval '14 days'`
   );
-  const gd = await genreVotesByDate(db, platform);
+  const gd = deps?.gd ?? await genreVotesByDate(db, platform);
+  const vol = deps?.vol ?? await genreCounts(db, platform);
   const MIN_VOL = 4;
-  const counts = await db.query(
-    `SELECT l.genre AS genre, count(*)::int AS n FROM v_latest l JOIN games g ON g.id=l.game_id JOIN sources src ON src.id=g.source_id WHERE g.is_live AND l.genre IS NOT NULL ${pf(platform)} GROUP BY l.genre`
-  );
-  const vol = new Map(counts.map((r) => [r.genre, num(r.n)]));
   const rising = gd.order
     .filter((genre) => (vol.get(genre) ?? 0) >= MIN_VOL)
     .map((genre) => ({ genre, v: velocity(gd.byGenre[genre], gd.daySpan) }))
@@ -420,16 +424,13 @@ async function gapExamples(db: Querier, platform: Platform): Promise<Map<string,
   return m;
 }
 
-export async function getGenreVelocityBars(db: Querier, platform: Platform): Promise<GenreVelocityBar[]> {
-  const gd = await genreVotesByDate(db, platform);
-  const counts = await db.query(
-    `SELECT l.genre AS genre, count(*)::int AS n FROM v_latest l JOIN games g ON g.id=l.game_id JOIN sources src ON src.id=g.source_id WHERE g.is_live AND l.genre IS NOT NULL ${pf(platform)} GROUP BY l.genre`
-  );
-  const vol = new Map(counts.map((r) => [r.genre, num(r.n)]));
+export async function getGenreVelocityBars(db: Querier, platform: Platform, gd?: GenreDates, vol?: Map<string, number>): Promise<GenreVelocityBar[]> {
+  gd ??= await genreVotesByDate(db, platform);
+  vol ??= await genreCounts(db, platform);
   const MIN_VOL = 4;
   return gd.order
-    .filter((g) => (vol.get(g) ?? 0) >= MIN_VOL)
-    .map((g) => ({ genre: g, votesPerDay: Math.round(velocity(gd.byGenre[g], gd.daySpan)) }))
+    .filter((g) => (vol!.get(g) ?? 0) >= MIN_VOL)
+    .map((g) => ({ genre: g, votesPerDay: Math.round(velocity(gd!.byGenre[g], gd!.daySpan)) }))
     .sort((a, b) => b.votesPerDay - a.votesPerDay)
     .slice(0, 12);
 }
@@ -477,17 +478,21 @@ async function getTagGlossary(db: Querier, platform: Platform, tagNames: string[
 }
 
 export async function getOverview(db: Querier, platform: Platform): Promise<Overview> {
-  const [momentum, tags, scatter, heatmap, gaps, insights, landscape, velocityBars] = await Promise.all([
-    getGenreMomentum(db, platform),
+  const gd = await genreVotesByDate(db, platform);
+  const vol = await genreCounts(db, platform);
+  const gemRows = await gemBase(db, platform);
+  const [tags, heatmap, gaps, landscape] = await Promise.all([
     getTagFrequency(db, platform),
-    getScatter(db, platform),
     getFeatureHeatmap(db, platform),
     getMarketGaps(db, platform),
-    getInsights(db, platform),
     getGenreLandscape(db, platform),
-    getGenreVelocityBars(db, platform),
   ]);
-  const kpi = await getKPI(db, platform, gaps);
+  const scatter = await getScatter(db, platform, gemRows);
+  const gems = await getHiddenGems(db, platform, gemRows);
+  const momentum = await getGenreMomentum(db, platform, gd);
+  const velocityBars = await getGenreVelocityBars(db, platform, gd, vol);
+  const insights = await getInsights(db, platform, { gd, gaps, landscape, gems });
+  const kpi = await getKPI(db, platform, gaps, { gd, vol });
   const tagNames = [...new Set([...gaps.map((g) => g.tag), ...tags.map((t) => t.tag)])];
   const glossary: GlossaryRow[] = await getTagGlossary(db, platform, tagNames);
   return { kpi, momentum, tags, scatter, heatmap, gaps, insights, landscape, velocityBars, glossary, platform, subtitle: subtitleFor(platform) };
