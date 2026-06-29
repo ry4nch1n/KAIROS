@@ -63,14 +63,12 @@ describe("A5 tag frequency", () => {
   });
 });
 
-describe("A6 hidden gems", () => {
-  it("all rows are high-rating, low-votes, unfeatured", async () => {
+describe("A6 hidden gems (percentile)", () => {
+  it("is a selective minority, not ~half the catalogue", async () => {
+    const all = (await db.query("SELECT count(*)::int n FROM v_latest"))[0].n;
     const g = await q.getHiddenGems(db, "all");
     expect(g.length).toBeGreaterThan(0);
-    for (const row of g) {
-      expect(row.rating).toBeGreaterThanOrEqual(4.4);
-      expect(row.votes).toBeLessThan(5000);
-    }
+    expect(g.length).toBeLessThanOrEqual(Math.ceil(all * 0.15)); // < 15% of catalogue
   });
 });
 
@@ -89,14 +87,13 @@ describe("A7 market gaps", () => {
 });
 
 describe("A8 scatter", () => {
-  it("returns rating x votes with gems flagged", async () => {
+  it("carries title+genre and flags a small gem minority", async () => {
     const pts = await q.getScatter(db, "all");
     expect(pts.length).toBeGreaterThan(0);
-    expect(pts.some((p) => p.gem)).toBe(true);
-    for (const p of pts) {
-      expect(p.rating).toBeGreaterThan(0);
-      expect(p.votes).toBeGreaterThanOrEqual(0);
-    }
+    expect(pts.every((p) => typeof p.title === "string" && typeof p.genre === "string")).toBe(true);
+    const gems = pts.filter((p) => p.gem).length;
+    expect(gems).toBeGreaterThan(0);
+    expect(gems).toBeLessThan(pts.length * 0.25);
   });
 });
 

@@ -102,28 +102,37 @@ export async function getTagFrequency(db: Querier, platform: Platform): Promise<
   return rows.map((r) => ({ tag: r.tag, count: num(r.cnt) }));
 }
 
-export async function getHiddenGems(db: Querier, platform: Platform): Promise<HiddenGem[]> {
-  const rows = await db.query(
-    `SELECT g.id AS id, g.title AS title, l.rating AS rating, l.votes AS votes, l.genre AS genre
-     FROM v_latest l
-     JOIN games g ON g.id = l.game_id
-     JOIN sources src ON src.id = g.source_id
-     WHERE g.is_live AND l.rating >= 4.4 AND l.votes < 5000 AND l.featured = false ${pf(platform)}
-     ORDER BY l.rating DESC, l.votes ASC LIMIT 30`
+const GEM_RATING_PCTILE = 0.75, GEM_VOTES_PCTILE = 0.25;
+
+async function gemBase(db: Querier, platform: Platform) {
+  return db.query(
+    `WITH base AS (
+       SELECT g.id, g.title, l.genre, l.rating, l.votes,
+              percent_rank() OVER (ORDER BY l.rating) AS rp,
+              percent_rank() OVER (ORDER BY l.votes)  AS vp
+       FROM v_latest l
+       JOIN games g ON g.id = l.game_id
+       JOIN sources src ON src.id = g.source_id
+       WHERE g.is_live AND l.rating IS NOT NULL AND l.votes IS NOT NULL ${pf(platform)}
+     )
+     SELECT id, title, genre, rating, votes, rp, vp,
+            (rp >= ${GEM_RATING_PCTILE} AND vp <= ${GEM_VOTES_PCTILE}) AS gem
+     FROM base`
   );
-  return rows.map((r) => ({ gameId: num(r.id), title: r.title, rating: num(r.rating), votes: num(r.votes), genre: r.genre }));
 }
 
 export async function getScatter(db: Querier, platform: Platform): Promise<ScatterPoint[]> {
-  const rows = await db.query(
-    `SELECT g.title AS title, l.rating AS rating, l.votes AS votes,
-            (l.rating >= 4.4 AND l.votes < 5000 AND l.featured = false) AS gem
-     FROM v_latest l
-     JOIN games g ON g.id = l.game_id
-     JOIN sources src ON src.id = g.source_id
-     WHERE g.is_live ${pf(platform)}`
-  );
-  return rows.map((r) => ({ title: r.title, rating: num(r.rating), votes: num(r.votes), gem: !!r.gem }));
+  const rows = await gemBase(db, platform);
+  return rows.map((r) => ({ title: r.title, genre: r.genre ?? "—", rating: num(r.rating), votes: num(r.votes), gem: !!r.gem }));
+}
+
+export async function getHiddenGems(db: Querier, platform: Platform): Promise<HiddenGem[]> {
+  const rows = await gemBase(db, platform);
+  return rows
+    .filter((r) => r.gem)
+    .sort((a, b) => (num(b.rp) - num(b.vp)) - (num(a.rp) - num(a.vp)))
+    .slice(0, 30)
+    .map((r) => ({ gameId: num(r.id), title: r.title, rating: num(r.rating), votes: num(r.votes), genre: r.genre ?? "—" }));
 }
 
 export async function getMarketGaps(db: Querier, platform: Platform): Promise<MarketGap[]> {

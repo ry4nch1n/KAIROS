@@ -57,23 +57,20 @@ export function treemapOption(tags: TagFreq[]): EChartsOption {
 }
 
 export function scatterOption(points: ScatterPoint[]): EChartsOption {
-  const crowd = points.filter((p) => !p.gem).map((p) => [Math.max(p.votes, 1), p.rating]);
-  const gems = points.filter((p) => p.gem).map((p) => [Math.max(p.votes, 1), p.rating]);
+  // [votes, rating, title, genre] — title/genre kept for the tooltip
+  const crowd = points.filter((p) => !p.gem).map((p) => [Math.max(p.votes, 1), p.rating, p.title, p.genre]);
+  const gems  = points.filter((p) =>  p.gem).map((p) => [Math.max(p.votes, 1), p.rating, p.title, p.genre]);
+  const fmtPt = (p: any) => `<b>${p.value[2]}</b><br>${p.value[3]} · rating ${p.value[1]}<br>${Number(p.value[0]).toLocaleString()} votes`;
   return {
-    tooltip: { ...tip, formatter: (p: any) => `rating <b>${p.value[1]}</b><br>${p.value[0].toLocaleString()} votes` },
+    tooltip: { ...tip, formatter: fmtPt },
     grid: { ...baseGrid, left: 40, top: 18 },
-    xAxis: { type: "log", name: "votes (visibility)", nameTextStyle: { color: AX, fontFamily: FONT, fontSize: 10 }, axisLine: { lineStyle: { color: GRID } }, axisLabel: { color: AX, fontFamily: FONT, fontSize: 9 }, splitLine: { lineStyle: { color: GRID } } },
+    xAxis: { type: "log", name: "votes (visibility) →", nameLocation: "middle", nameGap: 26, nameTextStyle: { color: AX, fontFamily: FONT, fontSize: 10 }, axisLine: { lineStyle: { color: GRID } }, axisLabel: { color: AX, fontFamily: FONT, fontSize: 9 }, splitLine: { lineStyle: { color: GRID } } },
     yAxis: { type: "value", min: 2.5, max: 5, name: "rating", nameTextStyle: { color: AX, fontFamily: FONT, fontSize: 10 }, axisLine: { lineStyle: { color: GRID } }, axisLabel: { color: AX, fontFamily: FONT, fontSize: 9 }, splitLine: { lineStyle: { color: GRID } } },
     series: [
-      { name: "crowd", type: "scatter", symbolSize: 6, itemStyle: { color: "rgba(100,116,139,.40)" }, data: crowd },
-      {
-        name: "gems",
-        type: "scatter",
-        symbolSize: 9,
-        itemStyle: { color: "#0891b2", borderColor: "#fff", borderWidth: 1, shadowBlur: 6, shadowColor: "rgba(8,145,178,.5)" },
-        data: gems,
-        markArea: { itemStyle: { color: "rgba(8,145,178,.07)" }, data: [[{ xAxis: 100, yAxis: 4.4 } as any, { xAxis: 5000, yAxis: 5 } as any]] },
-      },
+      { name: "crowd", type: "scatter", symbolSize: 5, itemStyle: { color: "rgba(100,116,139,.28)" }, data: crowd },
+      { name: "gems", type: "scatter", symbolSize: 11, itemStyle: { color: "#0891b2", borderColor: "#fff", borderWidth: 1.5, shadowBlur: 6, shadowColor: "rgba(8,145,178,.5)" }, data: gems,
+        markLine: { silent: true, symbol: "none", lineStyle: { color: "#0891b2", type: "dashed", opacity: 0.5 },
+          data: [{ yAxis: 4.4, label: { formatter: "high rating", color: AX, fontSize: 9 } }] } },
     ],
   };
 }

@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll } from "vitest";
 import { freshMemoryDb, type Querier } from "../src/db/db.ts";
 import { seedRealShape } from "./fixtures.ts";
+import * as q from "../src/queries/index.ts";
 
 let db: Querier;
 beforeAll(async () => { db = await freshMemoryDb(); await seedRealShape(db); }, 60000);
@@ -18,5 +19,13 @@ describe("real-shape fixture mirrors production", () => {
   it("votes rise across days for a sample game", async () => {
     const r = await db.query("SELECT votes FROM game_snapshots WHERE game_id=1 ORDER BY captured_at");
     expect(r[r.length - 1].votes).toBeGreaterThan(r[0].votes);
+  });
+});
+
+describe("real-shape: gems are relative & named", () => {
+  it("gem set is a small minority and points carry titles", async () => {
+    const pts = await q.getScatter(db, "all");
+    expect(pts.every((p) => p.title.length > 0)).toBe(true);
+    expect(pts.filter((p) => p.gem).length).toBeLessThan(pts.length * 0.25);
   });
 });

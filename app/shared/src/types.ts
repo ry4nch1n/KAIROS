@@ -25,12 +25,7 @@ export interface TagFreq {
   count: number;
 }
 
-export interface ScatterPoint {
-  title: string;
-  votes: number;
-  rating: number;
-  gem: boolean;
-}
+export interface ScatterPoint { title: string; genre: string; votes: number; rating: number; gem: boolean; }
 
 export interface HiddenGem {
   gameId: number;
