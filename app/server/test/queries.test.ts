@@ -131,6 +131,7 @@ describe("A_explorer queries", () => {
     expect(genres[0].games).toBeGreaterThan(0);
     expect(genres[0].p90Votes).toBeGreaterThanOrEqual(genres[0].medianVotes);
     expect(genres[0].p90Rating).toBeGreaterThan(0);
+    expect(typeof genres[0].votesPerDay).toBe("number");
   });
   it("developers rollup (mode genre) runs", async () => {
     const devs = await q.getDevelopers(db, "all");

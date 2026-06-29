@@ -203,42 +203,36 @@ export async function getDevelopers(db: Querier, platform: Platform): Promise<De
 export async function getNewReleases(db: Querier, platform: Platform): Promise<NewRelease[]> {
   const rows = await db.query(
     `SELECT g.id AS id, g.title AS title, g.url AS url, l.genre AS genre, l.rating AS rating, l.votes AS votes
-     FROM games g
-     JOIN sources src ON src.id = g.source_id
-     JOIN v_latest l ON l.game_id = g.id
-     JOIN (SELECT game_id, min(captured_at) AS fs FROM game_snapshots GROUP BY game_id) m ON m.game_id = g.id
-     WHERE g.is_live AND m.fs = (SELECT max(captured_at) FROM game_snapshots) ${pf(platform)}
-     ORDER BY l.votes DESC NULLS LAST LIMIT 60`
+     FROM games g JOIN sources src ON src.id = g.source_id JOIN v_latest l ON l.game_id = g.id
+     WHERE g.is_live ${pf(platform)} AND g.first_seen_at >= (SELECT max(first_seen_at) FROM games) - interval '14 days'
+     ORDER BY g.first_seen_at DESC, l.votes DESC NULLS LAST LIMIT 60`
   );
-  return rows.map((r) => ({
-    gameId: num(r.id),
-    title: r.title,
-    genre: r.genre ?? "—",
-    rating: num(r.rating),
-    votes: num(r.votes),
-    url: r.url,
-  }));
+  return rows.map((r) => ({ gameId: num(r.id), title: r.title, genre: r.genre ?? "—", rating: num(r.rating), votes: num(r.votes), url: r.url }));
 }
 
 export async function getInsights(db: Querier, platform: Platform): Promise<Insight[]> {
   const gd = await genreVotesByDate(db, platform);
   const vels = gd.order.map((genre) => ({ genre, v: velocity(gd.byGenre[genre], gd.daySpan) }));
   const out: Insight[] = [];
+  // (1) Rising genre by votes/day
   if (vels.length) {
     const top = vels.reduce((best, cur) => (cur.v > best.v ? cur : best), vels[0]);
     out.push({ kind: "up", tag: "RISING", meta: `+${Math.round(top.v)} votes/day`, text: `<b>${top.genre}</b> is gaining the most votes/day across the window.` });
-    const falling = vels.filter((s) => s.v < 0);
-    if (falling.length) {
-      const bot = falling.reduce((worst, cur) => (cur.v < worst.v ? cur : worst), falling[0]);
-      out.push({ kind: "down", tag: "DECLINING", meta: `${Math.round(bot.v)} votes/day`, text: `<b>${bot.genre}</b> median votes are declining over the window.` });
-    }
   }
+  // (2) Top opportunity gap
   const gaps = await getMarketGaps(db, platform);
   if (gaps.length)
     out.push({ kind: "gap", tag: "OPPORTUNITY", meta: `${gaps[0].supplyN} games · ${gaps[0].appetite} median votes`, text: `<b>${gaps[0].label}</b> shows high demand with thin supply.` });
+  // (3) Hidden-gems count
   const gems = await getHiddenGems(db, platform);
   if (gems.length)
     out.push({ kind: "gem", tag: "HIDDEN GEMS", meta: `${gems.length} found`, text: `<b>${gems.length} hidden gems</b> rank in the top 25% on rating with low vote volume.` });
+  // (4) Optional highest-quality genre by P75 rating
+  const landscape = await getGenreLandscape(db, platform);
+  if (landscape.length) {
+    const best = landscape.reduce((b, c) => (c.p75Rating > b.p75Rating ? c : b), landscape[0]);
+    out.push({ kind: "up", tag: "TOP QUALITY", meta: `P75 rating ${best.p75Rating.toFixed(2)}`, text: `<b>${best.genre}</b> has the highest P75 rating across all genres.` });
+  }
   return out;
 }
 

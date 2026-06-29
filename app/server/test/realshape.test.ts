@@ -29,3 +29,16 @@ describe("real-shape: gems are relative & named", () => {
     expect(pts.filter((p) => p.gem).length).toBeLessThan(pts.length * 0.25);
   });
 });
+
+describe("real-shape: honest labels & no silent zeros", () => {
+  it("momentum uses real dates, never W## tokens", async () => {
+    const m = await q.getGenreMomentum(db, "all");
+    expect(m.dates.every((d) => !/^W\d+$/.test(d))).toBe(true);
+  });
+  it("overview KPIs are populated from real data (no featured dependency)", async () => {
+    const ov = await q.getOverview(db, "all");
+    expect(ov.kpi.risingGenre.length).toBeGreaterThan(0);
+    expect(ov.landscape.length).toBeGreaterThan(0);
+    expect(ov.heatmap.cells.some((c) => c.value > 0)).toBe(true);
+  });
+});

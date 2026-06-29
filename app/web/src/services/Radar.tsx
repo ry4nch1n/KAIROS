@@ -38,7 +38,7 @@ function OverviewView({ ov }: { ov: Overview }) {
         <div className="kpi"><div className="label">{I.overview}Games tracked</div><div className="val num">{fmt(ov.kpi.gamesTracked)}</div><span className="delta up num">▲ {ov.kpi.newGames} new (14d)</span></div>
         <div className="kpi"><div className="label">★ Avg rating</div><div className="val num">{ov.kpi.avgRating.toFixed(2)}</div><span className="delta flat num">P90 {ov.kpi.avgRatingP90.toFixed(2)} · point-in-time</span></div>
         <div className="kpi"><div className="label">{I.trends}Rising genre</div><div className="val num" style={{ fontSize: 24, paddingTop: 4 }}>{ov.kpi.risingGenre}</div><span className="delta up num">▲ +{ov.kpi.risingVotesPerDay} votes/day</span></div>
-        <div className="kpi accent"><div className="label">{I.gaps}Open market gaps</div><div className="val num">{ov.kpi.openGaps}</div><span className="delta up num">demand ≫ supply</span></div>
+        <div className="kpi accent"><div className="label">{I.gaps}Open market gaps</div><div className="val num">{ov.kpi.openGaps}</div><span className="delta up num">appetite &gt; supply</span></div>
       </div>
       <div className="card hero">{head(I.genres, "Genre landscape", "supply × quality × audience — top-left = green-field")}<EChart option={landscapeOption(ov.landscape)} style={{ minHeight: 320 }} /></div>
       <div className="grid g-2">
@@ -59,7 +59,7 @@ function OverviewView({ ov }: { ov: Overview }) {
         <div className="card">{head(I.gems, "Hidden-gem finder", "rating × visibility")}<EChart option={scatterOption(ov.scatter)} /></div>
       </div>
       <div className="grid g-2">
-        <div className="card">{head(I.overview, "Feature heatmap", "genre × rating band (game counts)")}<EChart option={heatmapOption(ov.heatmap)} style={{ minHeight: 260 }} /></div>
+        <div className="card">{head(I.overview, "Rating-band density", "genre × rating band (game counts)")}<EChart option={heatmapOption(ov.heatmap)} style={{ minHeight: 260 }} /></div>
         <div className="card">{head(I.gaps, "Top market gaps", "appetite × quality × supply")}<GapList gaps={ov.gaps} /></div>
       </div>
     </>
@@ -104,7 +104,7 @@ function TagsView({ ov }: { ov: Overview }) {
   return (
     <div className="grid g-2b">
       <div className="card">{head(I.tags, "Tag treemap", "by game count")}<EChart option={treemapOption(ov.tags)} style={{ minHeight: 360 }} /></div>
-      <div className="card">{head(I.tags, "Tag frequency", `${ov.tags.length} tags`)}
+      <div className="card">{head(I.tags, "Tag frequency", `${ov.tags.length} tags · game count`)}
         <table className="dtable"><thead><tr><th>Tag</th><th className="r">Games</th></tr></thead>
           <tbody>{ov.tags.map((t) => (<tr key={t.tag}><td className="gname">{t.tag}<span className="minibar"><i style={{ width: (t.count / max) * 100 + "%" }} /></span></td><td className="r">{fmt(t.count)}</td></tr>))}</tbody></table>
       </div>
@@ -112,7 +112,7 @@ function TagsView({ ov }: { ov: Overview }) {
   );
 }
 
-function DevelopersView({ rows }: { rows: DeveloperRow[] }) {
+function DevelopersView({ rows, platform }: { rows: DeveloperRow[]; platform: Platform }) {
   if (!rows.length)
     return (
       <div className="card"><div className="empty"><div className="big-ic">{I.developers}</div><h3>No developer data yet</h3>
@@ -120,6 +120,9 @@ function DevelopersView({ rows }: { rows: DeveloperRow[] }) {
     );
   return (
     <div className="card">{head(I.developers, "Developer Explorer", `${rows.length} developers`)}
+      {(platform === "all" || platform === "crazygames") && (
+        <p className="view-head">Developer names come from Poki; CrazyGames doesn't expose them.</p>
+      )}
       <table className="dtable"><thead><tr><th>Developer</th><th className="r">Games</th><th className="r">Avg rating</th><th className="r">Avg votes</th><th>Top genre</th></tr></thead>
         <tbody>{rows.map((r) => (<tr key={r.developer}><td className="gname">{r.developer}</td><td className="r">{r.games}</td><td className="r">{r.avgRating.toFixed(2)}</td><td className="r">{fmt(r.avgVotes)}</td><td>{r.topGenre}</td></tr>))}</tbody></table>
     </div>
@@ -129,12 +132,13 @@ function DevelopersView({ rows }: { rows: DeveloperRow[] }) {
 function TrendsView({ ov }: { ov: Overview }) {
   return (
     <>
-      <div className="card">{head(I.trends, "Genre momentum", "median votes by genre over time")}
+      <div className="card">{head(I.trends, "Genre momentum", "median votes/day by genre over crawl window")}
         {ov.momentum.building
           ? <div className="empty-inline">History building — need ≥2 crawl days</div>
-          : <EChart option={momentumOption(ov.momentum)} style={{ minHeight: 340 }} />}
+          : <><EChart option={momentumOption(ov.momentum)} style={{ minHeight: 340 }} /></>}
       </div>
-      <div className="card">{head(I.overview, "Feature heatmap", "genre × rating band (game counts)")}<EChart option={heatmapOption(ov.heatmap)} style={{ minHeight: 300 }} /></div>
+      <div className="card">{head(I.genres, "Genre landscape", "supply × quality × audience — top-left = green-field")}<EChart option={landscapeOption(ov.landscape)} style={{ minHeight: 300 }} /></div>
+      <div className="card">{head(I.overview, "Rating-band density", "genre × rating band (game counts)")}<EChart option={heatmapOption(ov.heatmap)} style={{ minHeight: 300 }} /></div>
     </>
   );
 }
@@ -155,7 +159,7 @@ function GemsView({ ov, rows }: { ov: Overview; rows: HiddenGem[] | null }) {
 
 function NewReleasesView({ rows }: { rows: NewRelease[] }) {
   return (
-    <div className="card">{head(I.releases, "New Releases", `${rows.length} first seen latest crawl`)}
+    <div className="card">{head(I.releases, "New Releases", `${rows.length} new in last 14 days`)}
       <table className="dtable"><thead><tr><th>Game</th><th>Genre</th><th className="r">Rating</th><th className="r">Votes</th></tr></thead>
         <tbody>{rows.map((r) => (<tr key={r.gameId}><td><a className="gname" href={r.url} target="_blank" rel="noreferrer">{r.title}</a></td><td>{r.genre}</td><td className="r">{r.rating ? r.rating.toFixed(2) : "—"}</td><td className="r">{fmt(r.votes)}</td></tr>))}</tbody></table>
     </div>
@@ -229,7 +233,7 @@ export function Radar({ hidden }: { hidden: boolean }) {
           {view === "overview" && (ov ? <OverviewView ov={ov} /> : <Skel />)}
           {view === "genres" && (extra ? <GenresView rows={extra} /> : <Skel />)}
           {view === "tags" && (ov ? <TagsView ov={ov} /> : <Skel />)}
-          {view === "developers" && (extra ? <DevelopersView rows={extra} /> : <Skel />)}
+          {view === "developers" && (extra ? <DevelopersView rows={extra} platform={platform} /> : <Skel />)}
           {view === "trends" && (ov ? <TrendsView ov={ov} /> : <Skel />)}
           {view === "hidden-gems" && (ov ? <GemsView ov={ov} rows={extra} /> : <Skel />)}
           {view === "new-releases" && (extra ? <NewReleasesView rows={extra} /> : <Skel />)}
