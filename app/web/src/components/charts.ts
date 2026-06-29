@@ -87,7 +87,7 @@ export function heatmapOption(h: FeatureHeatmap): EChartsOption {
       {
         type: "heatmap",
         data: h.cells.map((c) => [c.week, c.genreIndex, c.value]),
-        label: { show: true, fontFamily: FONT, fontSize: 9, formatter: (p: any) => p.value[2], color: (p: any) => (p.value[2] > maxV * 0.5 ? "#ffffff" : "#334155") },
+        label: { show: true, fontFamily: FONT, fontSize: 9, formatter: (p: any) => String(p.value[2]), color: (p: any) => (p.value[2] > maxV * 0.5 ? "#ffffff" : "#334155") },
         itemStyle: { borderColor: "#fff", borderWidth: 2 },
         emphasis: { itemStyle: { shadowBlur: 8, shadowColor: "rgba(37,99,235,.4)" } },
       },
