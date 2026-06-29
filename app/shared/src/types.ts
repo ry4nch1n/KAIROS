@@ -18,7 +18,6 @@ export interface MomentumSeries {
 }
 export interface GenreMomentum {
   dates: string[]; // e.g. ["06-15","06-22",...] — real MM-DD dates
-  building: boolean; // true when <2 crawl days exist
   series: MomentumSeries[];
 }
 

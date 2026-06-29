@@ -49,10 +49,9 @@ describe("A3 overview", () => {
 });
 
 describe("A4 momentum (median votes over dates)", () => {
-  it("series align to real dates; building flag reflects history depth", async () => {
+  it("series align to real dates", async () => {
     const m = await q.getGenreMomentum(db, "all");
     expect(Array.isArray(m.dates)).toBe(true);
-    expect(typeof m.building).toBe("boolean");
     for (const s of m.series) expect(s.values.length).toBe(m.dates.length);
     expect(m.dates.every((d) => !/^W\d+$/.test(d))).toBe(true); // no fake "W15" labels
   });
@@ -211,5 +210,17 @@ describe("iter5 fixes", () => {
     const ov = await q.getOverview(db, "all");
     expect(ov.glossary.length).toBeGreaterThan(0);
     expect(ov.glossary.every((r) => typeof r.definition === "string" && r.definition.length > 0)).toBe(true);
+  });
+});
+
+describe("p11 memoization guard", () => {
+  it("memoized getOverview matches standalone query results", async () => {
+    const ov = await q.getOverview(db, "all");
+    const [scatter, gems, gaps] = await Promise.all([q.getScatter(db, "all"), q.getHiddenGems(db, "all"), q.getMarketGaps(db, "all")]);
+    expect(ov.scatter.length).toBe(scatter.length);
+    expect(ov.scatter.filter((p) => p.gem).length).toBe(scatter.filter((p) => p.gem).length);
+    expect(ov.gaps.map((g) => g.label)).toEqual(gaps.map((g) => g.label));
+    // hidden-gem badge (sidebar) derives from scatter gems; insights gem count uses getHiddenGems — they must agree
+    expect(ov.scatter.filter((p) => p.gem).length).toBe(gems.length);
   });
 });
