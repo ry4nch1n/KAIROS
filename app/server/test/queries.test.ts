@@ -34,8 +34,8 @@ describe("A3 overview", () => {
     expect(all.kpi.gamesTracked).toBeGreaterThan(0);
     expect(all.kpi.avgRating).toBeGreaterThan(0);
     expect(all.kpi.avgRating).toBeLessThanOrEqual(5);
-    expect(typeof all.kpi.fastestGenre).toBe("string");
-    expect(all.kpi.fastestGenre.length).toBeGreaterThan(0);
+    expect(typeof all.kpi.risingGenre).toBe("string");
+    expect(all.kpi.avgRatingP90).toBeGreaterThanOrEqual(all.kpi.avgRating);
 
     const poki = await q.getOverview(db, "poki");
     const cg = await q.getOverview(db, "crazygames");
@@ -45,12 +45,13 @@ describe("A3 overview", () => {
   });
 });
 
-describe("A4 genre momentum", () => {
-  it("series aligned to weeks, platform-filtered", async () => {
+describe("A4 momentum (median votes over dates)", () => {
+  it("series align to real dates; building flag reflects history depth", async () => {
     const m = await q.getGenreMomentum(db, "all");
-    expect(m.weeks.length).toBeGreaterThan(3);
-    expect(m.series.length).toBeGreaterThan(0);
-    for (const s of m.series) expect(s.values.length).toBe(m.weeks.length);
+    expect(Array.isArray(m.dates)).toBe(true);
+    expect(typeof m.building).toBe("boolean");
+    for (const s of m.series) expect(s.values.length).toBe(m.dates.length);
+    expect(m.dates.every((d) => !/^W\d+$/.test(d))).toBe(true); // no fake "W15" labels
   });
 });
 

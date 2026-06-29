@@ -18,8 +18,8 @@ export function momentumOption(m: GenreMomentum): EChartsOption {
     tooltip: { trigger: "axis", ...tip },
     legend: { top: 0, right: 0, textStyle: { color: AX, fontSize: 11, fontFamily: FONT }, icon: "roundRect", itemWidth: 11, itemHeight: 4 },
     grid: { ...baseGrid, top: 34 },
-    xAxis: { type: "category", data: m.weeks, axisLine: { lineStyle: { color: GRID } }, axisLabel: { color: AX, fontFamily: FONT, fontSize: 10 } },
-    yAxis: { type: "value", splitLine: { lineStyle: { color: GRID } }, axisLabel: { color: AX, fontFamily: FONT, fontSize: 10 } },
+    xAxis: { type: "category", data: m.dates, axisLine: { lineStyle: { color: GRID } }, axisLabel: { color: AX, fontFamily: FONT, fontSize: 10 } },
+    yAxis: { type: "value", name: "median votes", nameTextStyle: { color: AX, fontFamily: FONT, fontSize: 10 }, splitLine: { lineStyle: { color: GRID } }, axisLabel: { color: AX, fontFamily: FONT, fontSize: 10 } },
     series: m.series.map((s, i) => ({
       name: s.genre,
       type: "line",

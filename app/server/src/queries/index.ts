@@ -8,6 +8,42 @@ import type {
 
 const WEEK_LABEL_BASE = 15;
 
+const fmtDate = (d: any) => new Date(d).toISOString().slice(5, 10); // "MM-DD"
+
+interface GenreDates { dates: string[]; order: string[]; byGenre: Record<string, number[]>; }
+async function genreVotesByDate(db: Querier, platform: Platform): Promise<GenreDates> {
+  const rows = await db.query(
+    `SELECT s.genre AS genre, s.captured_at AS d,
+            percentile_cont(0.5) WITHIN GROUP (ORDER BY s.votes) AS med
+     FROM game_snapshots s
+     JOIN games g ON g.id = s.game_id
+     JOIN sources src ON src.id = g.source_id
+     WHERE g.is_live AND s.votes IS NOT NULL AND s.genre IS NOT NULL ${pf(platform)}
+     GROUP BY s.genre, s.captured_at`
+  );
+  const times = [...new Set(rows.map((r) => new Date(r.d).getTime()))].sort((a, b) => a - b);
+  const idx = new Map(times.map((t, i) => [t, i]));
+  const dates = times.map((t) => fmtDate(t));
+  const byGenre: Record<string, number[]> = {};
+  const totalVotes: Record<string, number> = {};
+  for (const r of rows) {
+    const g = r.genre as string;
+    if (!byGenre[g]) byGenre[g] = new Array(times.length).fill(0);
+    byGenre[g][idx.get(new Date(r.d).getTime())!] = num(r.med);
+    totalVotes[g] = (totalVotes[g] ?? 0) + num(r.med);
+  }
+  const order = Object.keys(byGenre).sort((a, b) => totalVotes[b] - totalVotes[a]);
+  return { dates, order, byGenre };
+}
+
+// velocity = (last - first) / spanDays, guarded for <2 points
+function velocity(values: number[]): number {
+  if (values.length < 2) return 0;
+  const first = values[0], last = values[values.length - 1];
+  const span = values.length - 1;
+  return span > 0 ? (last - first) / span : 0;
+}
+
 function pf(platform: Platform): string {
   if (platform === "poki") return "AND src.name = 'poki'";
   if (platform === "crazygames") return "AND src.name = 'crazygames'";
@@ -74,9 +110,9 @@ function growthPct(series: number[]): number {
 }
 
 export async function getGenreMomentum(db: Querier, platform: Platform): Promise<GenreMomentum> {
-  const gw = await genreWeekFeatures(db, platform);
-  const top = gw.order.slice(0, 4);
-  return { weeks: gw.weeks, series: top.map((genre) => ({ genre, values: gw.byGenre[genre] })) };
+  const gd = await genreVotesByDate(db, platform);
+  const top = gd.order.slice(0, 4);
+  return { dates: gd.dates, building: gd.dates.length < 2, series: top.map((genre) => ({ genre, values: gd.byGenre[genre] })) };
 }
 
 export async function getFeatureHeatmap(db: Querier, platform: Platform): Promise<FeatureHeatmap> {
@@ -242,17 +278,17 @@ export async function getNewReleases(db: Querier, platform: Platform): Promise<N
 }
 
 export async function getInsights(db: Querier, platform: Platform): Promise<Insight[]> {
-  const gw = await genreWeekFeatures(db, platform);
-  const stats = gw.order.map((g) => ({ g, ...trendStats(gw.byGenre[g]) }));
-  const eligible = stats.filter((s) => s.total >= gw.weeks.length * 0.5);
-  const pool = (eligible.length ? eligible : stats).sort((a, b) => b.deltaPct - a.deltaPct);
+  const gd = await genreVotesByDate(db, platform);
+  const vels = gd.order.map((genre) => ({ genre, v: velocity(gd.byGenre[genre]) }));
   const out: Insight[] = [];
-  if (pool.length) {
-    const f = pool[0];
-    out.push({ kind: "up", tag: "RISING", meta: `+${Math.round(f.deltaPct)}% / ${gw.weeks.length}w`, text: `<b>${f.g}</b> is the fastest-growing genre in homepage features.` });
-    const d = pool[pool.length - 1];
-    if (d.deltaPct < 0)
-      out.push({ kind: "down", tag: "DECLINING", meta: `${Math.round(d.deltaPct)}%`, text: `<b>${d.g}</b> features have declined over the window.` });
+  if (vels.length) {
+    const top = vels.reduce((best, cur) => (cur.v > best.v ? cur : best), vels[0]);
+    out.push({ kind: "up", tag: "RISING", meta: `+${Math.round(top.v)} votes/day`, text: `<b>${top.genre}</b> is gaining the most votes/day across the window.` });
+    const falling = vels.filter((s) => s.v < 0);
+    if (falling.length) {
+      const bot = falling.reduce((worst, cur) => (cur.v < worst.v ? cur : worst), falling[0]);
+      out.push({ kind: "down", tag: "DECLINING", meta: `${Math.round(bot.v)} votes/day`, text: `<b>${bot.genre}</b> median votes are declining over the window.` });
+    }
   }
   const gaps = await getMarketGaps(db, platform);
   if (gaps.length)
@@ -270,26 +306,31 @@ async function getKPI(db: Querier, platform: Platform, gaps: MarketGap[]): Promi
   const avg = await db.query(
     `SELECT avg(l.rating)::float AS r FROM v_latest l JOIN games g ON g.id = l.game_id JOIN sources src ON src.id = g.source_id WHERE g.is_live ${pf(platform)}`
   );
-  const recent = await db.query(
-    `SELECT count(*)::int AS n FROM (
-       SELECT g.id, min(s.captured_at) AS mn
-       FROM games g JOIN sources src ON src.id = g.source_id JOIN game_snapshots s ON s.game_id = g.id
-       WHERE g.is_live ${pf(platform)} GROUP BY g.id
-     ) t WHERE t.mn = (SELECT max(captured_at) FROM game_snapshots)`
+  const newGames = await db.query(
+    `SELECT count(*)::int AS n FROM games g JOIN sources src ON src.id = g.source_id
+     WHERE g.is_live ${pf(platform)} AND g.first_seen_at >= (SELECT max(first_seen_at) FROM games) - interval '14 days'`
   );
-  // fastest genre across ALL genres with enough volume (not just the charted top-4)
-  const gw = await genreWeekFeatures(db, platform);
-  const stats = gw.order.map((g) => ({ genre: g, ...trendStats(gw.byGenre[g]) }));
-  const eligible = stats.filter((s) => s.total >= gw.weeks.length); // avg >= 1 feature/week
-  const pool = eligible.length ? eligible : stats;
-  const best = [...pool].sort((a, b) => b.deltaPct - a.deltaPct)[0] ?? { genre: "—", deltaPct: 0 };
+  const gd = await genreVotesByDate(db, platform);
+  const MIN_VOL = 4;
+  const counts = await db.query(
+    `SELECT l.genre AS genre, count(*)::int AS n FROM v_latest l JOIN games g ON g.id=l.game_id JOIN sources src ON src.id=g.source_id WHERE g.is_live AND l.genre IS NOT NULL ${pf(platform)} GROUP BY l.genre`
+  );
+  const vol = new Map(counts.map((r) => [r.genre, num(r.n)]));
+  const rising = gd.order
+    .filter((genre) => (vol.get(genre) ?? 0) >= MIN_VOL)
+    .map((genre) => ({ genre, v: velocity(gd.byGenre[genre]) }))
+    .sort((a, b) => b.v - a.v)[0] ?? { genre: "—", v: 0 };
+  const p90 = await db.query(
+    `SELECT percentile_cont(0.9) WITHIN GROUP (ORDER BY l.rating)::float AS p FROM v_latest l JOIN games g ON g.id = l.game_id JOIN sources src ON src.id = g.source_id WHERE g.is_live AND l.rating IS NOT NULL ${pf(platform)}`
+  );
   return {
     gamesTracked: num(g[0].n),
-    newThisWeek: num(recent[0].n),
+    newGames: num(newGames[0].n),
     avgRating: +num(avg[0].r).toFixed(2),
-    fastestGenre: best.genre,
-    fastestGenreDeltaPct: Math.round(best.deltaPct),
-    openGaps: gaps.filter((c) => c.score > 40).length,
+    avgRatingP90: +num(p90[0].p).toFixed(2),
+    risingGenre: rising.genre,
+    risingVotesPerDay: Math.round(rising.v),
+    openGaps: gaps.filter((c) => c.score > 0).length,
   };
 }
 

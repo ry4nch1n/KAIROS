@@ -4,19 +4,21 @@ export type Platform = "all" | "poki" | "crazygames";
 
 export interface OverviewKPI {
   gamesTracked: number;
-  newThisWeek: number;
+  newGames: number;
   avgRating: number;
-  fastestGenre: string;
-  fastestGenreDeltaPct: number;
+  avgRatingP90: number;
+  risingGenre: string;
+  risingVotesPerDay: number;
   openGaps: number;
 }
 
 export interface MomentumSeries {
   genre: string;
-  values: number[]; // one per week, aligned to `weeks`
+  values: number[]; // one per date, aligned to `dates`
 }
 export interface GenreMomentum {
-  weeks: string[]; // e.g. ["W18","W19",...]
+  dates: string[]; // e.g. ["06-15","06-22",...] — real MM-DD dates
+  building: boolean; // true when <2 crawl days exist
   series: MomentumSeries[];
 }
 

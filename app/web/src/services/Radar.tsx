@@ -35,13 +35,17 @@ function OverviewView({ ov }: { ov: Overview }) {
   return (
     <>
       <div className="kpis">
-        <div className="kpi"><div className="label">{I.overview}Games tracked</div><div className="val num">{fmt(ov.kpi.gamesTracked)}</div><span className="delta up num">▲ {ov.kpi.newThisWeek} new this week</span></div>
-        <div className="kpi"><div className="label">★ Avg rating</div><div className="val num">{ov.kpi.avgRating.toFixed(2)}</div><span className="delta flat num">▬ rolling 12-week</span></div>
-        <div className="kpi"><div className="label">{I.trends}Fastest genre</div><div className="val num" style={{ fontSize: 24, paddingTop: 4 }}>{ov.kpi.fastestGenre}</div><span className="delta up num">▲ +{ov.kpi.fastestGenreDeltaPct}% features / 12w</span></div>
+        <div className="kpi"><div className="label">{I.overview}Games tracked</div><div className="val num">{fmt(ov.kpi.gamesTracked)}</div><span className="delta up num">▲ {ov.kpi.newGames} new (14d)</span></div>
+        <div className="kpi"><div className="label">★ Avg rating</div><div className="val num">{ov.kpi.avgRating.toFixed(2)}</div><span className="delta flat num">P90 {ov.kpi.avgRatingP90.toFixed(2)} · point-in-time</span></div>
+        <div className="kpi"><div className="label">{I.trends}Rising genre</div><div className="val num" style={{ fontSize: 24, paddingTop: 4 }}>{ov.kpi.risingGenre}</div><span className="delta up num">▲ +{ov.kpi.risingVotesPerDay} votes/day</span></div>
         <div className="kpi accent"><div className="label">{I.gaps}Open market gaps</div><div className="val num">{ov.kpi.openGaps}</div><span className="delta up num">demand ≫ supply</span></div>
       </div>
       <div className="grid g-2">
-        <div className="card">{head(I.trends, "Genre momentum", "weekly homepage features")}<EChart option={momentumOption(ov.momentum)} /></div>
+        <div className="card">{head(I.trends, "Genre momentum", "median votes by genre over time")}
+          {ov.momentum.building
+            ? <div className="empty-inline">History building — need ≥2 crawl days</div>
+            : <EChart option={momentumOption(ov.momentum)} />}
+        </div>
         <div className="card">{head(I.gems, "AI Insights", "auto-generated")}
           <div className="insights">{ov.insights.map((ins, i) => (
             <div className="insight" key={i}><div className={"ic " + ins.kind}><InsightSvg kind={ins.kind} /></div>
@@ -121,7 +125,11 @@ function DevelopersView({ rows }: { rows: DeveloperRow[] }) {
 function TrendsView({ ov }: { ov: Overview }) {
   return (
     <>
-      <div className="card">{head(I.trends, "Genre momentum", "weekly homepage features over time")}<EChart option={momentumOption(ov.momentum)} style={{ minHeight: 340 }} /></div>
+      <div className="card">{head(I.trends, "Genre momentum", "median votes by genre over time")}
+        {ov.momentum.building
+          ? <div className="empty-inline">History building — need ≥2 crawl days</div>
+          : <EChart option={momentumOption(ov.momentum)} style={{ minHeight: 340 }} />}
+      </div>
       <div className="card">{head(I.overview, "Feature heatmap", "genre × week intensity")}<EChart option={heatmapOption(ov.heatmap)} style={{ minHeight: 300 }} /></div>
     </>
   );
@@ -195,7 +203,7 @@ export function Radar({ hidden }: { hidden: boolean }) {
         {navItem("trends", I.trends, "Trends")}
         <div className="nav-label">Opportunity</div>
         {navItem("hidden-gems", I.gems, "Hidden Gems", ov ? gems : undefined)}
-        {navItem("new-releases", I.releases, "New Releases", ov ? ov.kpi.newThisWeek : undefined)}
+        {navItem("new-releases", I.releases, "New Releases", ov ? ov.kpi.newGames : undefined)}
         {navItem("market-gaps", I.gaps, "Market Gaps", ov ? ov.kpi.openGaps : undefined)}
         <div className="side-foot"><span className="pulse"></span>Crawl OK · {ov ? fmt(ov.kpi.gamesTracked) : "…"} games<br />live · Neon</div>
       </aside>
