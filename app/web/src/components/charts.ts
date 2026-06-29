@@ -17,9 +17,9 @@ export function momentumOption(m: GenreMomentum): EChartsOption {
   return {
     tooltip: { trigger: "axis", ...tip },
     legend: { top: 0, right: 0, textStyle: { color: AX, fontSize: 11, fontFamily: FONT }, icon: "roundRect", itemWidth: 11, itemHeight: 4 },
-    grid: { ...baseGrid, top: 34 },
+    grid: { ...baseGrid, left: 58, top: 34, bottom: 36 },
     xAxis: { type: "category", data: m.dates, axisLine: { lineStyle: { color: GRID } }, axisLabel: { color: AX, fontFamily: FONT, fontSize: 10 } },
-    yAxis: { type: "value", name: "median votes", nameTextStyle: { color: AX, fontFamily: FONT, fontSize: 10 }, splitLine: { lineStyle: { color: GRID } }, axisLabel: { color: AX, fontFamily: FONT, fontSize: 10 } },
+    yAxis: { type: "value", name: "median votes", nameLocation: "middle", nameGap: 44, nameRotate: 90, nameTextStyle: { color: AX, fontFamily: FONT, fontSize: 10 }, splitLine: { lineStyle: { color: GRID } }, axisLabel: { color: AX, fontFamily: FONT, fontSize: 10 } },
     series: m.series.map((s, i) => ({
       name: s.genre,
       type: "line",
@@ -105,9 +105,9 @@ export function landscapeOption(pts: GenreLandscapePoint[]): EChartsOption {
   const data = pts.map((p) => ({ value: [p.supply, p.p75Rating, p.totalVotes, p.genre, (p.examples ?? []).join(", ")], symbolSize: 12 + 34 * Math.sqrt(p.totalVotes / maxV) }));
   return {
     tooltip: { ...tip, formatter: (p: any) => `<b>${p.value[3]}</b><br>${p.value[0]} games · P75 rating ${p.value[1]}<br>${Number(p.value[2]).toLocaleString()} total votes${p.value[4] ? `<br><span style="opacity:.7">e.g. ${p.value[4]}</span>` : ""}` },
-    grid: { ...baseGrid, left: 44, right: 40, top: 18 },
-    xAxis: { type: "log", min: xMin, max: xMax, name: "supply (games) →", nameLocation: "middle", nameGap: 26, nameTextStyle: { color: AX, fontFamily: FONT, fontSize: 10 }, axisLine: { lineStyle: { color: GRID } }, axisLabel: { color: AX, fontFamily: FONT, fontSize: 9 }, splitLine: { lineStyle: { color: GRID } } },
-    yAxis: { type: "value", min: yMin, max: yMax, name: "quality ceiling (P75 rating)", nameTextStyle: { color: AX, fontFamily: FONT, fontSize: 10 }, axisLine: { lineStyle: { color: GRID } }, axisLabel: { color: AX, fontFamily: FONT, fontSize: 9 }, splitLine: { lineStyle: { color: GRID } } },
+    grid: { left: 64, right: 40, top: 20, bottom: 48 },
+    xAxis: { type: "log", min: xMin, max: xMax, name: "supply (games) →", nameLocation: "middle", nameGap: 28, nameTextStyle: { color: AX, fontFamily: FONT, fontSize: 10 }, axisLine: { lineStyle: { color: GRID } }, axisLabel: { color: AX, fontFamily: FONT, fontSize: 9 }, splitLine: { lineStyle: { color: GRID } } },
+    yAxis: { type: "value", min: yMin, max: yMax, name: "quality ceiling (P75 rating)", nameLocation: "middle", nameGap: 44, nameRotate: 90, nameTextStyle: { color: AX, fontFamily: FONT, fontSize: 10 }, axisLine: { lineStyle: { color: GRID } }, axisLabel: { color: AX, fontFamily: FONT, fontSize: 9 }, splitLine: { lineStyle: { color: GRID } } },
     series: [{
       type: "scatter", data,
       itemStyle: { color: "rgba(37,99,235,.45)", borderColor: "#1e3a8a", borderWidth: 1 },

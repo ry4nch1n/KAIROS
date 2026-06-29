@@ -194,3 +194,14 @@ describe("iter3 fixes", () => {
     expect(ov.glossary.some((r) => r.kind === "tag" && r.examples.length > 0)).toBe(true);
   });
 });
+
+describe("iter4 fixes", () => {
+  it("glossary is tags-only and explains every market-gap tag", async () => {
+    const ov = await q.getOverview(db, "all");
+    expect(ov.glossary.length).toBeGreaterThan(0);
+    expect(ov.glossary.every((r) => r.kind === "tag")).toBe(true);
+    expect(ov.glossary.every((r) => Array.isArray(r.examples))).toBe(true);
+    const gloss = new Set(ov.glossary.map((r) => r.label));
+    expect(ov.gaps.every((g) => gloss.has(g.tag))).toBe(true);
+  });
+});

@@ -6,6 +6,7 @@ import { momentumOption, treemapOption, scatterOption, heatmapOption, landscapeO
 import { InsightSvg, tagClass } from "../components/icons.tsx";
 
 const fmt = (n: number) => n.toLocaleString("en-US");
+const MIN_TREND_DAYS = 5;
 const PLATFORMS: { id: Platform; label: string }[] = [
   { id: "all", label: "All" },
   { id: "poki", label: "Poki" },
@@ -40,7 +41,7 @@ function OverviewView({ ov }: { ov: Overview }) {
         <div className="kpi"><div className="label">{I.trends}Rising genre</div><div className="val num" style={{ fontSize: 24, paddingTop: 4 }}>{ov.kpi.risingGenre}</div><span className="delta up num">▲ +{ov.kpi.risingVotesPerDay} votes/day</span></div>
         <div className="kpi accent"><div className="label">{I.gaps}Open market gaps</div><div className="val num">{ov.kpi.openGaps}</div><span className="delta up num">appetite &gt; supply</span></div>
       </div>
-      <div className="card hero">{head(I.genres, "Genre landscape", "supply × quality × audience — top-left = green-field")}<EChart option={landscapeOption(ov.landscape)} style={{ minHeight: 320 }} /></div>
+      <div className="card hero">{head(I.genres, "Genre landscape", "supply × quality × audience — top-left = green-field")}<EChart option={landscapeOption(ov.landscape)} style={{ minHeight: 360 }} /></div>
       <div className="grid g-2">
         <div className="card">{head(I.trends, "Genre vote-velocity", "votes/day by genre — gainers vs flat/decliners")}<EChart option={velocityBarOption(ov.velocityBars)} /></div>
         <div className="card">{head(I.gems, "AI Insights", "auto-generated")}
@@ -58,11 +59,10 @@ function OverviewView({ ov }: { ov: Overview }) {
         <div className="card">{head(I.overview, "Rating-band density", "genre × rating band (game counts)")}<EChart option={heatmapOption(ov.heatmap)} style={{ minHeight: 260 }} /></div>
         <div className="card">{head(I.gaps, "Top market gaps", "appetite × quality × supply")}<GapList gaps={ov.gaps} /></div>
       </div>
-      <div className="card">{head(I.tags, "Glossary", "what the genres & tags mean — example games")}
-        <table className="dtable"><thead><tr><th>Term</th><th>Type</th><th className="r">Games</th><th>Example games</th></tr></thead>
+      <div className="card">{head(I.tags, "Tag glossary", "what the tags on this dashboard mean — example games")}
+        <table className="dtable"><thead><tr><th>Tag</th><th className="r">Games</th><th>Example games</th></tr></thead>
           <tbody>{ov.glossary.map((r) => (
-            <tr key={r.kind + r.label}><td className="gname">{r.label}</td>
-              <td style={{ color: "var(--ink-3, #6b7280)" }}>{r.kind}</td>
+            <tr key={r.label}><td className="gname">{r.label}</td>
               <td className="r">{fmt(r.count)}</td>
               <td style={{ color: "var(--ink-3, #6b7280)" }}>{r.examples.join(" · ") || "—"}</td></tr>
           ))}</tbody></table>
@@ -138,12 +138,15 @@ function DevelopersView({ rows, platform }: { rows: DeveloperRow[]; platform: Pl
 function TrendsView({ ov }: { ov: Overview }) {
   return (
     <>
-      <div className="card">{head(I.trends, "Genre momentum", "median votes/day by genre over crawl window")}
-        {ov.momentum.building
-          ? <div className="empty-inline">History building — need ≥2 crawl days</div>
-          : <><EChart option={momentumOption(ov.momentum)} style={{ minHeight: 340 }} /></>}
+      <div className="card">{head(I.trends, "Genre momentum", "median votes/day by genre over the crawl window")}
+        {ov.momentum.dates.length >= MIN_TREND_DAYS
+          ? <EChart option={momentumOption(ov.momentum)} style={{ minHeight: 340 }} />
+          : <div className="empty-inline" style={{ padding: "28px 8px", color: "var(--ink-3, #6b7280)", fontSize: 13, lineHeight: 1.6 }}>
+              Genre momentum builds as the daily crawl accrues — <b>{ov.momentum.dates.length} crawl day{ov.momentum.dates.length === 1 ? "" : "s"}</b> so far.
+              Multi-day vote trajectories become meaningful after about a week; for now see <b>Genre vote-velocity</b> on the Overview for what's gaining today.
+            </div>}
       </div>
-      <div className="card">{head(I.genres, "Genre landscape", "supply × quality × audience — top-left = green-field")}<EChart option={landscapeOption(ov.landscape)} style={{ minHeight: 300 }} /></div>
+      <div className="card">{head(I.genres, "Genre landscape", "supply × quality × audience — top-left = green-field")}<EChart option={landscapeOption(ov.landscape)} style={{ minHeight: 360 }} /></div>
       <div className="card">{head(I.overview, "Rating-band density", "genre × rating band (game counts)")}<EChart option={heatmapOption(ov.heatmap)} style={{ minHeight: 300 }} /></div>
     </>
   );

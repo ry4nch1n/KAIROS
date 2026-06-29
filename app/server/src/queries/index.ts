@@ -374,11 +374,8 @@ export async function getOverview(db: Querier, platform: Platform): Promise<Over
     getGenreVelocityBars(db, platform),
   ]);
   const kpi = await getKPI(db, platform, gaps);
-  const genreGloss: GlossaryRow[] = [...landscape].sort((a, b) => b.supply - a.supply).slice(0, 10)
-    .map((p) => ({ label: p.genre, kind: "genre" as const, count: p.supply, examples: p.examples }));
-  const tagNames = [...new Set([...gaps.map((g) => g.tag), ...tags.slice(0, 8).map((t) => t.tag)])];
-  const tagGloss = await getTagGlossary(db, platform, tagNames);
-  const glossary: GlossaryRow[] = [...genreGloss, ...tagGloss];
+  const tagNames = [...new Set([...gaps.map((g) => g.tag), ...tags.map((t) => t.tag)])];
+  const glossary: GlossaryRow[] = await getTagGlossary(db, platform, tagNames);
   return { kpi, momentum, tags, scatter, heatmap, gaps, insights, landscape, velocityBars, glossary, platform, subtitle: subtitleFor(platform) };
 }
 
