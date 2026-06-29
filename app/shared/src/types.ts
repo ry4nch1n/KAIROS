@@ -39,6 +39,8 @@ export interface HiddenGem {
 
 export interface MarketGap {
   label: string;
+  genre: string;
+  tag: string;
   supplyN: number;
   appetite: number;
   qualityCeil: number;
@@ -68,7 +70,7 @@ export interface Insight {
 export interface GenreLandscapePoint { genre: string; supply: number; p75Rating: number; avgRating: number; totalVotes: number; examples: string[]; }
 
 export interface GenreVelocityBar { genre: string; votesPerDay: number; }
-export interface GenreGlossaryRow { genre: string; games: number; examples: string[]; }
+export interface GlossaryRow { label: string; kind: "genre" | "tag"; count: number; examples: string[]; }
 
 export interface Overview {
   kpi: OverviewKPI;
@@ -80,7 +82,7 @@ export interface Overview {
   insights: Insight[];
   landscape: GenreLandscapePoint[];
   velocityBars: GenreVelocityBar[];
-  glossary: GenreGlossaryRow[];
+  glossary: GlossaryRow[];
   platform: Platform;
   subtitle: string;
 }

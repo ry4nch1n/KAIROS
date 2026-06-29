@@ -58,9 +58,14 @@ function OverviewView({ ov }: { ov: Overview }) {
         <div className="card">{head(I.overview, "Rating-band density", "genre × rating band (game counts)")}<EChart option={heatmapOption(ov.heatmap)} style={{ minHeight: 260 }} /></div>
         <div className="card">{head(I.gaps, "Top market gaps", "appetite × quality × supply")}<GapList gaps={ov.gaps} /></div>
       </div>
-      <div className="card">{head(I.tags, "Genre glossary", "what these genres contain — example games")}
-        <table className="dtable"><thead><tr><th>Genre</th><th className="r">Games</th><th>Example games</th></tr></thead>
-          <tbody>{ov.glossary.map((r) => (<tr key={r.genre}><td className="gname">{r.genre}</td><td className="r">{fmt(r.games)}</td><td style={{ color: "var(--ink-3, #6b7280)" }}>{r.examples.join(" · ") || "—"}</td></tr>))}</tbody></table>
+      <div className="card">{head(I.tags, "Glossary", "what the genres & tags mean — example games")}
+        <table className="dtable"><thead><tr><th>Term</th><th>Type</th><th className="r">Games</th><th>Example games</th></tr></thead>
+          <tbody>{ov.glossary.map((r) => (
+            <tr key={r.kind + r.label}><td className="gname">{r.label}</td>
+              <td style={{ color: "var(--ink-3, #6b7280)" }}>{r.kind}</td>
+              <td className="r">{fmt(r.count)}</td>
+              <td style={{ color: "var(--ink-3, #6b7280)" }}>{r.examples.join(" · ") || "—"}</td></tr>
+          ))}</tbody></table>
       </div>
     </>
   );

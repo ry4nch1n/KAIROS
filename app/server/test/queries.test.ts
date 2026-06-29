@@ -183,3 +183,14 @@ describe("iter2 fixes", () => {
     expect(ov.gaps.every((g) => Array.isArray(g.examples))).toBe(true);
   });
 });
+
+describe("iter3 fixes", () => {
+  it("glossary explains tags shown on the dashboard, and gaps expose genre/tag", async () => {
+    const ov = await q.getOverview(db, "all");
+    expect(ov.gaps.every((g) => typeof g.genre === "string" && typeof g.tag === "string")).toBe(true);
+    // every gap's tag must be explained in the glossary
+    const gloss = new Set(ov.glossary.filter((r) => r.kind === "tag").map((r) => r.label));
+    expect(ov.gaps.every((g) => gloss.has(g.tag))).toBe(true);
+    expect(ov.glossary.some((r) => r.kind === "tag" && r.examples.length > 0)).toBe(true);
+  });
+});
