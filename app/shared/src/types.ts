@@ -70,7 +70,7 @@ export interface Insight {
 export interface GenreLandscapePoint { genre: string; supply: number; p75Rating: number; avgRating: number; totalVotes: number; examples: string[]; }
 
 export interface GenreVelocityBar { genre: string; votesPerDay: number; }
-export interface GlossaryRow { label: string; kind: "genre" | "tag"; count: number; examples: string[]; }
+export interface GlossaryRow { label: string; kind: "genre" | "tag"; count: number; examples: string[]; definition: string; }
 
 export interface Overview {
   kpi: OverviewKPI;

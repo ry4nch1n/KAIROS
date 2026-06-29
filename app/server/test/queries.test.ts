@@ -205,3 +205,11 @@ describe("iter4 fixes", () => {
     expect(ov.gaps.every((g) => gloss.has(g.tag))).toBe(true);
   });
 });
+
+describe("iter5 fixes", () => {
+  it("every glossary tag has a non-empty definition", async () => {
+    const ov = await q.getOverview(db, "all");
+    expect(ov.glossary.length).toBeGreaterThan(0);
+    expect(ov.glossary.every((r) => typeof r.definition === "string" && r.definition.length > 0)).toBe(true);
+  });
+});

@@ -59,11 +59,11 @@ function OverviewView({ ov }: { ov: Overview }) {
         <div className="card">{head(I.overview, "Rating-band density", "genre × rating band (game counts)")}<EChart option={heatmapOption(ov.heatmap)} style={{ minHeight: 260 }} /></div>
         <div className="card">{head(I.gaps, "Top market gaps", "appetite × quality × supply")}<GapList gaps={ov.gaps} /></div>
       </div>
-      <div className="card">{head(I.tags, "Tag glossary", "what the tags on this dashboard mean — example games")}
-        <table className="dtable"><thead><tr><th>Tag</th><th className="r">Games</th><th>Example games</th></tr></thead>
+      <div className="card">{head(I.tags, "Tag glossary", "what the tags on this dashboard mean — definition + example games")}
+        <table className="dtable"><thead><tr><th>Tag</th><th>What it describes</th><th>Example games</th></tr></thead>
           <tbody>{ov.glossary.map((r) => (
             <tr key={r.label}><td className="gname">{r.label}</td>
-              <td className="r">{fmt(r.count)}</td>
+              <td style={{ maxWidth: 360 }}>{r.definition}</td>
               <td style={{ color: "var(--ink-3, #6b7280)" }}>{r.examples.join(" · ") || "—"}</td></tr>
           ))}</tbody></table>
       </div>

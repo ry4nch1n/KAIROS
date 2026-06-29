@@ -8,6 +8,120 @@ import type {
 
 const fmtDate = (d: any) => new Date(d).toISOString().slice(5, 10); // "MM-DD"
 
+// Short, plain-language definitions for browser-game tags shown in the glossary.
+// Keyed by lowercased tag name. Anything missing falls back to an inferred guess.
+const TAG_DEFINITIONS: Record<string, string> = {
+  "action": "Fast-paced games built on reflexes and real-time challenge.",
+  "action games": "Fast-paced games built on reflexes and real-time challenge.",
+  "adventure": "Exploration- and story-driven games.",
+  "arcade": "Simple, score-chasing games with a classic arcade feel.",
+  "racing": "Race-to-the-finish driving competition games.",
+  "driving": "Vehicle-driving games (racing, parking, stunts).",
+  "car": "Car-themed driving games.",
+  "car games": "Car-themed driving games.",
+  "bike": "Motorbike/bicycle riding and stunt games.",
+  "truck": "Truck-driving and hauling games.",
+  "parking": "Precision vehicle-parking challenge games.",
+  "drift": "Drift-focused driving games.",
+  "shooting": "Games centered on aiming and shooting.",
+  "shooter": "Games centered on aiming and shooting.",
+  "sniper": "Long-range precision shooting games.",
+  "gun": "Firearm-based shooting games.",
+  "puzzle": "Games about solving logic or spatial challenges.",
+  "strategy": "Games rewarding planning, tactics, and resource management.",
+  "tower defense": "Defend a path by placing defensive towers against waves.",
+  "sports": "Games simulating real-world sports.",
+  "soccer": "Football/soccer sports games.",
+  "football": "Football sports games.",
+  "basketball": "Basketball sports games.",
+  "pool": "Pool/billiards cue-sports games.",
+  "billiards": "Billiards/pool cue-sports games.",
+  "golf": "Golf sports games.",
+  "simulation": "Games that model a real-world activity or system.",
+  "simulator": "Games that simulate operating a vehicle, job, or system.",
+  "idle": "Incremental games that progress with minimal, often automated, input.",
+  "clicker": "Tap/click games where repeated clicks drive progression.",
+  "io": "Massively-multiplayer browser arena games in the '.io' style.",
+  ".io": "Massively-multiplayer browser arena games in the '.io' style (e.g. Agar.io).",
+  "horror": "Scary, tense, atmosphere-driven games.",
+  "zombie": "Zombie-survival and shooting games.",
+  "multiplayer": "Games played with or against other people online.",
+  "2 player": "Games for two players sharing one device or playing online.",
+  "two player": "Games for two players sharing one device or playing online.",
+  "casual": "Easy-to-pick-up games with light, low-commitment sessions.",
+  "board": "Digital versions of board games (chess, checkers, ludo).",
+  "card": "Card-based games (solitaire, matching, collectible).",
+  "mahjong": "Tile-matching games in the mahjong tradition.",
+  "cooking": "Time-management games themed around cooking and food service.",
+  "restaurant": "Restaurant-management time-management games.",
+  "beauty": "Dress-up, makeover, and styling games.",
+  "dress up": "Outfit and styling games.",
+  "merge": "Games built around combining items to upgrade them.",
+  "match 3": "Swap-and-match three-or-more puzzle games.",
+  "bubble shooter": "Aim-and-pop bubble-matching games.",
+  "platform": "Jump-and-run platforming games.",
+  "runner": "Endless-runner games focused on dodging and timing.",
+  "running": "Auto-run / endless-runner games focused on dodging and timing.",
+  "running games": "Auto-run / endless-runner games focused on dodging and timing.",
+  "stickman": "Games starring stick-figure characters.",
+  "fighting": "One-on-one combat/brawler games.",
+  "brain": "Puzzle/logic games that test memory, reasoning, or math.",
+  "brain games": "Puzzle/logic games that test memory, reasoning, or math.",
+  "number": "Math and number-based puzzle games.",
+  "number games": "Math and number-based puzzle games.",
+  "math": "Arithmetic and math-practice games.",
+  "word": "Word, spelling, and vocabulary games.",
+  "typing": "Keyboard typing-skill games.",
+  "mouse": "Games controlled mainly with the mouse (point-click / aim).",
+  "mouse games": "Games controlled mainly with the mouse (point-click / aim).",
+  "music": "Rhythm and music-timing games.",
+  "physics": "Games whose challenge comes from realistic physics.",
+  "pixel": "Games with a retro pixel-art aesthetic.",
+  "retro": "Games with a retro/old-school aesthetic.",
+  "3d": "Games rendered with 3D graphics.",
+  "3d games": "Games rendered with 3D graphics.",
+  "2d": "Games with flat, two-dimensional graphics.",
+  "flash": "Legacy Flash-style games (now HTML5), usually simple arcade titles.",
+  "html5": "Games built in HTML5 to run natively in the browser.",
+  "mobile": "Touch-friendly games that also play well on phones/tablets.",
+  "mobile games": "Touch-friendly games that also play well on phones/tablets.",
+  "girls": "Audience label for dress-up, care, and casual games aimed at girls.",
+  "kids": "Games aimed at younger children.",
+  "educational": "Learning-focused games.",
+  "skill": "Games that reward dexterity and precise timing.",
+  "ball": "Ball-physics and ball-control games.",
+  "snake": "Snake-style grow-and-avoid games.",
+  "tank": "Tank combat games.",
+  "war": "Warfare-themed combat games.",
+  "farm": "Farming and harvest management games.",
+  "fishing": "Fishing-themed games.",
+  "escape": "Room-escape puzzle games.",
+  "hidden object": "Find-the-hidden-item search games.",
+  "jigsaw": "Jigsaw-puzzle assembly games.",
+  "solitaire": "Single-player card-sorting games.",
+  // Platform curation / brand tags (not gameplay genres) — described honestly:
+  "popular": "A platform curation label for trending/most-played titles — not a gameplay genre.",
+  "popular games": "A platform curation label for trending/most-played titles — not a gameplay genre.",
+  "new": "A platform curation label for recently added titles — not a gameplay genre.",
+  "new games": "A platform curation label for recently added titles — not a gameplay genre.",
+  "trending": "A platform curation label for currently-rising titles — not a gameplay genre.",
+  "hot": "A platform curation label for currently-popular titles — not a gameplay genre.",
+  "featured": "A platform curation label for editorially highlighted titles — not a gameplay genre.",
+  "crazygames": "A platform/brand tag (CrazyGames) — not a gameplay descriptor.",
+  "crazy games": "A platform/brand tag (CrazyGames) — not a gameplay descriptor.",
+  "poki": "A platform/brand tag (Poki) — not a gameplay descriptor.",
+  "fun": "A broad catch-all label with no specific gameplay meaning.",
+};
+
+function defineTag(name: string): string {
+  const d = TAG_DEFINITIONS[name.toLowerCase().trim()];
+  if (d) return d;
+  const base = name.replace(/\s*games?$/i, "").trim();
+  return base
+    ? `Games themed around or tagged "${base}" (inferred — not a formally defined category).`
+    : `A platform tag with no formal definition (inferred).`;
+}
+
 interface GenreDates { dates: string[]; order: string[]; byGenre: Record<string, number[]>; daySpan: number; }
 async function genreVotesByDate(db: Querier, platform: Platform): Promise<GenreDates> {
   const rows = await db.query(
@@ -359,7 +473,7 @@ async function getTagGlossary(db: Querier, platform: Platform, tagNames: string[
     m.set(r.tag, e);
   }
   // preserve the requested order
-  return tagNames.filter((t) => m.has(t)).map((label) => ({ label, kind: "tag" as const, count: m.get(label)!.count, examples: m.get(label)!.examples }));
+  return tagNames.filter((t) => m.has(t)).map((label) => ({ label, kind: "tag" as const, count: m.get(label)!.count, examples: m.get(label)!.examples, definition: defineTag(label) }));
 }
 
 export async function getOverview(db: Querier, platform: Platform): Promise<Overview> {
