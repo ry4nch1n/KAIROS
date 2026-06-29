@@ -34,8 +34,11 @@ describe("A3 overview", () => {
     expect(all.kpi.gamesTracked).toBeGreaterThan(0);
     expect(all.kpi.avgRating).toBeGreaterThan(0);
     expect(all.kpi.avgRating).toBeLessThanOrEqual(5);
-    expect(typeof all.kpi.fastestGenre).toBe("string");
-    expect(all.kpi.fastestGenre.length).toBeGreaterThan(0);
+    expect(typeof all.kpi.risingGenre).toBe("string");
+    expect(all.kpi.avgRatingP90).toBeGreaterThanOrEqual(all.kpi.avgRating);
+    expect(all.kpi.risingGenre.length).toBeGreaterThan(0);
+    expect(typeof all.kpi.newGames).toBe("number");
+    expect(all.kpi.newGames).toBeGreaterThanOrEqual(0);
 
     const poki = await q.getOverview(db, "poki");
     const cg = await q.getOverview(db, "crazygames");
@@ -45,12 +48,13 @@ describe("A3 overview", () => {
   });
 });
 
-describe("A4 genre momentum", () => {
-  it("series aligned to weeks, platform-filtered", async () => {
+describe("A4 momentum (median votes over dates)", () => {
+  it("series align to real dates; building flag reflects history depth", async () => {
     const m = await q.getGenreMomentum(db, "all");
-    expect(m.weeks.length).toBeGreaterThan(3);
-    expect(m.series.length).toBeGreaterThan(0);
-    for (const s of m.series) expect(s.values.length).toBe(m.weeks.length);
+    expect(Array.isArray(m.dates)).toBe(true);
+    expect(typeof m.building).toBe("boolean");
+    for (const s of m.series) expect(s.values.length).toBe(m.dates.length);
+    expect(m.dates.every((d) => !/^W\d+$/.test(d))).toBe(true); // no fake "W15" labels
   });
 });
 
@@ -63,49 +67,47 @@ describe("A5 tag frequency", () => {
   });
 });
 
-describe("A6 hidden gems", () => {
-  it("all rows are high-rating, low-votes, unfeatured", async () => {
+describe("A6 hidden gems (percentile)", () => {
+  it("is a selective minority, not ~half the catalogue", async () => {
+    const all = (await db.query("SELECT count(*)::int n FROM v_latest"))[0].n;
     const g = await q.getHiddenGems(db, "all");
     expect(g.length).toBeGreaterThan(0);
-    for (const row of g) {
-      expect(row.rating).toBeGreaterThanOrEqual(4.4);
-      expect(row.votes).toBeLessThan(5000);
-    }
+    expect(g.length).toBeLessThanOrEqual(Math.ceil(all * 0.15)); // < 15% of catalogue
   });
 });
 
-describe("A7 market gaps", () => {
-  it("ranked by score desc, demand/supply in 0-100", async () => {
+describe("A7 market gaps (interpretable)", () => {
+  it("rows carry absolute numbers and rank by score", async () => {
     const gaps = await q.getMarketGaps(db, "all");
     expect(gaps.length).toBeGreaterThan(0);
     for (let i = 1; i < gaps.length; i++) expect(gaps[i - 1].score).toBeGreaterThanOrEqual(gaps[i].score);
     for (const c of gaps) {
-      expect(c.demand).toBeGreaterThanOrEqual(0);
-      expect(c.demand).toBeLessThanOrEqual(100);
-      expect(c.supply).toBeGreaterThanOrEqual(0);
-      expect(c.supply).toBeLessThanOrEqual(100);
+      expect(c.supplyN).toBeGreaterThanOrEqual(2);
+      expect(c.appetite).toBeGreaterThanOrEqual(0);
+      expect(c.qualityCeil).toBeGreaterThan(0);
+      expect(c.qualityCeil).toBeLessThanOrEqual(5);
     }
   });
 });
 
 describe("A8 scatter", () => {
-  it("returns rating x votes with gems flagged", async () => {
+  it("carries title+genre and flags a small gem minority", async () => {
     const pts = await q.getScatter(db, "all");
     expect(pts.length).toBeGreaterThan(0);
-    expect(pts.some((p) => p.gem)).toBe(true);
-    for (const p of pts) {
-      expect(p.rating).toBeGreaterThan(0);
-      expect(p.votes).toBeGreaterThanOrEqual(0);
-    }
+    expect(pts.every((p) => typeof p.title === "string" && typeof p.genre === "string")).toBe(true);
+    const gems = pts.filter((p) => p.gem).length;
+    expect(gems).toBeGreaterThan(0);
+    expect(gems).toBeLessThan(pts.length * 0.25);
   });
 });
 
-describe("A8b feature heatmap", () => {
-  it("returns genres x weeks cells", async () => {
+describe("A8b rating-band density heatmap", () => {
+  it("bands × genres with at least one non-zero cell", async () => {
     const h = await q.getFeatureHeatmap(db, "all");
-    expect(h.weeks.length).toBeGreaterThan(0);
     expect(h.genres.length).toBeGreaterThan(0);
+    expect(h.weeks.length).toBe(5); // 5 rating bands
     expect(h.cells.length).toBe(h.weeks.length * h.genres.length);
+    expect(h.cells.some((c) => c.value > 0)).toBe(true);
   });
 });
 
@@ -123,11 +125,13 @@ describe("A10 brief editions", () => {
 });
 
 describe("A_explorer queries", () => {
-  it("genres rollup has counts + ratings", async () => {
+  it("genres rollup has benchmarks", async () => {
     const genres = await q.getGenres(db, "all");
     expect(genres.length).toBeGreaterThan(0);
     expect(genres[0].games).toBeGreaterThan(0);
-    expect(genres[0].avgRating).toBeGreaterThan(0);
+    expect(genres[0].p90Votes).toBeGreaterThanOrEqual(genres[0].medianVotes);
+    expect(genres[0].p90Rating).toBeGreaterThan(0);
+    expect(typeof genres[0].votesPerDay).toBe("number");
   });
   it("developers rollup (mode genre) runs", async () => {
     const devs = await q.getDevelopers(db, "all");
@@ -148,5 +152,64 @@ describe("A_insights", () => {
       expect(i.text.length).toBeGreaterThan(0);
       expect(["up", "down", "gap", "gem"]).toContain(i.kind);
     }
+  });
+});
+
+describe("A_landscape quality-saturation", () => {
+  it("one point per genre with supply, p75 rating, total votes", async () => {
+    const pts = await q.getGenreLandscape(db, "all");
+    expect(pts.length).toBeGreaterThan(0);
+    for (const p of pts) {
+      expect(p.supply).toBeGreaterThan(0);
+      expect(p.p75Rating).toBeGreaterThan(0);
+      expect(p.p75Rating).toBeLessThanOrEqual(5);
+      expect(p.totalVotes).toBeGreaterThanOrEqual(0);
+    }
+  });
+});
+
+describe("iter2 fixes", () => {
+  it("velocity bars are sorted desc with numeric votes/day", async () => {
+    const bars = await q.getGenreVelocityBars(db, "all");
+    expect(bars.length).toBeGreaterThan(0);
+    for (let i = 1; i < bars.length; i++) expect(bars[i - 1].votesPerDay).toBeGreaterThanOrEqual(bars[i].votesPerDay);
+    expect(typeof bars[0].votesPerDay).toBe("number");
+  });
+  it("landscape points and overview glossary carry example games", async () => {
+    const ov = await q.getOverview(db, "all");
+    expect(ov.landscape.every((p) => Array.isArray(p.examples) && p.examples.length <= 3)).toBe(true);
+    expect(ov.glossary.length).toBeGreaterThan(0);
+    expect(ov.glossary[0].examples.length).toBeGreaterThan(0);
+    expect(ov.gaps.every((g) => Array.isArray(g.examples))).toBe(true);
+  });
+});
+
+describe("iter3 fixes", () => {
+  it("glossary explains tags shown on the dashboard, and gaps expose genre/tag", async () => {
+    const ov = await q.getOverview(db, "all");
+    expect(ov.gaps.every((g) => typeof g.genre === "string" && typeof g.tag === "string")).toBe(true);
+    // every gap's tag must be explained in the glossary
+    const gloss = new Set(ov.glossary.filter((r) => r.kind === "tag").map((r) => r.label));
+    expect(ov.gaps.every((g) => gloss.has(g.tag))).toBe(true);
+    expect(ov.glossary.some((r) => r.kind === "tag" && r.examples.length > 0)).toBe(true);
+  });
+});
+
+describe("iter4 fixes", () => {
+  it("glossary is tags-only and explains every market-gap tag", async () => {
+    const ov = await q.getOverview(db, "all");
+    expect(ov.glossary.length).toBeGreaterThan(0);
+    expect(ov.glossary.every((r) => r.kind === "tag")).toBe(true);
+    expect(ov.glossary.every((r) => Array.isArray(r.examples))).toBe(true);
+    const gloss = new Set(ov.glossary.map((r) => r.label));
+    expect(ov.gaps.every((g) => gloss.has(g.tag))).toBe(true);
+  });
+});
+
+describe("iter5 fixes", () => {
+  it("every glossary tag has a non-empty definition", async () => {
+    const ov = await q.getOverview(db, "all");
+    expect(ov.glossary.length).toBeGreaterThan(0);
+    expect(ov.glossary.every((r) => typeof r.definition === "string" && r.definition.length > 0)).toBe(true);
   });
 });

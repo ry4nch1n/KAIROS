@@ -85,6 +85,7 @@ button{font-family:inherit}
 .kpi.accent .val{color:var(--accent)}
 
 .grid{display:grid;gap:18px}
+.card.hero{grid-column:1 / -1;width:100%}
 .g-2{grid-template-columns:1.55fr 1fr}
 .g-2b{grid-template-columns:1fr 1.1fr}
 .card{background:var(--surface);border:1px solid var(--border-soft);border-radius:var(--radius);padding:18px 20px;display:flex;flex-direction:column;box-shadow:var(--shadow)}
@@ -115,11 +116,10 @@ button{font-family:inherit}
 .gap .rank{font-family:'Fira Code';font-size:13px;color:var(--accent);font-weight:700;width:22px}
 .gap .name{font-weight:600;font-size:13px}
 .gap .name small{display:block;color:var(--text-3);font-weight:400;font-size:11px;font-family:'Fira Code';margin-top:1px}
-.gap .bars{margin-left:auto;display:flex;flex-direction:column;gap:4px;width:120px}
-.bar{height:5px;border-radius:3px;background:var(--border);overflow:hidden}
-.bar i{display:block;height:100%;border-radius:3px}
-.bar.demand i{background:linear-gradient(90deg,var(--green),var(--cyan))} .bar.supply i{background:var(--text-3)}
-.gap .barlbl{font-size:9px;color:var(--text-3);font-family:'Fira Code';display:flex;justify-content:space-between}
+.gap-stats{margin-left:auto;display:flex;flex-wrap:wrap;gap:6px 12px;font-size:11px;color:var(--text-3);font-family:'Fira Code'}
+.gap-stats b{color:var(--text-1)}
+.gap-legend{font-size:10px;color:var(--text-3);font-style:italic;margin:0 0 6px;padding:0}
+.gap-examples{font-size:11px;color:#6b7280;margin-top:4px;line-height:1.4}
 .foot-note{text-align:center;color:var(--text-3);font-size:11px;font-family:'Fira Code';padding-top:8px}
 
 .section-title{font-size:11px;text-transform:uppercase;letter-spacing:1.2px;color:var(--text-3);font-weight:700;display:flex;align-items:center;gap:9px;margin:6px 0 -6px}

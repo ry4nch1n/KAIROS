@@ -4,19 +4,21 @@ export type Platform = "all" | "poki" | "crazygames";
 
 export interface OverviewKPI {
   gamesTracked: number;
-  newThisWeek: number;
+  newGames: number;
   avgRating: number;
-  fastestGenre: string;
-  fastestGenreDeltaPct: number;
+  avgRatingP90: number;
+  risingGenre: string;
+  risingVotesPerDay: number;
   openGaps: number;
 }
 
 export interface MomentumSeries {
   genre: string;
-  values: number[]; // one per week, aligned to `weeks`
+  values: number[]; // one per date, aligned to `dates`
 }
 export interface GenreMomentum {
-  weeks: string[]; // e.g. ["W18","W19",...]
+  dates: string[]; // e.g. ["06-15","06-22",...] — real MM-DD dates
+  building: boolean; // true when <2 crawl days exist
   series: MomentumSeries[];
 }
 
@@ -25,12 +27,7 @@ export interface TagFreq {
   count: number;
 }
 
-export interface ScatterPoint {
-  title: string;
-  votes: number;
-  rating: number;
-  gem: boolean;
-}
+export interface ScatterPoint { title: string; genre: string; votes: number; rating: number; gem: boolean; }
 
 export interface HiddenGem {
   gameId: number;
@@ -42,10 +39,13 @@ export interface HiddenGem {
 
 export interface MarketGap {
   label: string;
-  combo: string;
-  demand: number; // 0-100
-  supply: number; // 0-100
-  score: number; // demand - supply
+  genre: string;
+  tag: string;
+  supplyN: number;
+  appetite: number;
+  qualityCeil: number;
+  score: number;
+  examples: string[];
 }
 
 export interface HeatCell {
@@ -67,6 +67,11 @@ export interface Insight {
   text: string; // may contain <b> emphasis
 }
 
+export interface GenreLandscapePoint { genre: string; supply: number; p75Rating: number; avgRating: number; totalVotes: number; examples: string[]; }
+
+export interface GenreVelocityBar { genre: string; votesPerDay: number; }
+export interface GlossaryRow { label: string; kind: "genre" | "tag"; count: number; examples: string[]; definition: string; }
+
 export interface Overview {
   kpi: OverviewKPI;
   momentum: GenreMomentum;
@@ -75,6 +80,9 @@ export interface Overview {
   heatmap: FeatureHeatmap;
   gaps: MarketGap[];
   insights: Insight[];
+  landscape: GenreLandscapePoint[];
+  velocityBars: GenreVelocityBar[];
+  glossary: GlossaryRow[];
   platform: Platform;
   subtitle: string;
 }
@@ -138,9 +146,10 @@ export interface GenreRow {
   genre: string;
   games: number;
   avgRating: number;
-  avgVotes: number;
-  daysFeatured: number;
-  deltaPct: number;
+  medianVotes: number;
+  p90Votes: number;
+  p90Rating: number;
+  votesPerDay: number;
 }
 export interface DeveloperRow {
   developer: string;

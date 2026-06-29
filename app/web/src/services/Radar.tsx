@@ -2,10 +2,11 @@ import { useEffect, useState } from "react";
 import type { Overview, Platform, GenreRow, DeveloperRow, NewRelease, HiddenGem } from "shared";
 import { api } from "../lib/api.ts";
 import { EChart } from "../components/EChart.tsx";
-import { momentumOption, treemapOption, scatterOption, heatmapOption } from "../components/charts.ts";
+import { momentumOption, treemapOption, scatterOption, heatmapOption, landscapeOption, velocityBarOption } from "../components/charts.ts";
 import { InsightSvg, tagClass } from "../components/icons.tsx";
 
 const fmt = (n: number) => n.toLocaleString("en-US");
+const MIN_TREND_DAYS = 5;
 const PLATFORMS: { id: Platform; label: string }[] = [
   { id: "all", label: "All" },
   { id: "poki", label: "Poki" },
@@ -35,13 +36,14 @@ function OverviewView({ ov }: { ov: Overview }) {
   return (
     <>
       <div className="kpis">
-        <div className="kpi"><div className="label">{I.overview}Games tracked</div><div className="val num">{fmt(ov.kpi.gamesTracked)}</div><span className="delta up num">▲ {ov.kpi.newThisWeek} new this week</span></div>
-        <div className="kpi"><div className="label">★ Avg rating</div><div className="val num">{ov.kpi.avgRating.toFixed(2)}</div><span className="delta flat num">▬ rolling 12-week</span></div>
-        <div className="kpi"><div className="label">{I.trends}Fastest genre</div><div className="val num" style={{ fontSize: 24, paddingTop: 4 }}>{ov.kpi.fastestGenre}</div><span className="delta up num">▲ +{ov.kpi.fastestGenreDeltaPct}% features / 12w</span></div>
-        <div className="kpi accent"><div className="label">{I.gaps}Open market gaps</div><div className="val num">{ov.kpi.openGaps}</div><span className="delta up num">demand ≫ supply</span></div>
+        <div className="kpi"><div className="label">{I.overview}Games tracked</div><div className="val num">{fmt(ov.kpi.gamesTracked)}</div><span className="delta up num">▲ {ov.kpi.newGames} new (14d)</span></div>
+        <div className="kpi"><div className="label">★ Avg rating</div><div className="val num">{ov.kpi.avgRating.toFixed(2)}</div><span className="delta flat num">P90 {ov.kpi.avgRatingP90.toFixed(2)} · point-in-time</span></div>
+        <div className="kpi"><div className="label">{I.trends}Rising genre</div><div className="val num" style={{ fontSize: 24, paddingTop: 4 }}>{ov.kpi.risingGenre}</div><span className="delta up num">▲ +{ov.kpi.risingVotesPerDay} votes/day</span></div>
+        <div className="kpi accent"><div className="label">{I.gaps}Open market gaps</div><div className="val num">{ov.kpi.openGaps}</div><span className="delta up num">appetite &gt; supply</span></div>
       </div>
+      <div className="card hero">{head(I.genres, "Genre landscape", "supply × quality × audience — top-left = green-field")}<EChart option={landscapeOption(ov.landscape)} style={{ minHeight: 360 }} /></div>
       <div className="grid g-2">
-        <div className="card">{head(I.trends, "Genre momentum", "weekly homepage features")}<EChart option={momentumOption(ov.momentum)} /></div>
+        <div className="card">{head(I.trends, "Genre vote-velocity", "votes/day by genre — gainers vs flat/decliners")}<EChart option={velocityBarOption(ov.velocityBars)} /></div>
         <div className="card">{head(I.gems, "AI Insights", "auto-generated")}
           <div className="insights">{ov.insights.map((ins, i) => (
             <div className="insight" key={i}><div className={"ic " + ins.kind}><InsightSvg kind={ins.kind} /></div>
@@ -54,8 +56,16 @@ function OverviewView({ ov }: { ov: Overview }) {
         <div className="card">{head(I.gems, "Hidden-gem finder", "rating × visibility")}<EChart option={scatterOption(ov.scatter)} /></div>
       </div>
       <div className="grid g-2">
-        <div className="card">{head(I.overview, "Feature heatmap", "genre × week")}<EChart option={heatmapOption(ov.heatmap)} style={{ minHeight: 260 }} /></div>
-        <div className="card">{head(I.gaps, "Top market gaps", "demand ▸ supply")}<GapList gaps={ov.gaps} /></div>
+        <div className="card">{head(I.overview, "Rating-band density", "genre × rating band (game counts)")}<EChart option={heatmapOption(ov.heatmap)} style={{ minHeight: 260 }} /></div>
+        <div className="card">{head(I.gaps, "Top market gaps", "appetite × quality × supply")}<GapList gaps={ov.gaps} /></div>
+      </div>
+      <div className="card">{head(I.tags, "Tag glossary", "what the tags on this dashboard mean — definition + example games")}
+        <table className="dtable"><thead><tr><th>Tag</th><th>What it describes</th><th>Example games</th></tr></thead>
+          <tbody>{ov.glossary.map((r) => (
+            <tr key={r.label}><td className="gname">{r.label}</td>
+              <td style={{ maxWidth: 360 }}>{r.definition}</td>
+              <td style={{ color: "var(--ink-3, #6b7280)" }}>{r.examples.join(" · ") || "—"}</td></tr>
+          ))}</tbody></table>
       </div>
     </>
   );
@@ -64,13 +74,16 @@ function OverviewView({ ov }: { ov: Overview }) {
 function GapList({ gaps }: { gaps: Overview["gaps"] }) {
   return (
     <div className="gaplist">
+      <p className="gap-legend">high appetite + high quality ceiling + low supply = opportunity</p>
       {gaps.map((g, i) => (
         <div className="gap" key={i}><span className="rank num">{i + 1}</span>
-          <div className="name">{g.label}<small>score {g.score}</small></div>
-          <div className="bars">
-            <div className="barlbl"><span>demand</span><span>{g.demand}</span></div><div className="bar demand"><i style={{ width: g.demand + "%" }} /></div>
-            <div className="barlbl"><span>supply</span><span>{g.supply}</span></div><div className="bar supply"><i style={{ width: g.supply + "%" }} /></div>
+          <div className="name">{g.label}<small>opportunity {g.score.toFixed(1)}</small></div>
+          <div className="gap-stats num">
+            <span><b>{fmt(g.appetite)}</b> median votes/title</span>
+            <span><b>{g.supplyN}</b> games</span>
+            <span>top rating <b>{g.qualityCeil.toFixed(2)}</b></span>
           </div>
+          {g.examples?.length ? <div className="gap-examples num">e.g. {g.examples.join(" · ")}</div> : null}
         </div>
       ))}
     </div>
@@ -81,11 +94,12 @@ function GenresView({ rows }: { rows: GenreRow[] }) {
   const max = Math.max(1, ...rows.map((r) => r.games));
   return (
     <div className="card">{head(I.genres, "Genre Explorer", `${rows.length} genres`)}
-      <table className="dtable"><thead><tr><th>Genre</th><th className="r">Games</th><th className="r">Avg rating</th><th className="r">Avg votes</th><th className="r">Days feat.</th><th className="r">Momentum</th></tr></thead>
+      <table className="dtable"><thead><tr><th>Genre</th><th className="r">Games</th><th className="r">Avg rating</th><th className="r">Median votes</th><th className="r">P90 votes (top-10% bar)</th><th className="r">P90 rating</th><th className="r">Votes/day</th></tr></thead>
         <tbody>{rows.map((r) => (
           <tr key={r.genre}><td className="gname">{r.genre}<span className="minibar"><i style={{ width: (r.games / max) * 100 + "%" }} /></span></td>
-            <td className="r">{r.games}</td><td className="r">{r.avgRating.toFixed(2)}</td><td className="r">{fmt(r.avgVotes)}</td><td className="r">{r.daysFeatured}</td>
-            <td className={"r " + deltaCls(r.deltaPct)}>{r.deltaPct > 0 ? "+" : ""}{r.deltaPct}%</td></tr>
+            <td className="r">{r.games}</td><td className="r">{r.avgRating.toFixed(2)}</td><td className="r">{fmt(r.medianVotes)}</td><td className="r">{fmt(r.p90Votes)}</td>
+            <td className="r">{r.p90Rating.toFixed(2)}</td>
+            <td className={"r " + deltaCls(r.votesPerDay)}>{r.votesPerDay > 0 ? "+" : ""}{fmt(r.votesPerDay)}</td></tr>
         ))}</tbody></table>
     </div>
   );
@@ -96,7 +110,7 @@ function TagsView({ ov }: { ov: Overview }) {
   return (
     <div className="grid g-2b">
       <div className="card">{head(I.tags, "Tag treemap", "by game count")}<EChart option={treemapOption(ov.tags)} style={{ minHeight: 360 }} /></div>
-      <div className="card">{head(I.tags, "Tag frequency", `${ov.tags.length} tags`)}
+      <div className="card">{head(I.tags, "Tag frequency", `${ov.tags.length} tags · game count`)}
         <table className="dtable"><thead><tr><th>Tag</th><th className="r">Games</th></tr></thead>
           <tbody>{ov.tags.map((t) => (<tr key={t.tag}><td className="gname">{t.tag}<span className="minibar"><i style={{ width: (t.count / max) * 100 + "%" }} /></span></td><td className="r">{fmt(t.count)}</td></tr>))}</tbody></table>
       </div>
@@ -104,7 +118,7 @@ function TagsView({ ov }: { ov: Overview }) {
   );
 }
 
-function DevelopersView({ rows }: { rows: DeveloperRow[] }) {
+function DevelopersView({ rows, platform }: { rows: DeveloperRow[]; platform: Platform }) {
   if (!rows.length)
     return (
       <div className="card"><div className="empty"><div className="big-ic">{I.developers}</div><h3>No developer data yet</h3>
@@ -112,6 +126,9 @@ function DevelopersView({ rows }: { rows: DeveloperRow[] }) {
     );
   return (
     <div className="card">{head(I.developers, "Developer Explorer", `${rows.length} developers`)}
+      {(platform === "all" || platform === "crazygames") && (
+        <p className="view-head">Developer names come from Poki; CrazyGames doesn't expose them.</p>
+      )}
       <table className="dtable"><thead><tr><th>Developer</th><th className="r">Games</th><th className="r">Avg rating</th><th className="r">Avg votes</th><th>Top genre</th></tr></thead>
         <tbody>{rows.map((r) => (<tr key={r.developer}><td className="gname">{r.developer}</td><td className="r">{r.games}</td><td className="r">{r.avgRating.toFixed(2)}</td><td className="r">{fmt(r.avgVotes)}</td><td>{r.topGenre}</td></tr>))}</tbody></table>
     </div>
@@ -121,8 +138,16 @@ function DevelopersView({ rows }: { rows: DeveloperRow[] }) {
 function TrendsView({ ov }: { ov: Overview }) {
   return (
     <>
-      <div className="card">{head(I.trends, "Genre momentum", "weekly homepage features over time")}<EChart option={momentumOption(ov.momentum)} style={{ minHeight: 340 }} /></div>
-      <div className="card">{head(I.overview, "Feature heatmap", "genre × week intensity")}<EChart option={heatmapOption(ov.heatmap)} style={{ minHeight: 300 }} /></div>
+      <div className="card">{head(I.trends, "Genre momentum", "median votes/day by genre over the crawl window")}
+        {ov.momentum.dates.length >= MIN_TREND_DAYS
+          ? <EChart option={momentumOption(ov.momentum)} style={{ minHeight: 340 }} />
+          : <div className="empty-inline" style={{ padding: "28px 8px", color: "var(--ink-3, #6b7280)", fontSize: 13, lineHeight: 1.6 }}>
+              Genre momentum builds as the daily crawl accrues — <b>{ov.momentum.dates.length} crawl day{ov.momentum.dates.length === 1 ? "" : "s"}</b> so far.
+              Multi-day vote trajectories become meaningful after about a week; for now see <b>Genre vote-velocity</b> on the Overview for what's gaining today.
+            </div>}
+      </div>
+      <div className="card">{head(I.genres, "Genre landscape", "supply × quality × audience — top-left = green-field")}<EChart option={landscapeOption(ov.landscape)} style={{ minHeight: 360 }} /></div>
+      <div className="card">{head(I.overview, "Rating-band density", "genre × rating band (game counts)")}<EChart option={heatmapOption(ov.heatmap)} style={{ minHeight: 300 }} /></div>
     </>
   );
 }
@@ -143,7 +168,7 @@ function GemsView({ ov, rows }: { ov: Overview; rows: HiddenGem[] | null }) {
 
 function NewReleasesView({ rows }: { rows: NewRelease[] }) {
   return (
-    <div className="card">{head(I.releases, "New Releases", `${rows.length} first seen latest crawl`)}
+    <div className="card">{head(I.releases, "New Releases", `${rows.length} new in last 14 days`)}
       <table className="dtable"><thead><tr><th>Game</th><th>Genre</th><th className="r">Rating</th><th className="r">Votes</th></tr></thead>
         <tbody>{rows.map((r) => (<tr key={r.gameId}><td><a className="gname" href={r.url} target="_blank" rel="noreferrer">{r.title}</a></td><td>{r.genre}</td><td className="r">{r.rating ? r.rating.toFixed(2) : "—"}</td><td className="r">{fmt(r.votes)}</td></tr>))}</tbody></table>
     </div>
@@ -195,7 +220,7 @@ export function Radar({ hidden }: { hidden: boolean }) {
         {navItem("trends", I.trends, "Trends")}
         <div className="nav-label">Opportunity</div>
         {navItem("hidden-gems", I.gems, "Hidden Gems", ov ? gems : undefined)}
-        {navItem("new-releases", I.releases, "New Releases", ov ? ov.kpi.newThisWeek : undefined)}
+        {navItem("new-releases", I.releases, "New Releases", ov ? ov.kpi.newGames : undefined)}
         {navItem("market-gaps", I.gaps, "Market Gaps", ov ? ov.kpi.openGaps : undefined)}
         <div className="side-foot"><span className="pulse"></span>Crawl OK · {ov ? fmt(ov.kpi.gamesTracked) : "…"} games<br />live · Neon</div>
       </aside>
@@ -217,11 +242,11 @@ export function Radar({ hidden }: { hidden: boolean }) {
           {view === "overview" && (ov ? <OverviewView ov={ov} /> : <Skel />)}
           {view === "genres" && (extra ? <GenresView rows={extra} /> : <Skel />)}
           {view === "tags" && (ov ? <TagsView ov={ov} /> : <Skel />)}
-          {view === "developers" && (extra ? <DevelopersView rows={extra} /> : <Skel />)}
+          {view === "developers" && (extra ? <DevelopersView rows={extra} platform={platform} /> : <Skel />)}
           {view === "trends" && (ov ? <TrendsView ov={ov} /> : <Skel />)}
           {view === "hidden-gems" && (ov ? <GemsView ov={ov} rows={extra} /> : <Skel />)}
           {view === "new-releases" && (extra ? <NewReleasesView rows={extra} /> : <Skel />)}
-          {view === "market-gaps" && (ov ? <div className="card">{head(I.gaps, "Market Gaps", "demand ≫ supply — ranked opportunities")}<GapList gaps={ov.gaps} /></div> : <Skel />)}
+          {view === "market-gaps" && (ov ? <div className="card">{head(I.gaps, "Market Gaps", "ranked by opportunity score")}<GapList gaps={ov.gaps} /></div> : <Skel />)}
           <div className="foot-note">KAIROS · GameRadar · live from Neon · platform via source_id</div>
         </div>
       </main>

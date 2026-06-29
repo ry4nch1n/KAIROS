@@ -3,10 +3,158 @@ import type { Querier } from "../db/db.ts";
 import type {
   Platform, Overview, OverviewKPI, GenreMomentum, TagFreq, ScatterPoint,
   HiddenGem, MarketGap, FeatureHeatmap, Insight, BriefEditionMeta, BriefEdition,
-  GenreRow, DeveloperRow, NewRelease,
+  GenreRow, DeveloperRow, NewRelease, GenreLandscapePoint, GenreVelocityBar, GlossaryRow,
 } from "shared";
 
-const WEEK_LABEL_BASE = 15;
+const fmtDate = (d: any) => new Date(d).toISOString().slice(5, 10); // "MM-DD"
+
+// Short, plain-language definitions for browser-game tags shown in the glossary.
+// Keyed by lowercased tag name. Anything missing falls back to an inferred guess.
+const TAG_DEFINITIONS: Record<string, string> = {
+  "action": "Fast-paced games built on reflexes and real-time challenge.",
+  "action games": "Fast-paced games built on reflexes and real-time challenge.",
+  "adventure": "Exploration- and story-driven games.",
+  "arcade": "Simple, score-chasing games with a classic arcade feel.",
+  "racing": "Race-to-the-finish driving competition games.",
+  "driving": "Vehicle-driving games (racing, parking, stunts).",
+  "car": "Car-themed driving games.",
+  "car games": "Car-themed driving games.",
+  "bike": "Motorbike/bicycle riding and stunt games.",
+  "truck": "Truck-driving and hauling games.",
+  "parking": "Precision vehicle-parking challenge games.",
+  "drift": "Drift-focused driving games.",
+  "shooting": "Games centered on aiming and shooting.",
+  "shooter": "Games centered on aiming and shooting.",
+  "sniper": "Long-range precision shooting games.",
+  "gun": "Firearm-based shooting games.",
+  "puzzle": "Games about solving logic or spatial challenges.",
+  "strategy": "Games rewarding planning, tactics, and resource management.",
+  "tower defense": "Defend a path by placing defensive towers against waves.",
+  "sports": "Games simulating real-world sports.",
+  "soccer": "Football/soccer sports games.",
+  "football": "Football sports games.",
+  "basketball": "Basketball sports games.",
+  "pool": "Pool/billiards cue-sports games.",
+  "billiards": "Billiards/pool cue-sports games.",
+  "golf": "Golf sports games.",
+  "simulation": "Games that model a real-world activity or system.",
+  "simulator": "Games that simulate operating a vehicle, job, or system.",
+  "idle": "Incremental games that progress with minimal, often automated, input.",
+  "clicker": "Tap/click games where repeated clicks drive progression.",
+  "io": "Massively-multiplayer browser arena games in the '.io' style.",
+  ".io": "Massively-multiplayer browser arena games in the '.io' style (e.g. Agar.io).",
+  "horror": "Scary, tense, atmosphere-driven games.",
+  "zombie": "Zombie-survival and shooting games.",
+  "multiplayer": "Games played with or against other people online.",
+  "2 player": "Games for two players sharing one device or playing online.",
+  "two player": "Games for two players sharing one device or playing online.",
+  "casual": "Easy-to-pick-up games with light, low-commitment sessions.",
+  "board": "Digital versions of board games (chess, checkers, ludo).",
+  "card": "Card-based games (solitaire, matching, collectible).",
+  "mahjong": "Tile-matching games in the mahjong tradition.",
+  "cooking": "Time-management games themed around cooking and food service.",
+  "restaurant": "Restaurant-management time-management games.",
+  "beauty": "Dress-up, makeover, and styling games.",
+  "dress up": "Outfit and styling games.",
+  "merge": "Games built around combining items to upgrade them.",
+  "match 3": "Swap-and-match three-or-more puzzle games.",
+  "bubble shooter": "Aim-and-pop bubble-matching games.",
+  "platform": "Jump-and-run platforming games.",
+  "runner": "Endless-runner games focused on dodging and timing.",
+  "running": "Auto-run / endless-runner games focused on dodging and timing.",
+  "running games": "Auto-run / endless-runner games focused on dodging and timing.",
+  "stickman": "Games starring stick-figure characters.",
+  "fighting": "One-on-one combat/brawler games.",
+  "brain": "Puzzle/logic games that test memory, reasoning, or math.",
+  "brain games": "Puzzle/logic games that test memory, reasoning, or math.",
+  "number": "Math and number-based puzzle games.",
+  "number games": "Math and number-based puzzle games.",
+  "math": "Arithmetic and math-practice games.",
+  "word": "Word, spelling, and vocabulary games.",
+  "typing": "Keyboard typing-skill games.",
+  "mouse": "Games controlled mainly with the mouse (point-click / aim).",
+  "mouse games": "Games controlled mainly with the mouse (point-click / aim).",
+  "music": "Rhythm and music-timing games.",
+  "physics": "Games whose challenge comes from realistic physics.",
+  "pixel": "Games with a retro pixel-art aesthetic.",
+  "retro": "Games with a retro/old-school aesthetic.",
+  "3d": "Games rendered with 3D graphics.",
+  "3d games": "Games rendered with 3D graphics.",
+  "2d": "Games with flat, two-dimensional graphics.",
+  "flash": "Legacy Flash-style games (now HTML5), usually simple arcade titles.",
+  "html5": "Games built in HTML5 to run natively in the browser.",
+  "mobile": "Touch-friendly games that also play well on phones/tablets.",
+  "mobile games": "Touch-friendly games that also play well on phones/tablets.",
+  "girls": "Audience label for dress-up, care, and casual games aimed at girls.",
+  "kids": "Games aimed at younger children.",
+  "educational": "Learning-focused games.",
+  "skill": "Games that reward dexterity and precise timing.",
+  "ball": "Ball-physics and ball-control games.",
+  "snake": "Snake-style grow-and-avoid games.",
+  "tank": "Tank combat games.",
+  "war": "Warfare-themed combat games.",
+  "farm": "Farming and harvest management games.",
+  "fishing": "Fishing-themed games.",
+  "escape": "Room-escape puzzle games.",
+  "hidden object": "Find-the-hidden-item search games.",
+  "jigsaw": "Jigsaw-puzzle assembly games.",
+  "solitaire": "Single-player card-sorting games.",
+  // Platform curation / brand tags (not gameplay genres) — described honestly:
+  "popular": "A platform curation label for trending/most-played titles — not a gameplay genre.",
+  "popular games": "A platform curation label for trending/most-played titles — not a gameplay genre.",
+  "new": "A platform curation label for recently added titles — not a gameplay genre.",
+  "new games": "A platform curation label for recently added titles — not a gameplay genre.",
+  "trending": "A platform curation label for currently-rising titles — not a gameplay genre.",
+  "hot": "A platform curation label for currently-popular titles — not a gameplay genre.",
+  "featured": "A platform curation label for editorially highlighted titles — not a gameplay genre.",
+  "crazygames": "A platform/brand tag (CrazyGames) — not a gameplay descriptor.",
+  "crazy games": "A platform/brand tag (CrazyGames) — not a gameplay descriptor.",
+  "poki": "A platform/brand tag (Poki) — not a gameplay descriptor.",
+  "fun": "A broad catch-all label with no specific gameplay meaning.",
+};
+
+function defineTag(name: string): string {
+  const d = TAG_DEFINITIONS[name.toLowerCase().trim()];
+  if (d) return d;
+  const base = name.replace(/\s*games?$/i, "").trim();
+  return base
+    ? `Games themed around or tagged "${base}" (inferred — not a formally defined category).`
+    : `A platform tag with no formal definition (inferred).`;
+}
+
+interface GenreDates { dates: string[]; order: string[]; byGenre: Record<string, number[]>; daySpan: number; }
+async function genreVotesByDate(db: Querier, platform: Platform): Promise<GenreDates> {
+  const rows = await db.query(
+    `SELECT s.genre AS genre, s.captured_at AS d,
+            percentile_cont(0.5) WITHIN GROUP (ORDER BY s.votes) AS med
+     FROM game_snapshots s
+     JOIN games g ON g.id = s.game_id
+     JOIN sources src ON src.id = g.source_id
+     WHERE g.is_live AND s.votes IS NOT NULL AND s.genre IS NOT NULL ${pf(platform)}
+     GROUP BY s.genre, s.captured_at`
+  );
+  const times = [...new Set(rows.map((r) => new Date(r.d).getTime()))].sort((a, b) => a - b);
+  const idx = new Map(times.map((t, i) => [t, i]));
+  const dates = times.map((t) => fmtDate(t));
+  const daySpan = times.length > 1 ? (times[times.length - 1] - times[0]) / 86400000 : 0;
+  const byGenre: Record<string, number[]> = {};
+  const totalVotes: Record<string, number> = {};
+  for (const r of rows) {
+    const g = r.genre as string;
+    if (!byGenre[g]) byGenre[g] = new Array(times.length).fill(0);
+    byGenre[g][idx.get(new Date(r.d).getTime())!] = num(r.med);
+    totalVotes[g] = (totalVotes[g] ?? 0) + num(r.med);
+  }
+  const order = Object.keys(byGenre).sort((a, b) => totalVotes[b] - totalVotes[a]);
+  return { dates, order, byGenre, daySpan };
+}
+
+// velocity = (last - first) / spanDays, guarded for <2 points or zero span
+function velocity(values: number[], daySpan: number): number {
+  if (values.length < 2 || daySpan <= 0) return 0;
+  const first = values[0], last = values[values.length - 1];
+  return (last - first) / daySpan;
+}
 
 function pf(platform: Platform): string {
   if (platform === "poki") return "AND src.name = 'poki'";
@@ -20,73 +168,30 @@ function subtitleFor(platform: Platform): string {
 }
 const num = (v: any) => (v === null || v === undefined ? 0 : Number(v));
 
-// ── genre × week featured counts (shared by momentum + heatmap + insights) ──
-interface GenreWeeks {
-  weeks: string[];
-  order: string[]; // genres by total featured desc
-  byGenre: Record<string, number[]>;
-  totals: Record<string, number>;
-}
-async function genreWeekFeatures(db: Querier, platform: Platform): Promise<GenreWeeks> {
-  const rows = await db.query(
-    `SELECT s.genre AS genre, s.captured_at AS wk,
-            count(*) FILTER (WHERE s.featured)::int AS feats
-     FROM game_snapshots s
-     JOIN games g ON g.id = s.game_id
-     JOIN sources src ON src.id = g.source_id
-     WHERE g.is_live ${pf(platform)}
-     GROUP BY s.genre, s.captured_at`
-  );
-  const times = [...new Set(rows.map((r) => new Date(r.wk).getTime()))].sort((a, b) => a - b);
-  const weekIndex = new Map(times.map((t, i) => [t, i]));
-  const weeks = times.map((_, i) => "W" + (WEEK_LABEL_BASE + i));
-  const byGenre: Record<string, number[]> = {};
-  const totals: Record<string, number> = {};
-  for (const r of rows) {
-    const g = r.genre as string;
-    if (!byGenre[g]) byGenre[g] = new Array(times.length).fill(0);
-    const i = weekIndex.get(new Date(r.wk).getTime())!;
-    byGenre[g][i] = num(r.feats);
-    totals[g] = (totals[g] ?? 0) + num(r.feats);
-  }
-  const order = Object.keys(totals).sort((a, b) => totals[b] - totals[a]);
-  return { weeks, order, byGenre, totals };
-}
-
-// Least-squares trend over the whole window — robust to single-week noise.
-// deltaPct = rise of the fitted line over the window, as % of the average level.
-function trendStats(series: number[]): { deltaPct: number; total: number; slope: number; mean: number } {
-  const n = series.length;
-  const total = series.reduce((a, b) => a + b, 0);
-  if (n < 2) return { deltaPct: 0, total, slope: 0, mean: total };
-  let sx = 0, sy = 0, sxx = 0, sxy = 0;
-  for (let i = 0; i < n; i++) {
-    sx += i; sy += series[i]; sxx += i * i; sxy += i * series[i];
-  }
-  const denom = n * sxx - sx * sx;
-  const slope = denom !== 0 ? (n * sxy - sx * sy) / denom : 0;
-  const mean = sy / n;
-  const deltaPct = mean > 0 ? (slope * (n - 1)) / mean * 100 : 0;
-  return { deltaPct, total, slope, mean };
-}
-function growthPct(series: number[]): number {
-  return trendStats(series).deltaPct;
-}
-
 export async function getGenreMomentum(db: Querier, platform: Platform): Promise<GenreMomentum> {
-  const gw = await genreWeekFeatures(db, platform);
-  const top = gw.order.slice(0, 4);
-  return { weeks: gw.weeks, series: top.map((genre) => ({ genre, values: gw.byGenre[genre] })) };
+  const gd = await genreVotesByDate(db, platform);
+  const top = gd.order.slice(0, 4);
+  return { dates: gd.dates, building: gd.dates.length < 2, series: top.map((genre) => ({ genre, values: gd.byGenre[genre] })) };
 }
+
+const RATING_BANDS = ["<3.5", "3.5–4.0", "4.0–4.4", "4.4–4.7", "≥4.7"];
+function bandIndex(r: number): number { return r < 3.5 ? 0 : r < 4.0 ? 1 : r < 4.4 ? 2 : r < 4.7 ? 3 : 4; }
 
 export async function getFeatureHeatmap(db: Querier, platform: Platform): Promise<FeatureHeatmap> {
-  const gw = await genreWeekFeatures(db, platform);
-  const genres = gw.order.slice(0, 7);
-  const cells = [];
-  for (let gi = 0; gi < genres.length; gi++)
-    for (let w = 0; w < gw.weeks.length; w++)
-      cells.push({ genreIndex: gi, week: w, value: gw.byGenre[genres[gi]][w] });
-  return { weeks: gw.weeks, genres, cells };
+  const rows = await db.query(
+    `SELECT l.genre AS genre, l.rating AS rating, count(*)::int AS n
+     FROM v_latest l JOIN games g ON g.id = l.game_id JOIN sources src ON src.id = g.source_id
+     WHERE g.is_live AND l.genre IS NOT NULL AND l.rating IS NOT NULL ${pf(platform)}
+     GROUP BY l.genre, l.rating`
+  );
+  const totals: Record<string, number> = {};
+  for (const r of rows) totals[r.genre] = (totals[r.genre] ?? 0) + num(r.n);
+  const genres = Object.keys(totals).sort((a, b) => totals[b] - totals[a]).slice(0, 7);
+  const gi = new Map(genres.map((g, i) => [g, i]));
+  const cells = genres.flatMap((_, g) => RATING_BANDS.map((_, w) => ({ genreIndex: g, week: w, value: 0 })));
+  const at = (g: number, w: number) => cells[g * RATING_BANDS.length + w];
+  for (const r of rows) { if (!gi.has(r.genre)) continue; at(gi.get(r.genre)!, bandIndex(num(r.rating))).value += num(r.n); }
+  return { weeks: RATING_BANDS, genres, cells };
 }
 
 export async function getTagFrequency(db: Querier, platform: Platform): Promise<TagFreq[]> {
@@ -102,92 +207,95 @@ export async function getTagFrequency(db: Querier, platform: Platform): Promise<
   return rows.map((r) => ({ tag: r.tag, count: num(r.cnt) }));
 }
 
-export async function getHiddenGems(db: Querier, platform: Platform): Promise<HiddenGem[]> {
-  const rows = await db.query(
-    `SELECT g.id AS id, g.title AS title, l.rating AS rating, l.votes AS votes, l.genre AS genre
-     FROM v_latest l
-     JOIN games g ON g.id = l.game_id
-     JOIN sources src ON src.id = g.source_id
-     WHERE g.is_live AND l.rating >= 4.4 AND l.votes < 5000 AND l.featured = false ${pf(platform)}
-     ORDER BY l.rating DESC, l.votes ASC LIMIT 30`
+const GEM_RATING_PCTILE = 0.75, GEM_VOTES_PCTILE = 0.25;
+
+async function gemBase(db: Querier, platform: Platform) {
+  return db.query(
+    `WITH base AS (
+       SELECT g.id, g.title, l.genre, l.rating, l.votes,
+              percent_rank() OVER (ORDER BY l.rating) AS rp,
+              percent_rank() OVER (ORDER BY l.votes)  AS vp
+       FROM v_latest l
+       JOIN games g ON g.id = l.game_id
+       JOIN sources src ON src.id = g.source_id
+       WHERE g.is_live AND l.rating IS NOT NULL AND l.votes IS NOT NULL ${pf(platform)}
+     )
+     SELECT id, title, genre, rating, votes, rp, vp,
+            (rp >= ${GEM_RATING_PCTILE} AND vp <= ${GEM_VOTES_PCTILE}) AS gem
+     FROM base`
   );
-  return rows.map((r) => ({ gameId: num(r.id), title: r.title, rating: num(r.rating), votes: num(r.votes), genre: r.genre }));
 }
 
 export async function getScatter(db: Querier, platform: Platform): Promise<ScatterPoint[]> {
-  const rows = await db.query(
-    `SELECT g.title AS title, l.rating AS rating, l.votes AS votes,
-            (l.rating >= 4.4 AND l.votes < 5000 AND l.featured = false) AS gem
-     FROM v_latest l
-     JOIN games g ON g.id = l.game_id
-     JOIN sources src ON src.id = g.source_id
-     WHERE g.is_live ${pf(platform)}`
-  );
-  return rows.map((r) => ({ title: r.title, rating: num(r.rating), votes: num(r.votes), gem: !!r.gem }));
+  const rows = await gemBase(db, platform);
+  return rows.map((r) => ({ title: r.title, genre: r.genre ?? "—", rating: num(r.rating), votes: num(r.votes), gem: !!r.gem }));
+}
+
+export async function getHiddenGems(db: Querier, platform: Platform): Promise<HiddenGem[]> {
+  const rows = await gemBase(db, platform);
+  return rows
+    .filter((r) => r.gem)
+    .sort((a, b) => (num(b.rp) - num(b.vp)) - (num(a.rp) - num(a.vp)))
+    .slice(0, 30)
+    .map((r) => ({ gameId: num(r.id), title: r.title, rating: num(r.rating), votes: num(r.votes), genre: r.genre ?? "—" }));
 }
 
 export async function getMarketGaps(db: Querier, platform: Platform): Promise<MarketGap[]> {
-  const rows = await db.query(
-    `SELECT l.genre AS genre, t.name AS tag,
-            count(DISTINCT g.id)::int AS supply_n,
-            avg(l.votes)::float AS demand_raw
-     FROM v_latest l
-     JOIN games g ON g.id = l.game_id
-     JOIN sources src ON src.id = g.source_id
-     JOIN game_tags gt ON gt.game_id = g.id
-     JOIN tags t ON t.id = gt.tag_id
-     WHERE g.is_live ${pf(platform)}
-     GROUP BY l.genre, t.name
-     HAVING count(DISTINCT g.id) >= 1`
-  );
+  const [rows, gex] = await Promise.all([
+    db.query(
+      `SELECT l.genre AS genre, t.name AS tag,
+              count(DISTINCT g.id)::int AS supply_n,
+              percentile_cont(0.5) WITHIN GROUP (ORDER BY l.votes)::float AS appetite,
+              percentile_cont(0.9) WITHIN GROUP (ORDER BY l.rating)::float AS quality_ceil
+       FROM v_latest l
+       JOIN games g ON g.id = l.game_id
+       JOIN sources src ON src.id = g.source_id
+       JOIN game_tags gt ON gt.game_id = g.id
+       JOIN tags t ON t.id = gt.tag_id
+       WHERE g.is_live AND l.genre IS NOT NULL ${pf(platform)}
+       GROUP BY l.genre, t.name
+       HAVING count(DISTINCT g.id) >= 2`
+    ),
+    gapExamples(db, platform),
+  ]);
   if (rows.length < 2) return [];
-  const rank = (vals: number[]) => {
-    const sorted = [...vals].sort((a, b) => a - b);
-    return (v: number) => {
-      const i = sorted.findIndex((x) => x >= v);
-      return Math.round((i / (sorted.length - 1)) * 100);
-    };
-  };
-  const demands = rows.map((r) => num(r.demand_raw));
-  const supplies = rows.map((r) => num(r.supply_n));
-  const dRank = rank(demands);
-  const sRank = rank(supplies);
+  const z = (vals: number[]) => { const m = vals.reduce((a, b) => a + b, 0) / vals.length;
+    const sd = Math.sqrt(vals.reduce((a, b) => a + (b - m) ** 2, 0) / vals.length) || 1;
+    return (v: number) => (v - m) / sd; };
+  const zApp = z(rows.map((r) => num(r.appetite)));
+  const zSup = z(rows.map((r) => num(r.supply_n)));
+  const zQual = z(rows.map((r) => num(r.quality_ceil)));
   return rows
-    .map((r) => {
-      const demand = dRank(num(r.demand_raw));
-      const supply = sRank(num(r.supply_n));
-      return {
-        label: `${r.genre} × ${r.tag}`,
-        combo: `${r.genre} × ${r.tag}`,
-        demand,
-        supply,
-        score: demand - supply,
-      };
-    })
+    .map((r) => ({
+      label: `${r.genre} × ${r.tag}`,
+      genre: r.genre,
+      tag: r.tag,
+      supplyN: num(r.supply_n),
+      appetite: Math.round(num(r.appetite)),
+      qualityCeil: +num(r.quality_ceil).toFixed(2),
+      score: +(zApp(num(r.appetite)) + zQual(num(r.quality_ceil)) - zSup(num(r.supply_n))).toFixed(2),
+      examples: gex.get(`${r.genre} × ${r.tag}`) ?? [],
+    }))
     .sort((a, b) => b.score - a.score)
     .slice(0, 6);
 }
 
 export async function getGenres(db: Querier, platform: Platform): Promise<GenreRow[]> {
   const rows = await db.query(
-    `SELECT l.genre AS genre, count(*)::int AS games,
-            avg(l.rating)::float AS avg_rating, avg(l.votes)::float AS avg_votes,
-            avg(fd.df)::float AS days_featured
-     FROM v_latest l
-     JOIN games g ON g.id = l.game_id
-     JOIN sources src ON src.id = g.source_id
-     LEFT JOIN (SELECT game_id, count(*) FILTER (WHERE featured) AS df FROM game_snapshots GROUP BY game_id) fd ON fd.game_id = g.id
+    `SELECT l.genre AS genre, count(*)::int AS games, avg(l.rating)::float AS avg_rating,
+            percentile_cont(0.5) WITHIN GROUP (ORDER BY l.votes)::float AS med_votes,
+            percentile_cont(0.9) WITHIN GROUP (ORDER BY l.votes)::float AS p90_votes,
+            percentile_cont(0.9) WITHIN GROUP (ORDER BY l.rating)::float AS p90_rating
+     FROM v_latest l JOIN games g ON g.id = l.game_id JOIN sources src ON src.id = g.source_id
      WHERE g.is_live AND l.genre IS NOT NULL ${pf(platform)}
      GROUP BY l.genre ORDER BY games DESC`
   );
-  const gw = await genreWeekFeatures(db, platform);
+  const gd = await genreVotesByDate(db, platform);
   return rows.map((r) => ({
-    genre: r.genre,
-    games: num(r.games),
-    avgRating: +num(r.avg_rating).toFixed(2),
-    avgVotes: Math.round(num(r.avg_votes)),
-    daysFeatured: +num(r.days_featured).toFixed(1),
-    deltaPct: gw.byGenre[r.genre] ? Math.round(trendStats(gw.byGenre[r.genre]).deltaPct) : 0,
+    genre: r.genre, games: num(r.games), avgRating: +num(r.avg_rating).toFixed(2),
+    medianVotes: Math.round(num(r.med_votes)), p90Votes: Math.round(num(r.p90_votes)),
+    p90Rating: +num(r.p90_rating).toFixed(2),
+    votesPerDay: gd.byGenre[r.genre] ? Math.round(velocity(gd.byGenre[r.genre], gd.daySpan)) : 0,
   }));
 }
 
@@ -215,42 +323,36 @@ export async function getDevelopers(db: Querier, platform: Platform): Promise<De
 export async function getNewReleases(db: Querier, platform: Platform): Promise<NewRelease[]> {
   const rows = await db.query(
     `SELECT g.id AS id, g.title AS title, g.url AS url, l.genre AS genre, l.rating AS rating, l.votes AS votes
-     FROM games g
-     JOIN sources src ON src.id = g.source_id
-     JOIN v_latest l ON l.game_id = g.id
-     JOIN (SELECT game_id, min(captured_at) AS fs FROM game_snapshots GROUP BY game_id) m ON m.game_id = g.id
-     WHERE g.is_live AND m.fs = (SELECT max(captured_at) FROM game_snapshots) ${pf(platform)}
-     ORDER BY l.votes DESC NULLS LAST LIMIT 60`
+     FROM games g JOIN sources src ON src.id = g.source_id JOIN v_latest l ON l.game_id = g.id
+     WHERE g.is_live ${pf(platform)} AND g.first_seen_at >= (SELECT max(first_seen_at) FROM games) - interval '14 days'
+     ORDER BY g.first_seen_at DESC, l.votes DESC NULLS LAST LIMIT 60`
   );
-  return rows.map((r) => ({
-    gameId: num(r.id),
-    title: r.title,
-    genre: r.genre ?? "—",
-    rating: num(r.rating),
-    votes: num(r.votes),
-    url: r.url,
-  }));
+  return rows.map((r) => ({ gameId: num(r.id), title: r.title, genre: r.genre ?? "—", rating: num(r.rating), votes: num(r.votes), url: r.url }));
 }
 
 export async function getInsights(db: Querier, platform: Platform): Promise<Insight[]> {
-  const gw = await genreWeekFeatures(db, platform);
-  const stats = gw.order.map((g) => ({ g, ...trendStats(gw.byGenre[g]) }));
-  const eligible = stats.filter((s) => s.total >= gw.weeks.length * 0.5);
-  const pool = (eligible.length ? eligible : stats).sort((a, b) => b.deltaPct - a.deltaPct);
+  const gd = await genreVotesByDate(db, platform);
+  const vels = gd.order.map((genre) => ({ genre, v: velocity(gd.byGenre[genre], gd.daySpan) }));
   const out: Insight[] = [];
-  if (pool.length) {
-    const f = pool[0];
-    out.push({ kind: "up", tag: "RISING", meta: `+${Math.round(f.deltaPct)}% / ${gw.weeks.length}w`, text: `<b>${f.g}</b> is the fastest-growing genre in homepage features.` });
-    const d = pool[pool.length - 1];
-    if (d.deltaPct < 0)
-      out.push({ kind: "down", tag: "DECLINING", meta: `${Math.round(d.deltaPct)}%`, text: `<b>${d.g}</b> features have declined over the window.` });
+  // (1) Rising genre by votes/day
+  if (vels.length) {
+    const top = vels.reduce((best, cur) => (cur.v > best.v ? cur : best), vels[0]);
+    out.push({ kind: "up", tag: "RISING", meta: `+${Math.round(top.v)} votes/day`, text: `<b>${top.genre}</b> is gaining the most votes/day across the window.` });
   }
+  // (2) Top opportunity gap
   const gaps = await getMarketGaps(db, platform);
   if (gaps.length)
-    out.push({ kind: "gap", tag: "OPPORTUNITY", meta: `demand p${gaps[0].demand} · supply p${gaps[0].supply}`, text: `<b>${gaps[0].label}</b> shows high demand with thin supply.` });
+    out.push({ kind: "gap", tag: "OPPORTUNITY", meta: `${gaps[0].supplyN} games · ${gaps[0].appetite} median votes`, text: `<b>${gaps[0].label}</b> shows high demand with thin supply.` });
+  // (3) Hidden-gems count
   const gems = await getHiddenGems(db, platform);
   if (gems.length)
-    out.push({ kind: "gem", tag: "HIDDEN GEMS", meta: `${gems.length} found`, text: `<b>${gems.length} hidden gems</b> rate ≥ 4.4 with low visibility.` });
+    out.push({ kind: "gem", tag: "HIDDEN GEMS", meta: `${gems.length} found`, text: `<b>${gems.length} hidden gems</b> rank in the top 25% on rating with low vote volume.` });
+  // (4) Optional highest-quality genre by P75 rating
+  const landscape = await getGenreLandscape(db, platform);
+  if (landscape.length) {
+    const best = landscape.reduce((b, c) => (c.p75Rating > b.p75Rating ? c : b), landscape[0]);
+    out.push({ kind: "up", tag: "TOP QUALITY", meta: `P75 rating ${best.p75Rating.toFixed(2)}`, text: `<b>${best.genre}</b> has the highest P75 rating across all genres.` });
+  }
   return out;
 }
 
@@ -261,40 +363,134 @@ async function getKPI(db: Querier, platform: Platform, gaps: MarketGap[]): Promi
   const avg = await db.query(
     `SELECT avg(l.rating)::float AS r FROM v_latest l JOIN games g ON g.id = l.game_id JOIN sources src ON src.id = g.source_id WHERE g.is_live ${pf(platform)}`
   );
-  const recent = await db.query(
-    `SELECT count(*)::int AS n FROM (
-       SELECT g.id, min(s.captured_at) AS mn
-       FROM games g JOIN sources src ON src.id = g.source_id JOIN game_snapshots s ON s.game_id = g.id
-       WHERE g.is_live ${pf(platform)} GROUP BY g.id
-     ) t WHERE t.mn = (SELECT max(captured_at) FROM game_snapshots)`
+  const newGames = await db.query(
+    `SELECT count(*)::int AS n FROM games g JOIN sources src ON src.id = g.source_id
+     WHERE g.is_live ${pf(platform)} AND g.first_seen_at >= (SELECT max(first_seen_at) FROM games) - interval '14 days'`
   );
-  // fastest genre across ALL genres with enough volume (not just the charted top-4)
-  const gw = await genreWeekFeatures(db, platform);
-  const stats = gw.order.map((g) => ({ genre: g, ...trendStats(gw.byGenre[g]) }));
-  const eligible = stats.filter((s) => s.total >= gw.weeks.length); // avg >= 1 feature/week
-  const pool = eligible.length ? eligible : stats;
-  const best = [...pool].sort((a, b) => b.deltaPct - a.deltaPct)[0] ?? { genre: "—", deltaPct: 0 };
+  const gd = await genreVotesByDate(db, platform);
+  const MIN_VOL = 4;
+  const counts = await db.query(
+    `SELECT l.genre AS genre, count(*)::int AS n FROM v_latest l JOIN games g ON g.id=l.game_id JOIN sources src ON src.id=g.source_id WHERE g.is_live AND l.genre IS NOT NULL ${pf(platform)} GROUP BY l.genre`
+  );
+  const vol = new Map(counts.map((r) => [r.genre, num(r.n)]));
+  const rising = gd.order
+    .filter((genre) => (vol.get(genre) ?? 0) >= MIN_VOL)
+    .map((genre) => ({ genre, v: velocity(gd.byGenre[genre], gd.daySpan) }))
+    .sort((a, b) => b.v - a.v)[0] ?? { genre: "—", v: 0 };
+  const p90 = await db.query(
+    `SELECT percentile_cont(0.9) WITHIN GROUP (ORDER BY l.rating)::float AS p FROM v_latest l JOIN games g ON g.id = l.game_id JOIN sources src ON src.id = g.source_id WHERE g.is_live AND l.rating IS NOT NULL ${pf(platform)}`
+  );
   return {
     gamesTracked: num(g[0].n),
-    newThisWeek: num(recent[0].n),
+    newGames: num(newGames[0].n),
     avgRating: +num(avg[0].r).toFixed(2),
-    fastestGenre: best.genre,
-    fastestGenreDeltaPct: Math.round(best.deltaPct),
-    openGaps: gaps.filter((c) => c.score > 40).length,
+    avgRatingP90: +num(p90[0].p).toFixed(2),
+    risingGenre: rising.genre,
+    risingVotesPerDay: Math.round(rising.v),
+    openGaps: gaps.filter((c) => c.score > 0).length,
   };
 }
 
+async function genreExamples(db: Querier, platform: Platform): Promise<Map<string, string[]>> {
+  const rows = await db.query(
+    `SELECT genre, title FROM (
+       SELECT l.genre AS genre, g.title AS title,
+              row_number() OVER (PARTITION BY l.genre ORDER BY l.votes DESC NULLS LAST) AS rn
+       FROM v_latest l JOIN games g ON g.id=l.game_id JOIN sources src ON src.id=g.source_id
+       WHERE g.is_live AND l.genre IS NOT NULL ${pf(platform)}
+     ) t WHERE rn <= 3 ORDER BY genre, rn`
+  );
+  const m = new Map<string, string[]>();
+  for (const r of rows) { const a = m.get(r.genre) ?? []; a.push(r.title); m.set(r.genre, a); }
+  return m;
+}
+
+async function gapExamples(db: Querier, platform: Platform): Promise<Map<string, string[]>> {
+  const rows = await db.query(
+    `SELECT genre, tag, title FROM (
+       SELECT l.genre AS genre, t.name AS tag, g.title AS title,
+              row_number() OVER (PARTITION BY l.genre, t.name ORDER BY l.votes DESC NULLS LAST) AS rn
+       FROM v_latest l JOIN games g ON g.id=l.game_id JOIN sources src ON src.id=g.source_id
+       JOIN game_tags gt ON gt.game_id=g.id JOIN tags t ON t.id=gt.tag_id
+       WHERE g.is_live AND l.genre IS NOT NULL ${pf(platform)}
+     ) x WHERE rn <= 3 ORDER BY genre, tag, rn`
+  );
+  const m = new Map<string, string[]>();
+  for (const r of rows) { const k = `${r.genre} × ${r.tag}`; const a = m.get(k) ?? []; a.push(r.title); m.set(k, a); }
+  return m;
+}
+
+export async function getGenreVelocityBars(db: Querier, platform: Platform): Promise<GenreVelocityBar[]> {
+  const gd = await genreVotesByDate(db, platform);
+  const counts = await db.query(
+    `SELECT l.genre AS genre, count(*)::int AS n FROM v_latest l JOIN games g ON g.id=l.game_id JOIN sources src ON src.id=g.source_id WHERE g.is_live AND l.genre IS NOT NULL ${pf(platform)} GROUP BY l.genre`
+  );
+  const vol = new Map(counts.map((r) => [r.genre, num(r.n)]));
+  const MIN_VOL = 4;
+  return gd.order
+    .filter((g) => (vol.get(g) ?? 0) >= MIN_VOL)
+    .map((g) => ({ genre: g, votesPerDay: Math.round(velocity(gd.byGenre[g], gd.daySpan)) }))
+    .sort((a, b) => b.votesPerDay - a.votesPerDay)
+    .slice(0, 12);
+}
+
+export async function getGenreLandscape(db: Querier, platform: Platform): Promise<GenreLandscapePoint[]> {
+  const [rows, ex] = await Promise.all([
+    db.query(
+      `SELECT l.genre AS genre, count(*)::int AS supply,
+              percentile_cont(0.75) WITHIN GROUP (ORDER BY l.rating)::float AS p75,
+              avg(l.rating)::float AS avgr, coalesce(sum(l.votes),0)::float AS tv
+       FROM v_latest l JOIN games g ON g.id = l.game_id JOIN sources src ON src.id = g.source_id
+       WHERE g.is_live AND l.genre IS NOT NULL AND l.rating IS NOT NULL ${pf(platform)}
+       GROUP BY l.genre HAVING count(*) >= 4 ORDER BY supply DESC`
+    ),
+    genreExamples(db, platform),
+  ]);
+  return rows.map((r) => ({ genre: r.genre, supply: num(r.supply), p75Rating: +num(r.p75).toFixed(2), avgRating: +num(r.avgr).toFixed(2), totalVotes: Math.round(num(r.tv)), examples: ex.get(r.genre) ?? [] }));
+}
+
+async function getTagGlossary(db: Querier, platform: Platform, tagNames: string[]): Promise<GlossaryRow[]> {
+  if (!tagNames.length) return [];
+  const ph = tagNames.map((_, i) => `$${i + 1}`).join(",");
+  const rows = await db.query(
+    `SELECT tag, title, cnt FROM (
+       SELECT t.name AS tag, gg.title AS title,
+              row_number() OVER (PARTITION BY t.name ORDER BY l.votes DESC NULLS LAST) AS rn,
+              count(*) OVER (PARTITION BY t.name) AS cnt
+       FROM tags t
+       JOIN game_tags gt ON gt.tag_id = t.id
+       JOIN games gg ON gg.id = gt.game_id
+       JOIN sources src ON src.id = gg.source_id
+       JOIN v_latest l ON l.game_id = gg.id
+       WHERE gg.is_live AND t.name IN (${ph}) ${pf(platform)}
+     ) x WHERE rn <= 3 ORDER BY tag, rn`,
+    tagNames
+  );
+  const m = new Map<string, { count: number; examples: string[] }>();
+  for (const r of rows) {
+    const e = m.get(r.tag) ?? { count: num(r.cnt), examples: [] };
+    e.examples.push(r.title);
+    m.set(r.tag, e);
+  }
+  // preserve the requested order
+  return tagNames.filter((t) => m.has(t)).map((label) => ({ label, kind: "tag" as const, count: m.get(label)!.count, examples: m.get(label)!.examples, definition: defineTag(label) }));
+}
+
 export async function getOverview(db: Querier, platform: Platform): Promise<Overview> {
-  const [momentum, tags, scatter, heatmap, gaps, insights] = await Promise.all([
+  const [momentum, tags, scatter, heatmap, gaps, insights, landscape, velocityBars] = await Promise.all([
     getGenreMomentum(db, platform),
     getTagFrequency(db, platform),
     getScatter(db, platform),
     getFeatureHeatmap(db, platform),
     getMarketGaps(db, platform),
     getInsights(db, platform),
+    getGenreLandscape(db, platform),
+    getGenreVelocityBars(db, platform),
   ]);
   const kpi = await getKPI(db, platform, gaps);
-  return { kpi, momentum, tags, scatter, heatmap, gaps, insights, platform, subtitle: subtitleFor(platform) };
+  const tagNames = [...new Set([...gaps.map((g) => g.tag), ...tags.map((t) => t.tag)])];
+  const glossary: GlossaryRow[] = await getTagGlossary(db, platform, tagNames);
+  return { kpi, momentum, tags, scatter, heatmap, gaps, insights, landscape, velocityBars, glossary, platform, subtitle: subtitleFor(platform) };
 }
 
 // ── Brief ──
