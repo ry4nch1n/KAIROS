@@ -101,12 +101,13 @@ describe("A8 scatter", () => {
   });
 });
 
-describe("A8b feature heatmap", () => {
-  it("returns genres x weeks cells", async () => {
+describe("A8b rating-band density heatmap", () => {
+  it("bands × genres with at least one non-zero cell", async () => {
     const h = await q.getFeatureHeatmap(db, "all");
-    expect(h.weeks.length).toBeGreaterThan(0);
     expect(h.genres.length).toBeGreaterThan(0);
+    expect(h.weeks.length).toBe(5); // 5 rating bands
     expect(h.cells.length).toBe(h.weeks.length * h.genres.length);
+    expect(h.cells.some((c) => c.value > 0)).toBe(true);
   });
 });
 

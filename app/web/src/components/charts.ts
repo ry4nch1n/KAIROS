@@ -77,7 +77,7 @@ export function scatterOption(points: ScatterPoint[]): EChartsOption {
 
 export function heatmapOption(h: FeatureHeatmap): EChartsOption {
   return {
-    tooltip: { ...tip, formatter: (p: any) => `${h.genres[p.value[1]]} · ${h.weeks[p.value[0]]}<br><b>${p.value[2]}</b> features` },
+    tooltip: { ...tip, formatter: (p: any) => `${h.genres[p.value[1]]} · ${h.weeks[p.value[0]]}<br><b>${p.value[2]}</b> games` },
     grid: { left: 84, right: 14, top: 10, bottom: 46 },
     xAxis: { type: "category", data: h.weeks, axisLine: { lineStyle: { color: GRID } }, axisLabel: { color: AX, fontFamily: FONT, fontSize: 10 }, splitArea: { show: false } },
     yAxis: { type: "category", data: h.genres, axisLine: { lineStyle: { color: GRID } }, axisLabel: { color: AX, fontFamily: FONT, fontSize: 10 } },

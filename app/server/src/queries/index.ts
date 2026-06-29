@@ -115,14 +115,24 @@ export async function getGenreMomentum(db: Querier, platform: Platform): Promise
   return { dates: gd.dates, building: gd.dates.length < 2, series: top.map((genre) => ({ genre, values: gd.byGenre[genre] })) };
 }
 
+const RATING_BANDS = ["<3.5", "3.5–4.0", "4.0–4.4", "4.4–4.7", "≥4.7"];
+function bandIndex(r: number): number { return r < 3.5 ? 0 : r < 4.0 ? 1 : r < 4.4 ? 2 : r < 4.7 ? 3 : 4; }
+
 export async function getFeatureHeatmap(db: Querier, platform: Platform): Promise<FeatureHeatmap> {
-  const gw = await genreWeekFeatures(db, platform);
-  const genres = gw.order.slice(0, 7);
-  const cells = [];
-  for (let gi = 0; gi < genres.length; gi++)
-    for (let w = 0; w < gw.weeks.length; w++)
-      cells.push({ genreIndex: gi, week: w, value: gw.byGenre[genres[gi]][w] });
-  return { weeks: gw.weeks, genres, cells };
+  const rows = await db.query(
+    `SELECT l.genre AS genre, l.rating AS rating, count(*)::int AS n
+     FROM v_latest l JOIN games g ON g.id = l.game_id JOIN sources src ON src.id = g.source_id
+     WHERE g.is_live AND l.genre IS NOT NULL AND l.rating IS NOT NULL ${pf(platform)}
+     GROUP BY l.genre, l.rating`
+  );
+  const totals: Record<string, number> = {};
+  for (const r of rows) totals[r.genre] = (totals[r.genre] ?? 0) + num(r.n);
+  const genres = Object.keys(totals).sort((a, b) => totals[b] - totals[a]).slice(0, 7);
+  const gi = new Map(genres.map((g, i) => [g, i]));
+  const cells = genres.flatMap((_, g) => RATING_BANDS.map((_, w) => ({ genreIndex: g, week: w, value: 0 })));
+  const at = (g: number, w: number) => cells[g * RATING_BANDS.length + w];
+  for (const r of rows) { if (!gi.has(r.genre)) continue; at(gi.get(r.genre)!, bandIndex(num(r.rating))).value += num(r.n); }
+  return { weeks: RATING_BANDS, genres, cells };
 }
 
 export async function getTagFrequency(db: Querier, platform: Platform): Promise<TagFreq[]> {

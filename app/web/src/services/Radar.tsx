@@ -59,7 +59,7 @@ function OverviewView({ ov }: { ov: Overview }) {
         <div className="card">{head(I.gems, "Hidden-gem finder", "rating × visibility")}<EChart option={scatterOption(ov.scatter)} /></div>
       </div>
       <div className="grid g-2">
-        <div className="card">{head(I.overview, "Feature heatmap", "genre × week")}<EChart option={heatmapOption(ov.heatmap)} style={{ minHeight: 260 }} /></div>
+        <div className="card">{head(I.overview, "Feature heatmap", "genre × rating band (game counts)")}<EChart option={heatmapOption(ov.heatmap)} style={{ minHeight: 260 }} /></div>
         <div className="card">{head(I.gaps, "Top market gaps", "appetite × quality × supply")}<GapList gaps={ov.gaps} /></div>
       </div>
     </>
@@ -133,7 +133,7 @@ function TrendsView({ ov }: { ov: Overview }) {
           ? <div className="empty-inline">History building — need ≥2 crawl days</div>
           : <EChart option={momentumOption(ov.momentum)} style={{ minHeight: 340 }} />}
       </div>
-      <div className="card">{head(I.overview, "Feature heatmap", "genre × week intensity")}<EChart option={heatmapOption(ov.heatmap)} style={{ minHeight: 300 }} /></div>
+      <div className="card">{head(I.overview, "Feature heatmap", "genre × rating band (game counts)")}<EChart option={heatmapOption(ov.heatmap)} style={{ minHeight: 300 }} /></div>
     </>
   );
 }
