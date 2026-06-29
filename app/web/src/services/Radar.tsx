@@ -59,7 +59,7 @@ function OverviewView({ ov }: { ov: Overview }) {
       </div>
       <div className="grid g-2">
         <div className="card">{head(I.overview, "Feature heatmap", "genre × week")}<EChart option={heatmapOption(ov.heatmap)} style={{ minHeight: 260 }} /></div>
-        <div className="card">{head(I.gaps, "Top market gaps", "demand ▸ supply")}<GapList gaps={ov.gaps} /></div>
+        <div className="card">{head(I.gaps, "Top market gaps", "appetite × quality × supply")}<GapList gaps={ov.gaps} /></div>
       </div>
     </>
   );
@@ -68,12 +68,14 @@ function OverviewView({ ov }: { ov: Overview }) {
 function GapList({ gaps }: { gaps: Overview["gaps"] }) {
   return (
     <div className="gaplist">
+      <p className="gap-legend">high appetite + high quality ceiling + low supply = opportunity</p>
       {gaps.map((g, i) => (
         <div className="gap" key={i}><span className="rank num">{i + 1}</span>
-          <div className="name">{g.label}<small>score {g.score}</small></div>
-          <div className="bars">
-            <div className="barlbl"><span>demand</span><span>{g.demand}</span></div><div className="bar demand"><i style={{ width: g.demand + "%" }} /></div>
-            <div className="barlbl"><span>supply</span><span>{g.supply}</span></div><div className="bar supply"><i style={{ width: g.supply + "%" }} /></div>
+          <div className="name">{g.label}<small>opportunity {g.score.toFixed(1)}</small></div>
+          <div className="gap-stats num">
+            <span><b>{fmt(g.appetite)}</b> median votes/title</span>
+            <span><b>{g.supplyN}</b> games</span>
+            <span>top rating <b>{g.qualityCeil.toFixed(2)}</b></span>
           </div>
         </div>
       ))}
@@ -229,7 +231,7 @@ export function Radar({ hidden }: { hidden: boolean }) {
           {view === "trends" && (ov ? <TrendsView ov={ov} /> : <Skel />)}
           {view === "hidden-gems" && (ov ? <GemsView ov={ov} rows={extra} /> : <Skel />)}
           {view === "new-releases" && (extra ? <NewReleasesView rows={extra} /> : <Skel />)}
-          {view === "market-gaps" && (ov ? <div className="card">{head(I.gaps, "Market Gaps", "demand ≫ supply — ranked opportunities")}<GapList gaps={ov.gaps} /></div> : <Skel />)}
+          {view === "market-gaps" && (ov ? <div className="card">{head(I.gaps, "Market Gaps", "ranked by opportunity score")}<GapList gaps={ov.gaps} /></div> : <Skel />)}
           <div className="foot-note">KAIROS · GameRadar · live from Neon · platform via source_id</div>
         </div>
       </main>

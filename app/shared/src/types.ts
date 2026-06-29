@@ -39,10 +39,10 @@ export interface HiddenGem {
 
 export interface MarketGap {
   label: string;
-  combo: string;
-  demand: number; // 0-100
-  supply: number; // 0-100
-  score: number; // demand - supply
+  supplyN: number;
+  appetite: number;
+  qualityCeil: number;
+  score: number;
 }
 
 export interface HeatCell {

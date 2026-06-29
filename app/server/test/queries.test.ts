@@ -76,16 +76,16 @@ describe("A6 hidden gems (percentile)", () => {
   });
 });
 
-describe("A7 market gaps", () => {
-  it("ranked by score desc, demand/supply in 0-100", async () => {
+describe("A7 market gaps (interpretable)", () => {
+  it("rows carry absolute numbers and rank by score", async () => {
     const gaps = await q.getMarketGaps(db, "all");
     expect(gaps.length).toBeGreaterThan(0);
     for (let i = 1; i < gaps.length; i++) expect(gaps[i - 1].score).toBeGreaterThanOrEqual(gaps[i].score);
     for (const c of gaps) {
-      expect(c.demand).toBeGreaterThanOrEqual(0);
-      expect(c.demand).toBeLessThanOrEqual(100);
-      expect(c.supply).toBeGreaterThanOrEqual(0);
-      expect(c.supply).toBeLessThanOrEqual(100);
+      expect(c.supplyN).toBeGreaterThanOrEqual(2);
+      expect(c.appetite).toBeGreaterThanOrEqual(0);
+      expect(c.qualityCeil).toBeGreaterThan(0);
+      expect(c.qualityCeil).toBeLessThanOrEqual(5);
     }
   });
 });

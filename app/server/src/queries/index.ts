@@ -175,40 +175,32 @@ export async function getMarketGaps(db: Querier, platform: Platform): Promise<Ma
   const rows = await db.query(
     `SELECT l.genre AS genre, t.name AS tag,
             count(DISTINCT g.id)::int AS supply_n,
-            avg(l.votes)::float AS demand_raw
+            percentile_cont(0.5) WITHIN GROUP (ORDER BY l.votes)::float AS appetite,
+            percentile_cont(0.9) WITHIN GROUP (ORDER BY l.rating)::float AS quality_ceil
      FROM v_latest l
      JOIN games g ON g.id = l.game_id
      JOIN sources src ON src.id = g.source_id
      JOIN game_tags gt ON gt.game_id = g.id
      JOIN tags t ON t.id = gt.tag_id
-     WHERE g.is_live ${pf(platform)}
+     WHERE g.is_live AND l.genre IS NOT NULL ${pf(platform)}
      GROUP BY l.genre, t.name
-     HAVING count(DISTINCT g.id) >= 1`
+     HAVING count(DISTINCT g.id) >= 2`
   );
   if (rows.length < 2) return [];
-  const rank = (vals: number[]) => {
-    const sorted = [...vals].sort((a, b) => a - b);
-    return (v: number) => {
-      const i = sorted.findIndex((x) => x >= v);
-      return Math.round((i / (sorted.length - 1)) * 100);
-    };
-  };
-  const demands = rows.map((r) => num(r.demand_raw));
-  const supplies = rows.map((r) => num(r.supply_n));
-  const dRank = rank(demands);
-  const sRank = rank(supplies);
+  const z = (vals: number[]) => { const m = vals.reduce((a, b) => a + b, 0) / vals.length;
+    const sd = Math.sqrt(vals.reduce((a, b) => a + (b - m) ** 2, 0) / vals.length) || 1;
+    return (v: number) => (v - m) / sd; };
+  const zApp = z(rows.map((r) => num(r.appetite)));
+  const zSup = z(rows.map((r) => num(r.supply_n)));
+  const zQual = z(rows.map((r) => num(r.quality_ceil)));
   return rows
-    .map((r) => {
-      const demand = dRank(num(r.demand_raw));
-      const supply = sRank(num(r.supply_n));
-      return {
-        label: `${r.genre} × ${r.tag}`,
-        combo: `${r.genre} × ${r.tag}`,
-        demand,
-        supply,
-        score: demand - supply,
-      };
-    })
+    .map((r) => ({
+      label: `${r.genre} × ${r.tag}`,
+      supplyN: num(r.supply_n),
+      appetite: Math.round(num(r.appetite)),
+      qualityCeil: +num(r.quality_ceil).toFixed(2),
+      score: +(zApp(num(r.appetite)) + zQual(num(r.quality_ceil)) - zSup(num(r.supply_n))).toFixed(2),
+    }))
     .sort((a, b) => b.score - a.score)
     .slice(0, 6);
 }
@@ -292,7 +284,7 @@ export async function getInsights(db: Querier, platform: Platform): Promise<Insi
   }
   const gaps = await getMarketGaps(db, platform);
   if (gaps.length)
-    out.push({ kind: "gap", tag: "OPPORTUNITY", meta: `demand p${gaps[0].demand} · supply p${gaps[0].supply}`, text: `<b>${gaps[0].label}</b> shows high demand with thin supply.` });
+    out.push({ kind: "gap", tag: "OPPORTUNITY", meta: `${gaps[0].supplyN} games · ${gaps[0].appetite} median votes`, text: `<b>${gaps[0].label}</b> shows high demand with thin supply.` });
   const gems = await getHiddenGems(db, platform);
   if (gems.length)
     out.push({ kind: "gem", tag: "HIDDEN GEMS", meta: `${gems.length} found`, text: `<b>${gems.length} hidden gems</b> rank in the top 25% on rating with low vote volume.` });
