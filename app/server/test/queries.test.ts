@@ -36,6 +36,9 @@ describe("A3 overview", () => {
     expect(all.kpi.avgRating).toBeLessThanOrEqual(5);
     expect(typeof all.kpi.risingGenre).toBe("string");
     expect(all.kpi.avgRatingP90).toBeGreaterThanOrEqual(all.kpi.avgRating);
+    expect(all.kpi.risingGenre.length).toBeGreaterThan(0);
+    expect(typeof all.kpi.newGames).toBe("number");
+    expect(all.kpi.newGames).toBeGreaterThanOrEqual(0);
 
     const poki = await q.getOverview(db, "poki");
     const cg = await q.getOverview(db, "crazygames");

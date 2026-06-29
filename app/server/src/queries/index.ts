@@ -10,7 +10,7 @@ const WEEK_LABEL_BASE = 15;
 
 const fmtDate = (d: any) => new Date(d).toISOString().slice(5, 10); // "MM-DD"
 
-interface GenreDates { dates: string[]; order: string[]; byGenre: Record<string, number[]>; }
+interface GenreDates { dates: string[]; order: string[]; byGenre: Record<string, number[]>; daySpan: number; }
 async function genreVotesByDate(db: Querier, platform: Platform): Promise<GenreDates> {
   const rows = await db.query(
     `SELECT s.genre AS genre, s.captured_at AS d,
@@ -24,6 +24,7 @@ async function genreVotesByDate(db: Querier, platform: Platform): Promise<GenreD
   const times = [...new Set(rows.map((r) => new Date(r.d).getTime()))].sort((a, b) => a - b);
   const idx = new Map(times.map((t, i) => [t, i]));
   const dates = times.map((t) => fmtDate(t));
+  const daySpan = times.length > 1 ? (times[times.length - 1] - times[0]) / 86400000 : 0;
   const byGenre: Record<string, number[]> = {};
   const totalVotes: Record<string, number> = {};
   for (const r of rows) {
@@ -33,15 +34,14 @@ async function genreVotesByDate(db: Querier, platform: Platform): Promise<GenreD
     totalVotes[g] = (totalVotes[g] ?? 0) + num(r.med);
   }
   const order = Object.keys(byGenre).sort((a, b) => totalVotes[b] - totalVotes[a]);
-  return { dates, order, byGenre };
+  return { dates, order, byGenre, daySpan };
 }
 
-// velocity = (last - first) / spanDays, guarded for <2 points
-function velocity(values: number[]): number {
-  if (values.length < 2) return 0;
+// velocity = (last - first) / spanDays, guarded for <2 points or zero span
+function velocity(values: number[], daySpan: number): number {
+  if (values.length < 2 || daySpan <= 0) return 0;
   const first = values[0], last = values[values.length - 1];
-  const span = values.length - 1;
-  return span > 0 ? (last - first) / span : 0;
+  return (last - first) / daySpan;
 }
 
 function pf(platform: Platform): string {
@@ -279,7 +279,7 @@ export async function getNewReleases(db: Querier, platform: Platform): Promise<N
 
 export async function getInsights(db: Querier, platform: Platform): Promise<Insight[]> {
   const gd = await genreVotesByDate(db, platform);
-  const vels = gd.order.map((genre) => ({ genre, v: velocity(gd.byGenre[genre]) }));
+  const vels = gd.order.map((genre) => ({ genre, v: velocity(gd.byGenre[genre], gd.daySpan) }));
   const out: Insight[] = [];
   if (vels.length) {
     const top = vels.reduce((best, cur) => (cur.v > best.v ? cur : best), vels[0]);
@@ -318,7 +318,7 @@ async function getKPI(db: Querier, platform: Platform, gaps: MarketGap[]): Promi
   const vol = new Map(counts.map((r) => [r.genre, num(r.n)]));
   const rising = gd.order
     .filter((genre) => (vol.get(genre) ?? 0) >= MIN_VOL)
-    .map((genre) => ({ genre, v: velocity(gd.byGenre[genre]) }))
+    .map((genre) => ({ genre, v: velocity(gd.byGenre[genre], gd.daySpan) }))
     .sort((a, b) => b.v - a.v)[0] ?? { genre: "—", v: 0 };
   const p90 = await db.query(
     `SELECT percentile_cont(0.9) WITHIN GROUP (ORDER BY l.rating)::float AS p FROM v_latest l JOIN games g ON g.id = l.game_id JOIN sources src ON src.id = g.source_id WHERE g.is_live AND l.rating IS NOT NULL ${pf(platform)}`
