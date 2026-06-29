@@ -259,7 +259,7 @@ export async function getInsights(db: Querier, platform: Platform): Promise<Insi
     out.push({ kind: "gap", tag: "OPPORTUNITY", meta: `demand p${gaps[0].demand} · supply p${gaps[0].supply}`, text: `<b>${gaps[0].label}</b> shows high demand with thin supply.` });
   const gems = await getHiddenGems(db, platform);
   if (gems.length)
-    out.push({ kind: "gem", tag: "HIDDEN GEMS", meta: `${gems.length} found`, text: `<b>${gems.length} hidden gems</b> rate ≥ 4.4 with low visibility.` });
+    out.push({ kind: "gem", tag: "HIDDEN GEMS", meta: `${gems.length} found`, text: `<b>${gems.length} hidden gems</b> rank in the top 25% on rating with low vote volume.` });
   return out;
 }
 
