@@ -4,13 +4,14 @@ on:
     - cron: "0 20 * * *" # 20:00 UTC = 04:00 SGT (UTC+8) daily
   workflow_dispatch: {} # lets you trigger a run by hand from the Actions tab
 
-# ── Actions budget (private repo free tier = 2,000 min/month, ~30 daily runs) ──
-# Per run (measured ~2s/req browser, ~3-4s/app Steam): CrazyGames 250 ≈ 18 min,
-# Poki 250 ≈ 18 min, Steam 300 ≈ 18 min, migrate+install overhead ≈ 2 min.
-# ≈ 56 min/day typical → ~1,700 min/month; worst case ~62/day → ~1,880/month.
-# That keeps ~120-300 min headroom for manual re-runs under the 2,000 cap.
-# To go bigger: make the repo PUBLIC (unlimited Actions) and raise the limits below —
-# no secrets live in the code (they're in Actions/Netlify env), so it's safe to do so.
+# ── Actions budget (private repo free tier = 2,000 min/month, ~30-31 daily runs) ──
+# MEASURED on run 28423375066 (2026-06-30): CrazyGames 250 ≈ 19 min, Poki 250 ≈ 20 min,
+# Steam ≈ 5.6 s/app on Actions runners (3 endpoints + 1.5s politeness). migrate+install ≈ 2 min.
+# Steam 200 ≈ 19 min → total ≈ 60 min/run → ~1,800/mo (30) / ~1,860/mo (31): under cap,
+# ~150-200 min headroom for manual re-runs. (NOTE: the first run used Steam 300 ≈ 28 min →
+# ~68 min/run ≈ 2,050/mo, OVER cap — reduced to 200 below.)
+# To go bigger: make the repo PUBLIC (unlimited Actions) and raise the limits — no secrets
+# live in the code (they're in Actions/Netlify env), so publishing is safe.
 
 jobs:
   crawl:
@@ -42,4 +43,4 @@ jobs:
         run: npm run crawl:steam
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          CRAWL_LIMIT: "300"
+          CRAWL_LIMIT: "200"
