@@ -5,7 +5,7 @@ import type { Querier } from "../db/db.ts";
 import type { Platform } from "shared";
 import * as q from "../queries/index.ts";
 
-const PLATFORMS = ["all", "poki", "crazygames"];
+const PLATFORMS = ["all", "poki", "crazygames", "steam"];
 function parsePlatform(v: unknown): Platform {
   return (typeof v === "string" && PLATFORMS.includes(v) ? v : "all") as Platform;
 }
@@ -40,6 +40,14 @@ export function createApp(db: Querier) {
   app.get("/api/hidden-gems", async (req, res) => {
     res.json(await q.getHiddenGems(db, parsePlatform(req.query.platform)));
   });
+  app.get("/api/steam", async (_req, res) => {
+    try {
+      res.json(await q.getSteamOverview(db));
+    } catch (e) {
+      res.status(500).json({ error: String(e) });
+    }
+  });
+
   app.get("/api/genres", async (req, res) => res.json(await q.getGenres(db, parsePlatform(req.query.platform))));
   app.get("/api/developers", async (req, res) => res.json(await q.getDevelopers(db, parsePlatform(req.query.platform))));
   app.get("/api/new-releases", async (req, res) => res.json(await q.getNewReleases(db, parsePlatform(req.query.platform))));

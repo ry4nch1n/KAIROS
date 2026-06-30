@@ -491,3 +491,28 @@ CREATE TABLE library_items (
 | DB driver | — | `@electric-sql/pglite` (dev) / `pg` or `@neondatabase/serverless` (prod), behind one `query()` | Switch by `DATABASE_URL` presence; no code change between envs. |
 
 Everything else in §1–§11 (append-only snapshots, derived views, market-gap detector, AI insight pipeline, politeness, caching) stands unchanged.
+
+---
+
+## Phase 2 — Steam (PC) source (added 2026-06-30, data layer)
+
+Extends KAIROS beyond browser portals into PC-indie market intel, scoped to a **solo-dev funnel**: analytics default to the **indie-addressable cohort**; AAA is kept as demand context, not a benchmark.
+
+**Sources & endpoints (free, no API key):**
+- `store/api/appdetails` → price, release_date, genres, developers/publishers, metacritic
+- `store/appreviews/<id>?filter=summary` → `total_positive`/`total_reviews` → rating (0–5) + votes
+- `steamspy api.php` → owners (→ `plays`/`owners_est`), ccu, playtime, weighted tags
+- Seed: SteamSpy `tag=Indie` (indie coverage) + `top100in2weeks` + storefront `featuredcategories`, **round-robin merged** (`mergeSeeds`) so the AAA-heavy lists can't crowd out indies at small limits.
+
+**Schema additions (additive, idempotent `ALTER … IF NOT EXISTS` for Neon):** `games.release_date`; `game_snapshots.{price_cents, discount_pct, owners_est, ccu, median_playtime_min, metacritic, scale_tier}`. Time-varying metrics live on the append-only snapshot, consistent with rating/votes/plays.
+
+**Adapter (`crawler/steam.ts`):** pure, unit-tested transforms — `parseOwners`, `normalizeSteamRating`, `isSelfPublished`, `classifyScaleTier` (`hobby|small_indie|est_indie|aaa`, inferred from reviews+owners+self-published since Steam has no budget field), `parseReleaseDate`, `parseSteamGame` — plus a network `steamCrawl` orchestrator. Reuses the existing append-only `loadGames`.
+
+**Queries:** `getScaleTierBreakdown(platform)`; `getSteamGenreEconomics({cohort})` — per-genre games/median price/median rating/total owners/revenue-proxy, **indie-default** (excludes `aaa`), `cohort:'all'` for the demand-context view. `Platform` type + `pf()` extended with `'steam'`.
+
+**Run:** `npm run crawl:steam` (CRAWL_LIMIT caps). Live validation: `npx tsx server/scripts/validate-steam.ts`.
+
+**Deferred (next build):** promotion-capture homepage crawl (CrazyGames/Poki featured/trending → `featured`/`homepage_position`); React UI surfaces (Bridge / Comparables / Opportunity board + Steam in the platform selector) and their API routes; daily `crawl.yml` Steam step. Full design + rationale: `OneDrive\Claude-Config\handoff\` and the Phase 2 decision report (`Documents\Claude-Reviews\KAIROS-Phase2-Feasibility.html`).
+
+### Phase 2 UI (added 2026-06-30)
+Steam is a fourth platform in the GameRadar selector. Selecting it renders a dedicated **SteamView** (asymmetric — browser charts don't apply): KPIs (games / indie cohort / AAA context / rated %), a scale-tier distribution bar (`tierBarOption`, indie blue / AAA grey), a genre-economics table with an **indie ↔ all-tiers** cohort toggle (owners × price revenue proxy), and an indie **comparables** table. Served by `GET /api/steam` → `getSteamOverview()` (Express dev + Netlify function). Bridge (browser→Steam) and a Comparables deep-dive remain the next UI stage.

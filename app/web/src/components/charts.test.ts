@@ -6,6 +6,7 @@ import {
   heatmapOption,
   momentumOption,
   treemapOption,
+  tierBarOption,
 } from "./charts.ts";
 import type {
   ScatterPoint,
@@ -14,6 +15,7 @@ import type {
   FeatureHeatmap,
   GenreMomentum,
   TagFreq,
+  ScaleTierRow,
 } from "shared";
 
 // ---------------------------------------------------------------------------
@@ -192,5 +194,36 @@ describe("treemapOption", () => {
 
   it("series[0].data[0] maps tag→name and count→value", () => {
     expect(opt.series[0].data[0]).toEqual({ name: "3D", value: 168 });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 7. tierBarOption — scale-tier bars; AAA greyed, indie tiers blue
+// ---------------------------------------------------------------------------
+describe("tierBarOption", () => {
+  const tiers: ScaleTierRow[] = [
+    { tier: "hobby", games: 14 },
+    { tier: "aaa", games: 13 },
+    { tier: "small_indie", games: 10 },
+    { tier: "est_indie", games: 3 },
+  ];
+  const opt = tierBarOption(tiers) as any;
+
+  it("is a horizontal bar (yAxis category, xAxis value)", () => {
+    expect(opt.yAxis.type).toBe("category");
+    expect(opt.xAxis.type).toBe("value");
+  });
+
+  it("AAA bar is grey, indie bars are blue", () => {
+    const data = opt.series[0].data;
+    const aaa = data.find((d: any) => d.name === "aaa");
+    const hobby = data.find((d: any) => d.name === "hobby");
+    expect(aaa.itemStyle.color).toBe("#cbd5e1");
+    expect(hobby.itemStyle.color).toBe("#2563eb");
+  });
+
+  it("includes every tier and its count", () => {
+    const byName = Object.fromEntries(opt.series[0].data.map((d: any) => [d.name, d.value]));
+    expect(byName).toEqual({ hobby: 14, small_indie: 10, est_indie: 3, aaa: 13 });
   });
 });

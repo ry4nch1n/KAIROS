@@ -153,3 +153,25 @@ Mon/Thu brief routine  ─► brief_editions ├─► Neon ─► Netlify (KAIR
 **News Brief write-step (the only change to your current routine):** after it builds an edition and writes the local HTML + Notion copy as it does today, add a final call that upserts the structured edition into `brief_editions` (and optionally the rendered HTML). Because the brief routine may run on a workstation while the crawl runs in GitHub Actions, both simply need the Neon `DATABASE_URL` — they write to the same DB independently, on their own schedules. Nothing about the existing local-HTML or Notion output changes.
 
 **Local dev vs prod parity:** locally the whole command center runs against PGlite with one `npm run dev`; in prod the identical SQL/handlers run against Neon on Netlify. You verify locally, deploy unchanged.
+
+---
+
+## Phase 2 — Steam (PC) crawl (added 2026-06-30)
+
+```
+# crawl real Steam data into the DB (PGlite locally, or Neon if DATABASE_URL set)
+cd app && CRAWL_LIMIT=150 npm run crawl:steam
+
+# live end-to-end validation (in-memory; prints tier distribution + indie genre economics)
+cd app && STEAM_VALIDATE_LIMIT=18 npx tsx server/scripts/validate-steam.ts
+```
+
+- No API keys. Three free endpoints per app (appdetails + appreviews + SteamSpy), throttled ~1.5s/app.
+- **Seed is indie-aware** (`mergeSeeds` round-robins SteamSpy `tag=Indie` + `top100in2weeks` + storefront featured) so the sample isn't all-AAA.
+- **SteamSpy rate limits:** the `all` endpoint is 1 req/min — *not used*; only `top100in2weeks` + per-app `appdetails` (fine). Keep `CRAWL_LIMIT` modest to stay polite and inside the GitHub Actions free budget (private repo) — Steam adds ~10–15 min/day at ~150 apps.
+- Schema migration is additive + idempotent: `npm run db:migrate` (or the seed/crawl applies schema locally) adds the new columns on existing Neon without data loss.
+
+### Phase 2 — viewing Steam analytics in the app
+1. `cd app && npm run db:seed` then `CRAWL_LIMIT=40 npm run crawl:steam` (populate local DB; prod uses the daily crawl).
+2. `npm run dev` → open http://localhost:5173 → GameRadar → click the **Steam** platform tab.
+3. The Steam tab reads `GET /api/steam`; toggle the genre-economics cohort between **Indie** (default) and **All tiers** (demand context). Steam data shows only after a Steam crawl has populated the DB.

@@ -3,7 +3,7 @@
 
 CREATE TABLE IF NOT EXISTS sources (
   id        SERIAL PRIMARY KEY,
-  name      TEXT UNIQUE NOT NULL,        -- 'poki' | 'crazygames'
+  name      TEXT UNIQUE NOT NULL,        -- 'poki' | 'crazygames' | 'steam'
   base_url  TEXT NOT NULL,
   active    BOOLEAN DEFAULT TRUE
 );
@@ -20,6 +20,7 @@ CREATE TABLE IF NOT EXISTS games (
   engine         TEXT,
   orientation    TEXT,
   mobile         BOOLEAN,
+  release_date   DATE,                   -- Phase 2: stable per-game (Steam appdetails)
   first_seen_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
   last_seen_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
   is_live        BOOLEAN DEFAULT TRUE,
@@ -48,9 +49,27 @@ CREATE TABLE IF NOT EXISTS game_snapshots (
   featured      BOOLEAN DEFAULT FALSE,
   trending      BOOLEAN DEFAULT FALSE,
   genre         TEXT,
+  -- Phase 2: Steam / PC time-varying metrics (null for browser sources)
+  price_cents         INT,
+  discount_pct        INT,
+  owners_est          BIGINT,   -- SteamSpy owners-bucket midpoint
+  ccu                 INT,      -- concurrent players
+  median_playtime_min INT,      -- SteamSpy median_forever (minutes)
+  metacritic          INT,
+  scale_tier          TEXT,     -- 'hobby' | 'small_indie' | 'est_indie' | 'aaa'
   UNIQUE (game_id, crawl_id)
 );
 CREATE INDEX IF NOT EXISTS idx_snap_game_time ON game_snapshots (game_id, captured_at DESC);
+
+-- Phase 2 additive migration for already-provisioned DBs (Neon). Idempotent.
+ALTER TABLE games          ADD COLUMN IF NOT EXISTS release_date        DATE;
+ALTER TABLE game_snapshots ADD COLUMN IF NOT EXISTS price_cents         INT;
+ALTER TABLE game_snapshots ADD COLUMN IF NOT EXISTS discount_pct        INT;
+ALTER TABLE game_snapshots ADD COLUMN IF NOT EXISTS owners_est          BIGINT;
+ALTER TABLE game_snapshots ADD COLUMN IF NOT EXISTS ccu                 INT;
+ALTER TABLE game_snapshots ADD COLUMN IF NOT EXISTS median_playtime_min INT;
+ALTER TABLE game_snapshots ADD COLUMN IF NOT EXISTS metacritic          INT;
+ALTER TABLE game_snapshots ADD COLUMN IF NOT EXISTS scale_tier          TEXT;
 
 CREATE TABLE IF NOT EXISTS tags (
   id   SERIAL PRIMARY KEY,

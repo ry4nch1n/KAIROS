@@ -1,6 +1,6 @@
 // ECharts option builders from API shapes. Mirrors the approved light-mode mockup.
 import type { EChartsOption } from "echarts";
-import type { GenreMomentum, TagFreq, ScatterPoint, FeatureHeatmap, GenreLandscapePoint, GenreVelocityBar } from "shared";
+import type { GenreMomentum, TagFreq, ScatterPoint, FeatureHeatmap, GenreLandscapePoint, GenreVelocityBar, ScaleTierRow } from "shared";
 
 const AX = "#64748b", GRID = "#e6ecf5", FONT = "'Fira Code', monospace";
 const LINE_COLORS = ["#059669", "#2563eb", "#d97706", "#dc2626"];
@@ -113,6 +113,28 @@ export function landscapeOption(pts: GenreLandscapePoint[]): EChartsOption {
       itemStyle: { color: "rgba(37,99,235,.45)", borderColor: "#1e3a8a", borderWidth: 1 },
       label: { show: true, formatter: (p: any) => p.value[3], position: "right", color: AX, fontFamily: FONT, fontSize: 9 },
       labelLayout: { hideOverlap: true },
+    }],
+  };
+}
+
+// Scale-tier distribution. Indie tiers blue, AAA greyed (it's demand-context, not benchmark).
+const TIER_ORDER = ["hobby", "small_indie", "est_indie", "aaa"];
+const TIER_LABEL: Record<string, string> = {
+  hobby: "Hobby / solo", small_indie: "Small indie", est_indie: "Est. indie / AA", aaa: "AAA (context)",
+};
+export function tierBarOption(tiers: ScaleTierRow[]): EChartsOption {
+  const map = new Map(tiers.map((t) => [t.tier, t.games]));
+  // reverse so the indie tiers sit on top, AAA at the bottom of the horizontal bar
+  const rows = [...TIER_ORDER].reverse().map((t) => ({ tier: t, games: map.get(t) ?? 0 }));
+  return {
+    tooltip: { ...tip, formatter: (p: any) => `${p.name}<br><b>${p.value}</b> games` },
+    grid: { left: 124, right: 40, top: 8, bottom: 24 },
+    xAxis: { type: "value", axisLabel: { color: AX, fontFamily: FONT, fontSize: 9 }, splitLine: { lineStyle: { color: GRID } } },
+    yAxis: { type: "category", data: rows.map((r) => TIER_LABEL[r.tier]), axisLabel: { color: AX, fontFamily: FONT, fontSize: 10 }, axisLine: { lineStyle: { color: GRID } } },
+    series: [{
+      type: "bar", barWidth: "58%",
+      data: rows.map((r) => ({ value: r.games, name: r.tier, itemStyle: { color: r.tier === "aaa" ? "#cbd5e1" : "#2563eb" } })),
+      label: { show: true, position: "right", color: AX, fontFamily: FONT, fontSize: 10, fontWeight: 600, formatter: (p: any) => String(p.value) },
     }],
   };
 }

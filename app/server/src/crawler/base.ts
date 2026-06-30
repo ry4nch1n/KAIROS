@@ -14,6 +14,16 @@ export interface RawGame {
   rating: number | null; // normalized 0-5
   votes: number | null;
   featured: boolean;
+  // ── Phase 2: Steam / PC fields (optional; null/undefined for browser sources) ──
+  releaseDate?: string | null;       // ISO YYYY-MM-DD
+  plays?: number | null;             // owners estimate (also mirrored to owners_est)
+  ownersEst?: number | null;         // SteamSpy owners-bucket midpoint
+  priceCents?: number | null;
+  discountPct?: number | null;
+  ccu?: number | null;               // concurrent players
+  medianPlaytimeMin?: number | null;
+  metacritic?: number | null;
+  scaleTier?: string | null;         // 'hobby' | 'small_indie' | 'est_indie' | 'aaa'
 }
 
 export interface SourceAdapter {

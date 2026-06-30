@@ -46,23 +46,27 @@ export async function loadGames(
     try {
       const game = await one(
         db,
-        `INSERT INTO games(source_id, source_game_id, url, title, thumbnail_url, developer, description, engine, orientation, mobile, last_seen_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+        `INSERT INTO games(source_id, source_game_id, url, title, thumbnail_url, developer, description, engine, orientation, mobile, release_date, last_seen_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
          ON CONFLICT (source_id, source_game_id) DO UPDATE SET
            url = EXCLUDED.url, title = EXCLUDED.title, thumbnail_url = EXCLUDED.thumbnail_url,
            developer = EXCLUDED.developer, description = EXCLUDED.description, engine = EXCLUDED.engine,
-           orientation = EXCLUDED.orientation, mobile = EXCLUDED.mobile, last_seen_at = EXCLUDED.last_seen_at,
-           is_live = true
+           orientation = EXCLUDED.orientation, mobile = EXCLUDED.mobile,
+           release_date = COALESCE(EXCLUDED.release_date, games.release_date),
+           last_seen_at = EXCLUDED.last_seen_at, is_live = true
          RETURNING id`,
-        [sourceId, s(r.sourceGameId), s(r.url), s(r.title), s(r.thumbnailUrl), s(r.developer), s(r.description), s(r.engine), s(r.orientation), r.mobile, crawlDateISO]
+        [sourceId, s(r.sourceGameId), s(r.url), s(r.title), s(r.thumbnailUrl), s(r.developer), s(r.description), s(r.engine), s(r.orientation), r.mobile, r.releaseDate ?? null, crawlDateISO]
       );
       const gameId = game.id as number;
 
       const before = await db.query(
-        `INSERT INTO game_snapshots(game_id, crawl_id, captured_at, rating, votes, featured, genre)
-         VALUES ($1,$2,$3,$4,$5,$6,$7)
+        `INSERT INTO game_snapshots(game_id, crawl_id, captured_at, rating, votes, plays, featured, genre,
+           price_cents, discount_pct, owners_est, ccu, median_playtime_min, metacritic, scale_tier)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
          ON CONFLICT (game_id, crawl_id) DO NOTHING RETURNING id`,
-        [gameId, crawlId, crawlDateISO, r.rating, r.votes, r.featured, s(r.genre)]
+        [gameId, crawlId, crawlDateISO, r.rating, r.votes, r.plays ?? null, r.featured, s(r.genre),
+         r.priceCents ?? null, r.discountPct ?? null, r.ownersEst ?? null, r.ccu ?? null,
+         r.medianPlaytimeMin ?? null, r.metacritic ?? null, r.scaleTier ?? null]
       );
       if (before.length) inserted++;
 

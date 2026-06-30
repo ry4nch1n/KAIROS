@@ -4,6 +4,7 @@ import type {
   Platform, Overview, OverviewKPI, GenreMomentum, TagFreq, ScatterPoint,
   HiddenGem, MarketGap, FeatureHeatmap, Insight, BriefEditionMeta, BriefEdition,
   GenreRow, DeveloperRow, NewRelease, GenreLandscapePoint, GenreVelocityBar, GlossaryRow,
+  ScaleTierRow, SteamGenreEconomics, SteamCohort, SteamComparable, SteamOverview,
 } from "shared";
 
 const fmtDate = (d: any) => new Date(d).toISOString().slice(5, 10); // "MM-DD"
@@ -166,11 +167,16 @@ function velocity(values: number[], daySpan: number): number {
 function pf(platform: Platform): string {
   if (platform === "poki") return "AND src.name = 'poki'";
   if (platform === "crazygames") return "AND src.name = 'crazygames'";
-  return "";
+  if (platform === "steam") return "AND src.name = 'steam'";
+  // "all" = all BROWSER platforms only. Steam is an asymmetric surface (its own view,
+  // different metric semantics + crawl cadence) and must never feed browser analytics —
+  // mixing it corrupts vote-velocity/momentum via cross-source date misalignment.
+  return "AND src.name IN ('poki','crazygames')";
 }
 function subtitleFor(platform: Platform): string {
   if (platform === "poki") return "Poki · last 90 days";
   if (platform === "crazygames") return "CrazyGames · last 90 days";
+  if (platform === "steam") return "Steam (PC) · last 90 days";
   return "Poki + CrazyGames · last 90 days";
 }
 const num = (v: any) => (v === null || v === undefined ? 0 : Number(v));
@@ -496,6 +502,91 @@ export async function getOverview(db: Querier, platform: Platform): Promise<Over
   const tagNames = [...new Set([...gaps.map((g) => g.tag), ...tags.map((t) => t.tag)])];
   const glossary: GlossaryRow[] = await getTagGlossary(db, platform, tagNames);
   return { kpi, momentum, tags, scatter, heatmap, gaps, insights, landscape, velocityBars, glossary, platform, subtitle: subtitleFor(platform) };
+}
+
+// ── Phase 2: Steam / PC analytics ──
+
+// Distribution of games across inferred market-scale tiers (hobby → aaa).
+export async function getScaleTierBreakdown(db: Querier, platform: Platform): Promise<ScaleTierRow[]> {
+  const rows = await db.query(
+    `SELECT l.scale_tier AS tier, count(*)::int AS games
+     FROM v_latest l JOIN games g ON g.id = l.game_id JOIN sources src ON src.id = g.source_id
+     WHERE g.is_live AND l.scale_tier IS NOT NULL ${pf(platform)}
+     GROUP BY l.scale_tier ORDER BY games DESC`
+  );
+  return rows.map((r) => ({ tier: r.tier, games: num(r.games) }));
+}
+
+// Per-genre economics for Steam, defaulting to the indie-addressable cohort
+// (AAA excluded so its outliers don't distort the benchmark medians — see Phase 2 design).
+export async function getSteamGenreEconomics(
+  db: Querier,
+  opts?: { cohort?: SteamCohort }
+): Promise<SteamGenreEconomics[]> {
+  const cohort = opts?.cohort ?? "indie";
+  const tierFilter = cohort === "indie" ? "AND (l.scale_tier IS NULL OR l.scale_tier <> 'aaa')" : "";
+  const rows = await db.query(
+    `SELECT l.genre AS genre, count(*)::int AS games,
+            percentile_cont(0.5) WITHIN GROUP (ORDER BY l.price_cents)::float AS med_price,
+            percentile_cont(0.5) WITHIN GROUP (ORDER BY l.rating)::float AS med_rating,
+            coalesce(sum(l.owners_est), 0)::float AS total_owners,
+            coalesce(sum(l.owners_est * l.price_cents), 0)::float AS rev_cents
+     FROM v_latest l JOIN games g ON g.id = l.game_id JOIN sources src ON src.id = g.source_id
+     WHERE g.is_live AND src.name = 'steam' AND l.genre IS NOT NULL ${tierFilter}
+     GROUP BY l.genre ORDER BY total_owners DESC`
+  );
+  return rows.map((r) => ({
+    genre: r.genre,
+    games: num(r.games),
+    medianPriceCents: Math.round(num(r.med_price)),
+    medianRating: r.med_rating == null ? null : +Number(r.med_rating).toFixed(2),
+    totalOwners: num(r.total_owners),
+    revenueProxy: Math.round(num(r.rev_cents) / 100),
+  }));
+}
+
+// Indie-tier rated games ordered by owners — the realistic "comparables" peer set.
+export async function getSteamComparables(db: Querier, limit = 12): Promise<SteamComparable[]> {
+  const rows = await db.query(
+    `SELECT g.title, l.scale_tier AS tier, l.genre, l.rating, l.votes,
+            l.owners_est AS owners, l.price_cents AS price, g.developer
+     FROM v_latest l JOIN games g ON g.id = l.game_id JOIN sources src ON src.id = g.source_id
+     WHERE g.is_live AND src.name = 'steam' AND l.rating IS NOT NULL
+       AND (l.scale_tier IS NULL OR l.scale_tier <> 'aaa')
+     ORDER BY l.owners_est DESC NULLS LAST, l.votes DESC NULLS LAST
+     LIMIT $1`,
+    [limit]
+  );
+  return rows.map((r) => ({
+    title: r.title, tier: r.tier ?? "—", genre: r.genre ?? "—",
+    rating: r.rating == null ? null : +Number(r.rating).toFixed(2),
+    votes: r.votes == null ? null : num(r.votes),
+    owners: r.owners == null ? null : num(r.owners),
+    priceCents: r.price == null ? null : num(r.price),
+    developer: r.developer ?? null,
+  }));
+}
+
+// Composed Steam screen payload: KPIs + tier mix + both cohorts + comparables.
+export async function getSteamOverview(db: Querier): Promise<SteamOverview> {
+  const [tiers, indie, all, comparables] = await Promise.all([
+    getScaleTierBreakdown(db, "steam"),
+    getSteamGenreEconomics(db, { cohort: "indie" }),
+    getSteamGenreEconomics(db, { cohort: "all" }),
+    getSteamComparables(db, 14),
+  ]);
+  const games = tiers.reduce((s, t) => s + t.games, 0);
+  const aaa = tiers.find((t) => t.tier === "aaa")?.games ?? 0;
+  const rated = (await db.query(
+    `SELECT count(*) FILTER (WHERE l.rating IS NOT NULL)::int AS r, count(*)::int AS n
+     FROM v_latest l JOIN games g ON g.id = l.game_id JOIN sources src ON src.id = g.source_id
+     WHERE g.is_live AND src.name = 'steam'`
+  ))[0];
+  return {
+    kpi: { games, indie: games - aaa, aaa, ratedPct: num(rated.n) ? Math.round((num(rated.r) / num(rated.n)) * 100) : 0 },
+    tiers, indie, all, comparables,
+    subtitle: "Steam (PC) · indie-addressable cohort default",
+  };
 }
 
 // ── Brief ──

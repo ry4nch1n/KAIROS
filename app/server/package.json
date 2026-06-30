@@ -9,6 +9,7 @@
     "migrate": "tsx src/db/migrate.ts",
     "crawl:crazygames": "tsx src/crawler/run.ts crazygames",
     "crawl:poki": "tsx src/crawler/run.ts poki",
+    "crawl:steam": "tsx src/crawler/run.ts steam",
     "test": "vitest run"
   },
   "dependencies": {

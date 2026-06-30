@@ -1,6 +1,38 @@
 // Shared types across web + server. Single source of truth for API shapes.
 
-export type Platform = "all" | "poki" | "crazygames";
+export type Platform = "all" | "poki" | "crazygames" | "steam";
+
+// ── Phase 2: Steam / PC analytics ──
+export interface ScaleTierRow { tier: string; games: number; }
+export type SteamCohort = "indie" | "all";
+export interface SteamGenreEconomics {
+  genre: string;
+  games: number;
+  medianPriceCents: number;
+  medianRating: number | null; // null when the cohort has no rated games yet (honest, not 0)
+  totalOwners: number;
+  revenueProxy: number; // owners × price, in dollars (rough monetizability signal)
+}
+
+export interface SteamComparable {
+  title: string;
+  tier: string;
+  genre: string;
+  rating: number | null;
+  votes: number | null;
+  owners: number | null;
+  priceCents: number | null;
+  developer: string | null;
+}
+
+export interface SteamOverview {
+  kpi: { games: number; indie: number; aaa: number; ratedPct: number };
+  tiers: ScaleTierRow[];
+  indie: SteamGenreEconomics[]; // indie-addressable cohort (default benchmark)
+  all: SteamGenreEconomics[];   // all tiers incl. AAA (demand-context view)
+  comparables: SteamComparable[];
+  subtitle: string;
+}
 
 export interface OverviewKPI {
   gamesTracked: number;

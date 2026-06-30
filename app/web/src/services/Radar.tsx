@@ -1,17 +1,35 @@
 import { useEffect, useState } from "react";
-import type { Overview, Platform, GenreRow, DeveloperRow, NewRelease, HiddenGem } from "shared";
+import type { Overview, Platform, GenreRow, DeveloperRow, NewRelease, HiddenGem, SteamOverview, SteamGenreEconomics } from "shared";
 import { api } from "../lib/api.ts";
 import { EChart } from "../components/EChart.tsx";
-import { momentumOption, treemapOption, scatterOption, heatmapOption, landscapeOption, velocityBarOption } from "../components/charts.ts";
+import { momentumOption, treemapOption, scatterOption, heatmapOption, landscapeOption, velocityBarOption, tierBarOption } from "../components/charts.ts";
 import { InsightSvg, tagClass } from "../components/icons.tsx";
 
 const fmt = (n: number) => n.toLocaleString("en-US");
 const MIN_TREND_DAYS = 5;
+// "All Browser" = combined browser platforms (Poki + CrazyGames). Steam is separate
+// (its own asymmetric surface), so the grouping label makes the scope explicit.
 const PLATFORMS: { id: Platform; label: string }[] = [
-  { id: "all", label: "All" },
+  { id: "all", label: "All Browser" },
   { id: "poki", label: "Poki" },
   { id: "crazygames", label: "CrazyGames" },
+  { id: "steam", label: "Steam" },
 ];
+
+// ── Steam formatting helpers ──
+const fmtOwners = (n: number | null) =>
+  n == null ? "—" : n >= 1e6 ? (n / 1e6).toFixed(2) + "M" : n >= 1e3 ? Math.round(n / 1e3) + "K" : String(n);
+const money = (cents: number | null) =>
+  cents == null ? "—" : cents === 0 ? "Free" : "$" + (cents / 100).toFixed(2);
+const proxy = (d: number) =>
+  d >= 1e9 ? "$" + (d / 1e9).toFixed(1) + "B" : d >= 1e6 ? "$" + (d / 1e6).toFixed(2) + "M" : d >= 1e3 ? "$" + Math.round(d / 1e3) + "K" : "$" + d;
+const rate = (r: number | null) => (r == null ? "—" : r.toFixed(2));
+const TIER_META: Record<string, { label: string; cls: string }> = {
+  hobby: { label: "hobby", cls: "t-hobby" },
+  small_indie: { label: "small", cls: "t-small" },
+  est_indie: { label: "est. indie", cls: "t-est" },
+  aaa: { label: "AAA", cls: "t-aaa" },
+};
 
 type View = "overview" | "genres" | "tags" | "developers" | "trends" | "hidden-gems" | "new-releases" | "market-gaps";
 const I = {
@@ -23,6 +41,8 @@ const I = {
   gems: <svg viewBox="0 0 24 24"><path d="M12 3l2.5 5.5L20 9l-4 4 1 6-5-3-5 3 1-6-4-4 5.5-.5z" /></svg>,
   releases: <svg viewBox="0 0 24 24"><path d="M5 12h14M12 5v14" /><circle cx="12" cy="12" r="9" /></svg>,
   gaps: <svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 10 10" /><path d="M12 2v10l7-7" /></svg>,
+  steam: <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" /><circle cx="15" cy="9" r="2.5" /><path d="M6 14l4 1.6" /><circle cx="9.5" cy="15.5" r="1.6" /></svg>,
+  money: <svg viewBox="0 0 24 24"><path d="M12 3v18M8 7h6a2.5 2.5 0 0 1 0 5H9a2.5 2.5 0 0 0 0 5h7" /></svg>,
 };
 
 const Skel = ({ h = 300 }: { h?: number }) => <div className="card"><div className="skeleton" style={{ height: h }} /></div>;
@@ -175,24 +195,95 @@ function NewReleasesView({ rows }: { rows: NewRelease[] }) {
   );
 }
 
+function EconTable({ rows }: { rows: SteamGenreEconomics[] }) {
+  return (
+    <table className="dtable"><thead><tr><th>Genre</th><th className="r">Games</th><th className="r">Median price</th><th className="r">Median rating</th><th className="r">Total owners</th><th className="r">Revenue proxy</th></tr></thead>
+      <tbody>{rows.map((r) => (
+        <tr key={r.genre}><td className="gname">{r.genre}</td>
+          <td className="r">{r.games}</td><td className="r">{money(r.medianPriceCents)}</td>
+          <td className="r">{rate(r.medianRating)}</td><td className="r">{fmtOwners(r.totalOwners)}</td>
+          <td className="r" style={{ fontWeight: 600 }}>{proxy(r.revenueProxy)}</td></tr>
+      ))}</tbody></table>
+  );
+}
+
+function SteamView({ data }: { data: SteamOverview }) {
+  const [cohort, setCohort] = useState<"indie" | "all">("indie");
+  const econ = cohort === "indie" ? data.indie : data.all;
+  return (
+    <>
+      <div className="kpis">
+        <div className="kpi"><div className="label">{I.steam}Steam games</div><div className="val num">{fmt(data.kpi.games)}</div><span className="delta flat num">{data.kpi.ratedPct}% have reviews</span></div>
+        <div className="kpi accent"><div className="label">{I.gems}Indie cohort</div><div className="val num">{fmt(data.kpi.indie)}</div><span className="delta up num">addressable for a solo dev</span></div>
+        <div className="kpi"><div className="label">{I.overview}AAA (context)</div><div className="val num">{fmt(data.kpi.aaa)}</div><span className="delta flat num">excluded from benchmarks</span></div>
+        <div className="kpi"><div className="label">{I.money}Cohort default</div><div className="val num" style={{ fontSize: 22, paddingTop: 6 }}>indie</div><span className="delta flat num">AAA quarantined</span></div>
+      </div>
+
+      <div className="card hero">{head(I.overview, "Scale-tier distribution", "inferred from reviews + owners + self-published · blue = indie cohort, grey = AAA context")}
+        <EChart option={tierBarOption(data.tiers)} style={{ minHeight: 240 }} /></div>
+
+      <div className="card">
+        <h3>{I.money}Genre economics
+          <span className="sub">owners × realized price — what a genre is worth at this scale</span>
+          <span className="seg" role="tablist" aria-label="Cohort" style={{ marginLeft: "auto" }}>
+            <button className={"seg-btn" + (cohort === "indie" ? " active" : "")} onClick={() => setCohort("indie")}>Indie</button>
+            <button className={"seg-btn" + (cohort === "all" ? " active" : "")} onClick={() => setCohort("all")}>All tiers</button>
+          </span>
+        </h3>
+        {cohort === "all" && <p className="view-head">All tiers include AAA — owners/revenue are dominated by mega-hits and are <b>not</b> a realistic solo-dev benchmark. Use for demand context only.</p>}
+        <EconTable rows={econ} />
+      </div>
+
+      <div className="card">{head(I.gems, "Indie comparables", "the realistic peer set — indie-tier games by owners")}
+        <table className="dtable"><thead><tr><th>Game</th><th>Tier</th><th>Genre</th><th className="r">Rating</th><th className="r">Reviews</th><th className="r">Owners</th><th className="r">Price</th><th>Developer</th></tr></thead>
+          <tbody>{data.comparables.map((c, i) => {
+            const tm = TIER_META[c.tier] ?? { label: c.tier, cls: "t-hobby" };
+            return (
+              <tr key={i}><td className="gname">{c.title}</td>
+                <td><span className={"tier-chip " + tm.cls}>{tm.label}</span></td>
+                <td>{c.genre}</td><td className="r">{rate(c.rating)}</td><td className="r">{c.votes == null ? "—" : fmt(c.votes)}</td>
+                <td className="r">{fmtOwners(c.owners)}</td><td className="r">{money(c.priceCents)}</td>
+                <td style={{ color: "var(--ink-3, #6b7280)" }}>{c.developer ?? "—"}</td></tr>
+            );
+          })}</tbody></table>
+      </div>
+
+      <div className="card" style={{ background: "#f6f9ff", borderStyle: "dashed" }}>
+        <p style={{ margin: 0, fontSize: 13, lineHeight: 1.65, color: "var(--ink-2, #475569)" }}>
+          <b>Reading this:</b> analytics default to the <b>indie-addressable cohort</b> (hobby + small + established indie). AAA is captured for demand context but quarantined so its mega-hits don't distort the benchmarks. Owners are SteamSpy bucket midpoints; revenue proxy = owners × current price (directional, not a P&amp;L). The <b>Bridge</b> (browser→Steam) and <b>Comparables</b> deep-dive are the next build stage.
+        </p>
+      </div>
+    </>
+  );
+}
+
 /* ───────────── shell ───────────── */
 export function Radar({ hidden }: { hidden: boolean }) {
   const [platform, setPlatform] = useState<Platform>("all");
   const [view, setView] = useState<View>("overview");
   const [ov, setOv] = useState<Overview | null>(null);
+  const [steam, setSteam] = useState<SteamOverview | null>(null);
   const [extra, setExtra] = useState<any>(null);
   const [err, setErr] = useState<string | null>(null);
+  const isSteam = platform === "steam";
 
   useEffect(() => {
     let on = true;
-    setOv(null); setErr(null);
-    api.overview(platform).then((d) => on && setOv(d), (e) => on && setErr(String(e)));
+    setErr(null);
+    if (isSteam) {
+      setSteam(null);
+      api.steam().then((d) => on && setSteam(d), (e) => on && setErr(String(e)));
+    } else {
+      setOv(null);
+      api.overview(platform).then((d) => on && setOv(d), (e) => on && setErr(String(e)));
+    }
     return () => { on = false; };
   }, [platform]);
 
   useEffect(() => {
     let on = true;
     setExtra(null);
+    if (isSteam) return () => { on = false; };
     const f = view === "genres" ? api.genres(platform) : view === "developers" ? api.developers(platform)
       : view === "new-releases" ? api.newReleases(platform) : view === "hidden-gems" ? api.hiddenGems(platform) : null;
     if (f) f.then((d) => on && setExtra(d));
@@ -206,7 +297,7 @@ export function Radar({ hidden }: { hidden: boolean }) {
     </a>
   );
 
-  const subtitle = ov ? ov.subtitle : "loading…";
+  const subtitle = isSteam ? (steam ? steam.subtitle : "loading…") : (ov ? ov.subtitle : "loading…");
 
   return (
     <section className="service" data-svc="radar" hidden={hidden}>
@@ -222,12 +313,12 @@ export function Radar({ hidden }: { hidden: boolean }) {
         {navItem("hidden-gems", I.gems, "Hidden Gems", ov ? gems : undefined)}
         {navItem("new-releases", I.releases, "New Releases", ov ? ov.kpi.newGames : undefined)}
         {navItem("market-gaps", I.gaps, "Market Gaps", ov ? ov.kpi.openGaps : undefined)}
-        <div className="side-foot"><span className="pulse"></span>Crawl OK · {ov ? fmt(ov.kpi.gamesTracked) : "…"} games<br />live · Neon</div>
+        <div className="side-foot"><span className="pulse"></span>Crawl OK · {isSteam ? (steam ? fmt(steam.kpi.games) : "…") : (ov ? fmt(ov.kpi.gamesTracked) : "…")} games<br />live · Neon</div>
       </aside>
 
       <main className="main">
         <div className="topbar">
-          <h2>Market Overview <small>{subtitle}</small></h2>
+          <h2>{isSteam ? "Steam (PC) Market" : "Market Overview"} <small>{subtitle}</small></h2>
           <div className="seg" role="tablist" aria-label="Platform">
             {PLATFORMS.map((p) => (
               <button key={p.id} className={"seg-btn" + (platform === p.id ? " active" : "")} role="tab" aria-selected={platform === p.id} onClick={() => setPlatform(p.id)}>
@@ -239,14 +330,20 @@ export function Radar({ hidden }: { hidden: boolean }) {
 
         <div className="content">
           {err && <div className="card" style={{ color: "var(--red)" }}>Failed to load: {err}</div>}
-          {view === "overview" && (ov ? <OverviewView ov={ov} /> : <Skel />)}
-          {view === "genres" && (extra ? <GenresView rows={extra} /> : <Skel />)}
-          {view === "tags" && (ov ? <TagsView ov={ov} /> : <Skel />)}
-          {view === "developers" && (extra ? <DevelopersView rows={extra} platform={platform} /> : <Skel />)}
-          {view === "trends" && (ov ? <TrendsView ov={ov} /> : <Skel />)}
-          {view === "hidden-gems" && (ov ? <GemsView ov={ov} rows={extra} /> : <Skel />)}
-          {view === "new-releases" && (extra ? <NewReleasesView rows={extra} /> : <Skel />)}
-          {view === "market-gaps" && (ov ? <div className="card">{head(I.gaps, "Market Gaps", "ranked by opportunity score")}<GapList gaps={ov.gaps} /></div> : <Skel />)}
+          {isSteam ? (
+            steam ? <SteamView data={steam} /> : <Skel />
+          ) : (
+            <>
+              {view === "overview" && (ov ? <OverviewView ov={ov} /> : <Skel />)}
+              {view === "genres" && (extra ? <GenresView rows={extra} /> : <Skel />)}
+              {view === "tags" && (ov ? <TagsView ov={ov} /> : <Skel />)}
+              {view === "developers" && (extra ? <DevelopersView rows={extra} platform={platform} /> : <Skel />)}
+              {view === "trends" && (ov ? <TrendsView ov={ov} /> : <Skel />)}
+              {view === "hidden-gems" && (ov ? <GemsView ov={ov} rows={extra} /> : <Skel />)}
+              {view === "new-releases" && (extra ? <NewReleasesView rows={extra} /> : <Skel />)}
+              {view === "market-gaps" && (ov ? <div className="card">{head(I.gaps, "Market Gaps", "ranked by opportunity score")}<GapList gaps={ov.gaps} /></div> : <Skel />)}
+            </>
+          )}
           <div className="foot-note">KAIROS · GameRadar · live from Neon · platform via source_id</div>
         </div>
       </main>

@@ -199,3 +199,11 @@ button{font-family:inherit}
 .loading-chart{width:100%;min-height:240px}
 
 @media(max-width:1080px){.kpis{grid-template-columns:repeat(2,1fr)}.g-2,.g-2b,.ref-grid{grid-template-columns:1fr}.service{grid-template-columns:1fr}.side{display:none}.ghost-row{grid-template-columns:repeat(2,1fr)}}
+
+/* Phase 2 — Steam platform */
+.dot.steam{background:#1b6ec2}
+.tier-chip{display:inline-block;font-family:'Fira Code';font-size:10px;font-weight:600;letter-spacing:.03em;padding:2px 7px;border-radius:999px;white-space:nowrap}
+.tier-chip.t-hobby{background:#e7edfa;color:#1e40af}
+.tier-chip.t-small{background:#dbeafe;color:#1d4ed8}
+.tier-chip.t-est{background:#e0e7ff;color:#4338ca}
+.tier-chip.t-aaa{background:#eef2f7;color:#64748b}

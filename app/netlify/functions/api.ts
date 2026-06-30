@@ -4,7 +4,7 @@ import { appDb } from "../../server/src/db/db.ts";
 import * as q from "../../server/src/queries/index.ts";
 import type { Platform } from "shared";
 
-const PLATFORMS = ["all", "poki", "crazygames"];
+const PLATFORMS = ["all", "poki", "crazygames", "steam"];
 const pp = (v: string | null): Platform => (v && PLATFORMS.includes(v) ? v : "all") as Platform;
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), {
@@ -40,6 +40,7 @@ export default async (req: Request) => {
       return json({ ok: true, deleted: date });
     }
     if (path === "/overview") return json(await q.getOverview(db, platform));
+    if (path === "/steam") return json(await q.getSteamOverview(db));
     if (path === "/hidden-gems") return json(await q.getHiddenGems(db, platform));
     if (path === "/genres") return json(await q.getGenres(db, platform));
     if (path === "/developers") return json(await q.getDevelopers(db, platform));
