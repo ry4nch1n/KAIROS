@@ -370,6 +370,70 @@ describe("D15 platform 'all' is browser-only — Steam never pollutes browser an
   });
 });
 
+async function seedSteamRich(db: Querier) {
+  await loadGames(db, "steam", STEAM_BASE_URL, [
+    steamGame({ sourceGameId: "1", genre: "Action", scaleTier: "small_indie", priceCents: 1500, ownersEst: 200_000, rating: 4.5, votes: 5000, tags: ["Roguelike"], developer: "StudioA", releaseDate: "2024-03-01", ccu: 500 }),
+    steamGame({ sourceGameId: "2", genre: "Action", scaleTier: "hobby", priceCents: 0, ownersEst: 50_000, rating: 4.1, votes: 300, tags: ["Roguelike"], developer: "StudioA", releaseDate: "2023-06-01", ccu: 50 }),
+    steamGame({ sourceGameId: "3", genre: "Puzzle", scaleTier: "small_indie", priceCents: 999, ownersEst: 120_000, rating: 4.6, votes: 2000, tags: ["Pixel"], developer: "StudioB", releaseDate: "2025-01-01", ccu: 80 }),
+    steamGame({ sourceGameId: "5", genre: "Puzzle", scaleTier: "hobby", priceCents: 1200, ownersEst: 60_000, rating: 4.2, votes: 400, tags: ["Pixel"], developer: "StudioB", releaseDate: "2024-09-01", ccu: 20 }),
+    steamGame({ sourceGameId: "4", genre: "Action", scaleTier: "aaa", priceCents: 6000, ownersEst: 9_000_000, rating: 4.8, votes: 300_000, tags: ["Roguelike"], developer: "BigCorp", releaseDate: "2022-01-01", ccu: 100_000 }),
+  ], "2026-06-30T00:00:00.000Z");
+}
+
+describe("D16 Steam sub-sections (Pricing / Ownership / Developers / New releases / Opportunity)", () => {
+  it("pricing groups the indie cohort into price bands (AAA excluded)", async () => {
+    const db = await freshMemoryDb(); await seedSteamRich(db);
+    const p = await q.getSteamPricing(db);
+    const by = Object.fromEntries(p.map((b) => [b.band, b]));
+    expect(by["Free"].games).toBe(1);          // g2
+    expect(by["Free"].revenueProxy).toBe(0);
+    expect(by["$10–20"].games).toBe(2);        // g1, g5
+    expect(p.some((b) => b.games > 4)).toBe(false); // AAA g4 excluded
+  });
+
+  it("ownership rolls up owners + CCU by genre (indie)", async () => {
+    const db = await freshMemoryDb(); await seedSteamRich(db);
+    const o = await q.getSteamOwnership(db);
+    const action = o.find((r) => r.genre === "Action")!;
+    expect(action.games).toBe(2);
+    expect(action.totalOwners).toBe(250_000);
+    expect(action.ccu).toBe(550);             // 500 + 50
+  });
+
+  it("developers ranks indie studios by owners", async () => {
+    const db = await freshMemoryDb(); await seedSteamRich(db);
+    const d = await q.getSteamDevelopers(db);
+    expect(d.map((r) => r.developer)).not.toContain("BigCorp"); // AAA excluded
+    expect(d[0].developer).toBe("StudioA");
+    expect(d[0].games).toBe(2);
+    expect(d[0].totalOwners).toBe(250_000);
+  });
+
+  it("new releases are indie, newest first", async () => {
+    const db = await freshMemoryDb(); await seedSteamRich(db);
+    const n = await q.getSteamNewReleases(db);
+    expect(n[0].releaseDate).toBe("2025-01-01");
+    expect(n.every((r) => r.tier !== "aaa")).toBe(true);
+  });
+
+  it("opportunity ranks indie genre×tag gaps", async () => {
+    const db = await freshMemoryDb(); await seedSteamRich(db);
+    const g = await q.getSteamOpportunity(db);
+    expect(g.length).toBe(2); // Action×Roguelike, Puzzle×Pixel
+    expect(g.every((x) => typeof x.score === "number" && x.examples.length > 0)).toBe(true);
+  });
+
+  it("getSteamOverview bundles every section", async () => {
+    const db = await freshMemoryDb(); await seedSteamRich(db);
+    const o = await q.getSteamOverview(db);
+    expect(o.pricing.length).toBeGreaterThan(0);
+    expect(o.ownership.length).toBeGreaterThan(0);
+    expect(o.developers.length).toBeGreaterThan(0);
+    expect(o.newReleases.length).toBeGreaterThan(0);
+    expect(o.opportunity.length).toBe(2);
+  });
+});
+
 describe("D14 GET /api/steam", () => {
   it("serves the steam overview as JSON", async () => {
     const db = await freshMemoryDb();

@@ -5,6 +5,7 @@ import type {
   HiddenGem, MarketGap, FeatureHeatmap, Insight, BriefEditionMeta, BriefEdition,
   GenreRow, DeveloperRow, NewRelease, GenreLandscapePoint, GenreVelocityBar, GlossaryRow,
   ScaleTierRow, SteamGenreEconomics, SteamCohort, SteamComparable, SteamOverview,
+  SteamGap, SteamPriceBand, SteamOwnershipRow, SteamDeveloperRow, SteamNewRelease,
 } from "shared";
 
 const fmtDate = (d: any) => new Date(d).toISOString().slice(5, 10); // "MM-DD"
@@ -572,13 +573,154 @@ export async function getSteamComparables(db: Querier, limit = 12): Promise<Stea
   }));
 }
 
-// Composed Steam screen payload: KPIs + tier mix + both cohorts + comparables.
+// Steam pricing: price-band breakdown over the indie cohort (how indies price + what each band is worth).
+const PRICE_BANDS = ["Free", "<$5", "$5–10", "$10–20", "$20+"];
+export async function getSteamPricing(db: Querier): Promise<SteamPriceBand[]> {
+  const rows = await db.query(
+    `SELECT CASE
+              WHEN l.price_cents IS NULL OR l.price_cents = 0 THEN 'Free'
+              WHEN l.price_cents < 500  THEN '<$5'
+              WHEN l.price_cents < 1000 THEN '$5–10'
+              WHEN l.price_cents < 2000 THEN '$10–20'
+              ELSE '$20+'
+            END AS band,
+            count(*)::int AS games,
+            percentile_cont(0.5) WITHIN GROUP (ORDER BY l.rating)::float AS med_rating,
+            coalesce(sum(l.owners_est), 0)::float AS total_owners,
+            coalesce(sum(l.owners_est * l.price_cents), 0)::float AS rev_cents
+     FROM v_latest l JOIN games g ON g.id = l.game_id JOIN sources src ON src.id = g.source_id
+     WHERE g.is_live AND src.name = 'steam' AND (l.scale_tier IS NULL OR l.scale_tier <> 'aaa')
+     GROUP BY band`
+  );
+  const by = new Map(rows.map((r) => [r.band, r]));
+  return PRICE_BANDS.filter((b) => by.has(b)).map((band) => {
+    const r = by.get(band)!;
+    return {
+      band, games: num(r.games),
+      medianRating: r.med_rating == null ? null : +Number(r.med_rating).toFixed(2),
+      totalOwners: num(r.total_owners), revenueProxy: Math.round(num(r.rev_cents) / 100),
+    };
+  });
+}
+
+// Steam ownership/engagement by genre (indie cohort): market size + live CCU + playtime.
+export async function getSteamOwnership(db: Querier): Promise<SteamOwnershipRow[]> {
+  const rows = await db.query(
+    `SELECT l.genre AS genre, count(*)::int AS games,
+            coalesce(sum(l.owners_est), 0)::float AS total_owners,
+            percentile_cont(0.5) WITHIN GROUP (ORDER BY l.owners_est)::float AS med_owners,
+            coalesce(sum(l.ccu), 0)::int AS ccu,
+            percentile_cont(0.5) WITHIN GROUP (ORDER BY l.median_playtime_min)::float AS med_play
+     FROM v_latest l JOIN games g ON g.id = l.game_id JOIN sources src ON src.id = g.source_id
+     WHERE g.is_live AND src.name = 'steam' AND l.genre IS NOT NULL AND (l.scale_tier IS NULL OR l.scale_tier <> 'aaa')
+     GROUP BY l.genre ORDER BY total_owners DESC`
+  );
+  return rows.map((r) => ({
+    genre: r.genre, games: num(r.games), totalOwners: num(r.total_owners),
+    medianOwners: Math.round(num(r.med_owners)), ccu: num(r.ccu),
+    medianPlaytimeMin: Math.round(num(r.med_play)),
+  }));
+}
+
+// Top Steam studios (indie cohort) — Steam exposes real developer names.
+export async function getSteamDevelopers(db: Querier): Promise<SteamDeveloperRow[]> {
+  const rows = await db.query(
+    `SELECT g.developer AS developer, count(DISTINCT g.id)::int AS games,
+            coalesce(sum(l.owners_est), 0)::float AS owners, avg(l.rating)::float AS avg_rating,
+            mode() WITHIN GROUP (ORDER BY l.genre) AS top_genre
+     FROM v_latest l JOIN games g ON g.id = l.game_id JOIN sources src ON src.id = g.source_id
+     WHERE g.is_live AND src.name = 'steam' AND g.developer IS NOT NULL AND g.developer <> ''
+       AND (l.scale_tier IS NULL OR l.scale_tier <> 'aaa')
+     GROUP BY g.developer ORDER BY owners DESC, games DESC LIMIT 40`
+  );
+  return rows.map((r) => ({
+    developer: r.developer, games: num(r.games), totalOwners: num(r.owners),
+    avgRating: +num(r.avg_rating).toFixed(2), topGenre: r.top_genre ?? "—",
+  }));
+}
+
+// Recent Steam releases (indie cohort) by release date.
+export async function getSteamNewReleases(db: Querier): Promise<SteamNewRelease[]> {
+  const rows = await db.query(
+    `SELECT g.title, l.genre, l.scale_tier AS tier, l.rating, l.owners_est AS owners, l.price_cents AS price, g.release_date
+     FROM v_latest l JOIN games g ON g.id = l.game_id JOIN sources src ON src.id = g.source_id
+     WHERE g.is_live AND src.name = 'steam' AND g.release_date IS NOT NULL
+       AND (l.scale_tier IS NULL OR l.scale_tier <> 'aaa')
+     ORDER BY g.release_date DESC LIMIT 40`
+  );
+  return rows.map((r) => ({
+    title: r.title, genre: r.genre ?? "—", tier: r.tier ?? "—",
+    rating: r.rating == null ? null : +Number(r.rating).toFixed(2),
+    owners: r.owners == null ? null : num(r.owners),
+    priceCents: r.price == null ? null : num(r.price),
+    releaseDate: r.release_date == null ? null : new Date(r.release_date).toISOString().slice(0, 10),
+  }));
+}
+
+async function steamGapExamples(db: Querier): Promise<Map<string, string[]>> {
+  const rows = await db.query(
+    `SELECT genre, tag, title FROM (
+       SELECT l.genre AS genre, t.name AS tag, g.title AS title,
+              row_number() OVER (PARTITION BY l.genre, t.name ORDER BY l.owners_est DESC NULLS LAST) AS rn
+       FROM v_latest l JOIN games g ON g.id = l.game_id JOIN sources src ON src.id = g.source_id
+       JOIN game_tags gt ON gt.game_id = g.id JOIN tags t ON t.id = gt.tag_id
+       WHERE g.is_live AND src.name = 'steam' AND l.genre IS NOT NULL AND (l.scale_tier IS NULL OR l.scale_tier <> 'aaa')
+         AND lower(t.name) <> lower(l.genre)
+     ) x WHERE rn <= 3`
+  );
+  const m = new Map<string, string[]>();
+  for (const r of rows) { const k = `${r.genre} × ${r.tag}`; const a = m.get(k) ?? []; a.push(r.title); m.set(k, a); }
+  return m;
+}
+
+// Steam opportunity: indie genre×tag with high demand (owners) + quality, low supply, monetizable.
+export async function getSteamOpportunity(db: Querier): Promise<SteamGap[]> {
+  const [rows, ex] = await Promise.all([
+    db.query(
+      `SELECT l.genre AS genre, t.name AS tag,
+              count(DISTINCT g.id)::int AS supply_n,
+              percentile_cont(0.5) WITHIN GROUP (ORDER BY l.owners_est)::float AS demand,
+              percentile_cont(0.9) WITHIN GROUP (ORDER BY l.rating)::float AS quality,
+              percentile_cont(0.5) WITHIN GROUP (ORDER BY l.price_cents)::float AS med_price
+       FROM v_latest l JOIN games g ON g.id = l.game_id JOIN sources src ON src.id = g.source_id
+       JOIN game_tags gt ON gt.game_id = g.id JOIN tags t ON t.id = gt.tag_id
+       WHERE g.is_live AND src.name = 'steam' AND l.genre IS NOT NULL AND (l.scale_tier IS NULL OR l.scale_tier <> 'aaa')
+         AND lower(t.name) <> lower(l.genre)
+       GROUP BY l.genre, t.name HAVING count(DISTINCT g.id) >= 2`
+    ),
+    steamGapExamples(db),
+  ]);
+  if (rows.length < 2) return [];
+  const z = (vals: number[]) => { const m = vals.reduce((a, b) => a + b, 0) / vals.length;
+    const sd = Math.sqrt(vals.reduce((a, b) => a + (b - m) ** 2, 0) / vals.length) || 1;
+    return (v: number) => (v - m) / sd; };
+  const zDem = z(rows.map((r) => num(r.demand)));
+  const zSup = z(rows.map((r) => num(r.supply_n)));
+  const zQual = z(rows.map((r) => num(r.quality)));
+  return rows
+    .map((r) => ({
+      label: `${r.genre} × ${r.tag}`, genre: r.genre, tag: r.tag,
+      supplyN: num(r.supply_n), medianOwners: Math.round(num(r.demand)),
+      qualityCeil: +num(r.quality).toFixed(2), medianPriceCents: Math.round(num(r.med_price)),
+      score: +(zDem(num(r.demand)) + zQual(num(r.quality)) - zSup(num(r.supply_n))).toFixed(2),
+      examples: ex.get(`${r.genre} × ${r.tag}`) ?? [],
+    }))
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 8);
+}
+
+// Composed Steam screen payload: KPIs + tier mix + cohorts + comparables + all sub-sections.
 export async function getSteamOverview(db: Querier): Promise<SteamOverview> {
-  const [tiers, indie, all, comparables] = await Promise.all([
+  const [tiers, indie, all, comparables, opportunity, pricing, ownership, developers, newReleases] = await Promise.all([
     getScaleTierBreakdown(db, "steam"),
     getSteamGenreEconomics(db, { cohort: "indie" }),
     getSteamGenreEconomics(db, { cohort: "all" }),
     getSteamComparables(db, 14),
+    getSteamOpportunity(db),
+    getSteamPricing(db),
+    getSteamOwnership(db),
+    getSteamDevelopers(db),
+    getSteamNewReleases(db),
   ]);
   const games = tiers.reduce((s, t) => s + t.games, 0);
   const aaa = tiers.find((t) => t.tier === "aaa")?.games ?? 0;
@@ -597,7 +739,7 @@ export async function getSteamOverview(db: Querier): Promise<SteamOverview> {
       ratedPct: num(agg.n) ? Math.round((num(agg.r) / num(agg.n)) * 100) : 0,
       indieMedianPriceCents: Math.round(num(agg.indie_med_price)),
     },
-    tiers, indie, all, comparables,
+    tiers, indie, all, comparables, opportunity, pricing, ownership, developers, newReleases,
     subtitle: "Steam (PC) · indie-addressable cohort default",
   };
 }

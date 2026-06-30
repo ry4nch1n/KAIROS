@@ -26,12 +26,49 @@ export interface SteamComparable {
   releaseDate: string | null; // ISO YYYY-MM-DD (for the "Released" year column)
 }
 
+export interface SteamGap {
+  label: string; genre: string; tag: string;
+  supplyN: number;          // # games (supply)
+  medianOwners: number;     // demand
+  qualityCeil: number;      // P90 rating
+  medianPriceCents: number; // monetization
+  score: number;
+  examples: string[];
+}
+export interface SteamPriceBand {
+  band: string;             // "Free" | "<$5" | "$5–10" | "$10–20" | "$20+"
+  games: number;
+  medianRating: number | null;
+  totalOwners: number;
+  revenueProxy: number;     // dollars
+}
+export interface SteamOwnershipRow {
+  genre: string; games: number;
+  totalOwners: number; medianOwners: number;
+  ccu: number;              // summed live concurrent players
+  medianPlaytimeMin: number;
+}
+export interface SteamDeveloperRow {
+  developer: string; games: number;
+  totalOwners: number; avgRating: number; topGenre: string;
+}
+export interface SteamNewRelease {
+  title: string; genre: string; tier: string;
+  rating: number | null; owners: number | null;
+  priceCents: number | null; releaseDate: string | null;
+}
+
 export interface SteamOverview {
   kpi: { games: number; indie: number; aaa: number; ratedPct: number; indieMedianPriceCents: number };
   tiers: ScaleTierRow[];
   indie: SteamGenreEconomics[]; // indie-addressable cohort (default benchmark)
   all: SteamGenreEconomics[];   // all tiers incl. AAA (demand-context view)
   comparables: SteamComparable[];
+  opportunity: SteamGap[];
+  pricing: SteamPriceBand[];
+  ownership: SteamOwnershipRow[];
+  developers: SteamDeveloperRow[];
+  newReleases: SteamNewRelease[];
   subtitle: string;
 }
 
