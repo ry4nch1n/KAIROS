@@ -4,6 +4,14 @@ on:
     - cron: "0 20 * * *" # 20:00 UTC = 04:00 SGT (UTC+8) daily
   workflow_dispatch: {} # lets you trigger a run by hand from the Actions tab
 
+# ── Actions budget (private repo free tier = 2,000 min/month, ~30 daily runs) ──
+# Per run (measured ~2s/req browser, ~3-4s/app Steam): CrazyGames 250 ≈ 18 min,
+# Poki 250 ≈ 18 min, Steam 300 ≈ 18 min, migrate+install overhead ≈ 2 min.
+# ≈ 56 min/day typical → ~1,700 min/month; worst case ~62/day → ~1,880/month.
+# That keeps ~120-300 min headroom for manual re-runs under the 2,000 cap.
+# To go bigger: make the repo PUBLIC (unlimited Actions) and raise the limits below —
+# no secrets live in the code (they're in Actions/Netlify env), so it's safe to do so.
+
 jobs:
   crawl:
     runs-on: ubuntu-latest
@@ -16,6 +24,10 @@ jobs:
         with:
           node-version: "22"
       - run: npm install
+      - name: Ensure Neon schema is current (idempotent — adds Phase 2 Steam columns)
+        run: npm run db:migrate
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
       - name: Crawl CrazyGames into Neon (append-only snapshot)
         run: npm run crawl:crazygames
         env:
@@ -26,3 +38,8 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           CRAWL_LIMIT: "250"
+      - name: Crawl Steam (PC) into Neon (append-only snapshot)
+        run: npm run crawl:steam
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          CRAWL_LIMIT: "300"

@@ -175,3 +175,6 @@ cd app && STEAM_VALIDATE_LIMIT=18 npx tsx server/scripts/validate-steam.ts
 1. `cd app && npm run db:seed` then `CRAWL_LIMIT=40 npm run crawl:steam` (populate local DB; prod uses the daily crawl).
 2. `npm run dev` → open http://localhost:5173 → GameRadar → click the **Steam** platform tab.
 3. The Steam tab reads `GET /api/steam`; toggle the genre-economics cohort between **Indie** (default) and **All tiers** (demand context). Steam data shows only after a Steam crawl has populated the DB.
+
+### Daily crawl — Actions budget (private repo)
+`crawl.yml` runs daily (04:00 SGT) and now: **migrate (idempotent schema) → CrazyGames 250 → Poki 250 → Steam 300**, all into Neon. Free private-repo tier = 2,000 Actions min/month; this config ≈ 56 min/day typical (~1,700/mo), worst-case ~62/day (~1,880/mo) — under cap with headroom for manual re-runs. The migrate step ensures the Phase 2 Steam columns exist before the Steam crawl. To go bigger, make the repo public (unlimited Actions) and raise the per-source `CRAWL_LIMIT`s — no secrets live in code.
