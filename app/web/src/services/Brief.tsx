@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { BriefEditionMeta, BriefEdition, BriefNotable } from "shared";
 import { api } from "../lib/api.ts";
+import { isSameWeek } from "../lib/week.ts";
 
 function fmt(date: string): string {
   return new Date(date + "T00:00:00Z").toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
@@ -78,10 +79,11 @@ export function Brief({ hidden }: { hidden: boolean }) {
     }
   }, [sel]);
 
-  const latest = list[0]?.editionDate;
-  const isThisWeek = (d: string) => (latest ? (new Date(latest).getTime() - new Date(d).getTime()) / 86400000 <= 7 : false);
-  const thisWeek = list.filter((e) => isThisWeek(e.editionDate));
-  const earlier = list.filter((e) => !isThisWeek(e.editionDate));
+  // Group by real calendar week (Monday-start) relative to today, so "This week"
+  // is literally this week — a Friday edition from last week falls under "Earlier".
+  const now = new Date();
+  const thisWeek = list.filter((e) => isSameWeek(e.editionDate, now));
+  const earlier = list.filter((e) => !isSameWeek(e.editionDate, now));
   const editionRow = (e: BriefEditionMeta) => {
     const di = dow(e.editionDate);
     return (
@@ -96,12 +98,12 @@ export function Brief({ hidden }: { hidden: boolean }) {
   return (
     <section className="service" data-svc="brief" hidden={hidden}>
       <aside className="side">
-        <div className="side-head"><b>News Brief</b><span>indie + gaming · mon/thu</span></div>
+        <div className="side-head"><b>News Brief</b><span>indie + gaming</span></div>
         {thisWeek.length > 0 && <div className="nav-label">This week</div>}
         {thisWeek.map(editionRow)}
         {earlier.length > 0 && <div className="nav-label">Earlier</div>}
         {earlier.map(editionRow)}
-        <div className="side-foot"><span className="pulse"></span>Next: Mon · 08:00<br />Routine: indie-brief</div>
+        <div className="side-foot"><span className="pulse"></span>Auto-published<br />Routine: indie-brief</div>
       </aside>
 
       <main className="main">
@@ -111,7 +113,6 @@ export function Brief({ hidden }: { hidden: boolean }) {
             {ed && ed.sourceCount > 0 && (
               <div className="chip"><svg viewBox="0 0 24 24"><path d="M12 2l3 7h7l-5.5 4 2 7L12 16l-6.5 4 2-7L2 9h7z" /></svg>{ed.sourceCount} sources</div>
             )}
-            <div className="chip"><svg viewBox="0 0 24 24"><path d="M14 3h7v7M21 3l-9 9M10 5H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5" /></svg>Open in Notion</div>
           </div>
         </div>
 
@@ -120,7 +121,7 @@ export function Brief({ hidden }: { hidden: boolean }) {
             <div className="empty">
               <div className="big-ic"><svg viewBox="0 0 24 24"><path d="M4 5h13v14a1 1 0 0 1-1 1H6a2 2 0 0 1-2-2z" /><path d="M17 8h3v10a2 2 0 0 1-2 2" /><path d="M7 9h7M7 13h7M7 17h4" /></svg></div>
               <h3>No brief editions yet</h3>
-              <p>Editions appear here automatically once your Mon/Thu indie-brief routine publishes them to the database.</p>
+              <p>Editions appear here automatically once your indie-brief routine publishes them to the database.</p>
             </div>
           ) : !p ? (
             <div className="card"><div className="skeleton" style={{ height: 200 }} /></div>
@@ -200,7 +201,7 @@ export function Brief({ hidden }: { hidden: boolean }) {
               )}
 
               {p.reference_shelf && <div className="foot-note">📚 {p.reference_shelf}</div>}
-              <div className="foot-note">KAIROS · News Brief · from brief_editions (published by the Mon/Thu routine)</div>
+              <div className="foot-note">KAIROS · News Brief · from brief_editions (published by the indie-brief routine)</div>
             </>
           )}
         </div>
