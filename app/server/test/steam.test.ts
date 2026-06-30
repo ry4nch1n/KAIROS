@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { freshMemoryDb, applySchema, type Querier } from "../src/db/db.ts";
 import {
   parseOwners, normalizeSteamRating, classifyScaleTier,
-  isSelfPublished, parseReleaseDate, parseSteamGame, STEAM_BASE_URL, mergeSeeds,
+  isSelfPublished, parseReleaseDate, parseSteamGame, STEAM_BASE_URL, mergeSeeds, appDetailsUrl,
 } from "../src/crawler/steam.ts";
 import { loadGames } from "../src/crawler/load.ts";
 import { crazygames } from "../src/crawler/crazygames.ts";
@@ -290,13 +290,46 @@ describe("D10b getSteamGenreEconomics — medianRating null when cohort has no r
 });
 
 describe("D12 getSteamComparables", () => {
-  it("returns indie-tier rated games ordered by owners desc", async () => {
+  it("returns indie-tier rated games (AAA excluded, only rated)", async () => {
     const db = await freshMemoryDb();
     await seedSteamSample(db);
     const c = await q.getSteamComparables(db, 10);
     expect(c.every((r) => r.tier !== "aaa")).toBe(true);          // AAA excluded
     expect(c.every((r) => r.rating !== null)).toBe(true);          // only rated
-    expect(c.map((r) => r.owners)).toEqual([100_000, 60_000, 30_000]); // owners desc
+    expect(c.length).toBe(3);
+  });
+});
+
+describe("D12b getSteamComparables prefers recent releases", () => {
+  it("orders by release date (newest first) and applies an owners floor", async () => {
+    const db = await freshMemoryDb();
+    await loadGames(db, "steam", STEAM_BASE_URL, [
+      steamGame({ sourceGameId: "old", title: "Old Hit", genre: "Action", scaleTier: "small_indie", releaseDate: "2015-05-01", ownersEst: 2_000_000, rating: 4.5, votes: 50_000 }),
+      steamGame({ sourceGameId: "new", title: "New Indie", genre: "Action", scaleTier: "small_indie", releaseDate: "2024-06-01", ownersEst: 80_000, rating: 4.3, votes: 3_000 }),
+      steamGame({ sourceGameId: "tiny", title: "Tiny Game", genre: "Indie", scaleTier: "hobby", releaseDate: "2025-01-01", ownersEst: 5_000, rating: 4.0, votes: 50 }),
+    ], "2026-06-30T00:00:00.000Z");
+    const c = await q.getSteamComparables(db, 10);
+    expect(c[0].title).toBe("New Indie");          // 2024 before 2015
+    expect(c[0].releaseDate).toBe("2024-06-01");
+    expect(c.map((x) => x.title)).not.toContain("Tiny Game"); // below owners floor
+  });
+});
+
+describe("D13b getSteamOverview kpi.indieMedianPriceCents", () => {
+  it("computes median price over the indie cohort (excludes AAA)", async () => {
+    const db = await freshMemoryDb();
+    await seedSteamSample(db); // indie prices: A 1500, C 500, D 1000 → median 1000 (B=aaa excluded)
+    const o = await q.getSteamOverview(db);
+    expect(o.kpi.indieMedianPriceCents).toBe(1000);
+  });
+});
+
+describe("appDetailsUrl pins locale (fixes the 'Ação' leak)", () => {
+  it("requests English genres and USD pricing", () => {
+    const u = appDetailsUrl(1145360);
+    expect(u).toContain("appids=1145360");
+    expect(u).toContain("l=english");
+    expect(u).toContain("cc=us");
   });
 });
 

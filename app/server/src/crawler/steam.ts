@@ -166,9 +166,15 @@ export async function seedAppIds(limit = SEED_LIMIT_DEFAULT): Promise<number[]> 
   return mergeSeeds([indie, trending, featured], limit);
 }
 
+/** Store appdetails URL. l=english fixes locale leakage (genres came back as e.g. "Ação");
+ *  cc=us pins USD pricing so price_cents is consistent regardless of where the crawl runs. */
+export function appDetailsUrl(appid: number | string): string {
+  return `${STORE}/api/appdetails?appids=${appid}&l=english&cc=us`;
+}
+
 /** Fetch + join the three endpoints for one appid. Returns null if the app isn't a usable game. */
 export async function fetchSteamGame(appid: number): Promise<RawGame | null> {
-  const adWrap = JSON.parse(await politeFetch(`${STORE}/api/appdetails?appids=${appid}`));
+  const adWrap = JSON.parse(await politeFetch(appDetailsUrl(appid)));
   const entry = adWrap?.[appid];
   if (!entry?.success || entry.data?.type !== "game") return null;
   const reviews = JSON.parse(

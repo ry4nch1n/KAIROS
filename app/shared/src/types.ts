@@ -23,10 +23,11 @@ export interface SteamComparable {
   owners: number | null;
   priceCents: number | null;
   developer: string | null;
+  releaseDate: string | null; // ISO YYYY-MM-DD (for the "Released" year column)
 }
 
 export interface SteamOverview {
-  kpi: { games: number; indie: number; aaa: number; ratedPct: number };
+  kpi: { games: number; indie: number; aaa: number; ratedPct: number; indieMedianPriceCents: number };
   tiers: ScaleTierRow[];
   indie: SteamGenreEconomics[]; // indie-addressable cohort (default benchmark)
   all: SteamGenreEconomics[];   // all tiers incl. AAA (demand-context view)

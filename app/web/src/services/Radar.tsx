@@ -7,13 +7,18 @@ import { InsightSvg, tagClass } from "../components/icons.tsx";
 
 const fmt = (n: number) => n.toLocaleString("en-US");
 const MIN_TREND_DAYS = 5;
-// "All Browser" = combined browser platforms (Poki + CrazyGames). Steam is separate
-// (its own asymmetric surface), so the grouping label makes the scope explicit.
-const PLATFORMS: { id: Platform; label: string }[] = [
-  { id: "all", label: "All Browser" },
-  { id: "poki", label: "Poki" },
-  { id: "crazygames", label: "CrazyGames" },
-  { id: "steam", label: "Steam" },
+// Platforms grouped by category to reflect the hierarchy: "All Browser" aggregates its
+// children (CrazyGames + Poki); Steam is the PC surface (an "all PC" of one, for now).
+// CrazyGames is listed before Poki by preference.
+const PLATFORM_GROUPS: { group: string; items: { id: Platform; label: string }[] }[] = [
+  { group: "Browser", items: [
+    { id: "all", label: "All Browser" },
+    { id: "crazygames", label: "CrazyGames" },
+    { id: "poki", label: "Poki" },
+  ] },
+  { group: "PC", items: [
+    { id: "steam", label: "Steam" },
+  ] },
 ];
 
 // ── Steam formatting helpers ──
@@ -216,7 +221,7 @@ function SteamView({ data }: { data: SteamOverview }) {
         <div className="kpi"><div className="label">{I.steam}Steam games</div><div className="val num">{fmt(data.kpi.games)}</div><span className="delta flat num">{data.kpi.ratedPct}% have reviews</span></div>
         <div className="kpi accent"><div className="label">{I.gems}Indie cohort</div><div className="val num">{fmt(data.kpi.indie)}</div><span className="delta up num">addressable for a solo dev</span></div>
         <div className="kpi"><div className="label">{I.overview}AAA (context)</div><div className="val num">{fmt(data.kpi.aaa)}</div><span className="delta flat num">excluded from benchmarks</span></div>
-        <div className="kpi"><div className="label">{I.money}Cohort default</div><div className="val num" style={{ fontSize: 22, paddingTop: 6 }}>indie</div><span className="delta flat num">AAA quarantined</span></div>
+        <div className="kpi"><div className="label">{I.money}Indie median price</div><div className="val num">{money(data.kpi.indieMedianPriceCents)}</div><span className="delta flat num">what indies charge</span></div>
       </div>
 
       <div className="card hero">{head(I.overview, "Scale-tier distribution", "inferred from reviews + owners + self-published · blue = indie cohort, grey = AAA context")}
@@ -234,14 +239,15 @@ function SteamView({ data }: { data: SteamOverview }) {
         <EconTable rows={econ} />
       </div>
 
-      <div className="card">{head(I.gems, "Indie comparables", "the realistic peer set — indie-tier games by owners")}
-        <table className="dtable"><thead><tr><th>Game</th><th>Tier</th><th>Genre</th><th className="r">Rating</th><th className="r">Reviews</th><th className="r">Owners</th><th className="r">Price</th><th>Developer</th></tr></thead>
+      <div className="card">{head(I.gems, "Indie comparables", "the realistic peer set — indie-tier games, most recent first")}
+        <table className="dtable"><thead><tr><th>Game</th><th>Tier</th><th>Genre</th><th className="r">Released</th><th className="r">Rating</th><th className="r">Reviews</th><th className="r">Owners</th><th className="r">Price</th><th>Developer</th></tr></thead>
           <tbody>{data.comparables.map((c, i) => {
             const tm = TIER_META[c.tier] ?? { label: c.tier, cls: "t-hobby" };
             return (
               <tr key={i}><td className="gname">{c.title}</td>
                 <td><span className={"tier-chip " + tm.cls}>{tm.label}</span></td>
-                <td>{c.genre}</td><td className="r">{rate(c.rating)}</td><td className="r">{c.votes == null ? "—" : fmt(c.votes)}</td>
+                <td>{c.genre}</td><td className="r">{c.releaseDate ? c.releaseDate.slice(0, 4) : "—"}</td>
+                <td className="r">{rate(c.rating)}</td><td className="r">{c.votes == null ? "—" : fmt(c.votes)}</td>
                 <td className="r">{fmtOwners(c.owners)}</td><td className="r">{money(c.priceCents)}</td>
                 <td style={{ color: "var(--ink-3, #6b7280)" }}>{c.developer ?? "—"}</td></tr>
             );
@@ -319,11 +325,18 @@ export function Radar({ hidden }: { hidden: boolean }) {
       <main className="main">
         <div className="topbar">
           <h2>{isSteam ? "Steam (PC) Market" : "Market Overview"} <small>{subtitle}</small></h2>
-          <div className="seg" role="tablist" aria-label="Platform">
-            {PLATFORMS.map((p) => (
-              <button key={p.id} className={"seg-btn" + (platform === p.id ? " active" : "")} role="tab" aria-selected={platform === p.id} onClick={() => setPlatform(p.id)}>
-                <span className={"dot " + p.id}></span>{p.label}
-              </button>
+          <div className="platform-groups" role="tablist" aria-label="Platform">
+            {PLATFORM_GROUPS.map((grp) => (
+              <div className="seg-group" key={grp.group}>
+                <span className="seg-group-label">{grp.group}</span>
+                <div className="seg">
+                  {grp.items.map((p) => (
+                    <button key={p.id} className={"seg-btn" + (platform === p.id ? " active" : "")} role="tab" aria-selected={platform === p.id} onClick={() => setPlatform(p.id)}>
+                      <span className={"dot " + p.id}></span>{p.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
             ))}
           </div>
         </div>

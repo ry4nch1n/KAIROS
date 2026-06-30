@@ -545,15 +545,19 @@ export async function getSteamGenreEconomics(
   }));
 }
 
-// Indie-tier rated games ordered by owners — the realistic "comparables" peer set.
+// Indie-tier rated games — the realistic "comparables" peer set. Ordered by release date
+// (newest first) so the set skews recent rather than to long-tail classics, with an owners
+// floor so the recent games shown still have real traction.
+const COMPARABLE_OWNERS_FLOOR = 20_000;
 export async function getSteamComparables(db: Querier, limit = 12): Promise<SteamComparable[]> {
   const rows = await db.query(
     `SELECT g.title, l.scale_tier AS tier, l.genre, l.rating, l.votes,
-            l.owners_est AS owners, l.price_cents AS price, g.developer
+            l.owners_est AS owners, l.price_cents AS price, g.developer, g.release_date
      FROM v_latest l JOIN games g ON g.id = l.game_id JOIN sources src ON src.id = g.source_id
      WHERE g.is_live AND src.name = 'steam' AND l.rating IS NOT NULL
        AND (l.scale_tier IS NULL OR l.scale_tier <> 'aaa')
-     ORDER BY l.owners_est DESC NULLS LAST, l.votes DESC NULLS LAST
+       AND coalesce(l.owners_est, 0) >= ${COMPARABLE_OWNERS_FLOOR}
+     ORDER BY g.release_date DESC NULLS LAST, l.owners_est DESC NULLS LAST
      LIMIT $1`,
     [limit]
   );
@@ -564,6 +568,7 @@ export async function getSteamComparables(db: Querier, limit = 12): Promise<Stea
     owners: r.owners == null ? null : num(r.owners),
     priceCents: r.price == null ? null : num(r.price),
     developer: r.developer ?? null,
+    releaseDate: r.release_date == null ? null : new Date(r.release_date).toISOString().slice(0, 10),
   }));
 }
 
@@ -577,13 +582,21 @@ export async function getSteamOverview(db: Querier): Promise<SteamOverview> {
   ]);
   const games = tiers.reduce((s, t) => s + t.games, 0);
   const aaa = tiers.find((t) => t.tier === "aaa")?.games ?? 0;
-  const rated = (await db.query(
-    `SELECT count(*) FILTER (WHERE l.rating IS NOT NULL)::int AS r, count(*)::int AS n
+  const agg = (await db.query(
+    `SELECT count(*) FILTER (WHERE l.rating IS NOT NULL)::int AS r, count(*)::int AS n,
+            percentile_cont(0.5) WITHIN GROUP (
+              ORDER BY l.price_cents) FILTER (
+              WHERE l.price_cents IS NOT NULL AND (l.scale_tier IS NULL OR l.scale_tier <> 'aaa')
+            )::float AS indie_med_price
      FROM v_latest l JOIN games g ON g.id = l.game_id JOIN sources src ON src.id = g.source_id
      WHERE g.is_live AND src.name = 'steam'`
   ))[0];
   return {
-    kpi: { games, indie: games - aaa, aaa, ratedPct: num(rated.n) ? Math.round((num(rated.r) / num(rated.n)) * 100) : 0 },
+    kpi: {
+      games, indie: games - aaa, aaa,
+      ratedPct: num(agg.n) ? Math.round((num(agg.r) / num(agg.n)) * 100) : 0,
+      indieMedianPriceCents: Math.round(num(agg.indie_med_price)),
+    },
     tiers, indie, all, comparables,
     subtitle: "Steam (PC) · indie-addressable cohort default",
   };

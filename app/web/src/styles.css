@@ -207,3 +207,9 @@ button{font-family:inherit}
 .tier-chip.t-small{background:#dbeafe;color:#1d4ed8}
 .tier-chip.t-est{background:#e0e7ff;color:#4338ca}
 .tier-chip.t-aaa{background:#eef2f7;color:#64748b}
+
+/* Phase 2 — grouped platform selector (Browser vs PC hierarchy) */
+.platform-groups{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.seg-group{display:flex;align-items:center;gap:9px}
+.seg-group + .seg-group{padding-left:16px;border-left:1px solid #e3e9f2}
+.seg-group-label{font-family:'Fira Code';font-size:10px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--text-3)}
