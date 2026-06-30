@@ -56,6 +56,19 @@ export function createApp(db: Querier) {
     res.json(await q.getBriefEditions(db));
   });
 
+  app.get("/api/brief/steering", async (_req, res) => res.json(await q.getBriefSteering(db)));
+  app.post("/api/brief/steering", async (req, res) => {
+    const token = process.env.PUBLISH_TOKEN;
+    const auth = req.headers.authorization || "";
+    if (!token || auth !== `Bearer ${token}`) return res.status(401).json({ error: "unauthorized" });
+    try {
+      await q.setBriefSteering(db, Array.isArray(req.body?.flags) ? req.body.flags : []);
+      res.json({ ok: true });
+    } catch (e) {
+      res.status(400).json({ error: String(e) });
+    }
+  });
+
   app.get("/api/brief/edition/:date", async (req, res) => {
     const ed = await q.getBriefEdition(db, req.params.date);
     if (!ed) return res.status(404).json({ error: "not found" });

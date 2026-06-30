@@ -23,5 +23,6 @@ export default async (req: Request, _context: Context) => {
 
 export const config: Config = {
   path: "/*",
-  excludedPath: "/api/brief/publish",
+  // bearer-token endpoints the routine posts to (their own auth) — excluded from the gate
+  excludedPath: ["/api/brief/publish", "/api/brief/steering"],
 };

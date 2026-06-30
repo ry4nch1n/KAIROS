@@ -101,6 +101,14 @@ CREATE TABLE IF NOT EXISTS brief_editions (
   UNIQUE (edition_date, brief_type)
 );
 
+-- brief steering: current "Standing Flags" (interests) the routine reads from Notion,
+-- mirrored here read-only so KAIROS can show what's steering the next brief. Single row.
+CREATE TABLE IF NOT EXISTS brief_steering (
+  id         INT PRIMARY KEY DEFAULT 1,
+  flags      JSONB NOT NULL DEFAULT '[]'::jsonb,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 -- library namespace
 CREATE TABLE IF NOT EXISTS library_items (
   id         BIGSERIAL PRIMARY KEY,

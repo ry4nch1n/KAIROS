@@ -45,6 +45,15 @@ export default async (req: Request) => {
     if (path === "/genres") return json(await q.getGenres(db, platform));
     if (path === "/developers") return json(await q.getDevelopers(db, platform));
     if (path === "/new-releases") return json(await q.getNewReleases(db, platform));
+    if (req.method === "POST" && path === "/brief/steering") {
+      const token = process.env.PUBLISH_TOKEN;
+      const auth = req.headers.get("authorization") || "";
+      if (!token || auth !== `Bearer ${token}`) return json({ error: "unauthorized" }, 401);
+      const body = await req.json();
+      await q.setBriefSteering(db, Array.isArray(body?.flags) ? body.flags : []);
+      return json({ ok: true });
+    }
+    if (path === "/brief/steering") return json(await q.getBriefSteering(db));
     if (path === "/brief/editions") return json(await q.getBriefEditions(db));
     const m = path.match(/^\/brief\/edition\/(.+)$/);
     if (m) {

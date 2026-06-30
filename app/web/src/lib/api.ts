@@ -1,6 +1,6 @@
 import type {
   Overview, Platform, BriefEditionMeta, BriefEdition, LibraryItem,
-  GenreRow, DeveloperRow, NewRelease, HiddenGem, SteamOverview,
+  GenreRow, DeveloperRow, NewRelease, HiddenGem, SteamOverview, BriefSteering,
 } from "shared";
 
 async function getJSON<T>(url: string): Promise<T> {
@@ -17,6 +17,7 @@ export const api = {
   newReleases: (p: Platform) => getJSON<NewRelease[]>(`/api/new-releases?platform=${p}`),
   hiddenGems: (p: Platform) => getJSON<HiddenGem[]>(`/api/hidden-gems?platform=${p}`),
   briefEditions: () => getJSON<BriefEditionMeta[]>(`/api/brief/editions`),
+  briefSteering: () => getJSON<BriefSteering>(`/api/brief/steering`),
   briefEdition: (date: string) => getJSON<BriefEdition>(`/api/brief/edition/${date}`),
   library: () => getJSON<LibraryItem[]>(`/api/library`),
 };

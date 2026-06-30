@@ -3,7 +3,7 @@ import type { Querier } from "../db/db.ts";
 import type {
   Platform, Overview, OverviewKPI, GenreMomentum, TagFreq, ScatterPoint,
   HiddenGem, MarketGap, FeatureHeatmap, Insight, BriefEditionMeta, BriefEdition,
-  GenreRow, DeveloperRow, NewRelease, GenreLandscapePoint, GenreVelocityBar, GlossaryRow,
+  GenreRow, DeveloperRow, NewRelease, GenreLandscapePoint, GenreVelocityBar, GlossaryRow, BriefSteering,
   ScaleTierRow, SteamGenreEconomics, SteamCohort, SteamComparable, SteamOverview,
   SteamGap, SteamPriceBand, SteamOwnershipRow, SteamDeveloperRow, SteamNewRelease,
 } from "shared";
@@ -785,6 +785,29 @@ export async function publishEdition(db: Querier, e: PublishInput): Promise<void
       e.localPath ?? null,
       e.sourceCount ?? null,
     ]
+  );
+}
+
+export async function getBriefSteering(db: Querier): Promise<BriefSteering> {
+  try {
+    const rows = await db.query(`SELECT flags, updated_at FROM brief_steering WHERE id = 1`);
+    if (!rows.length) return { flags: [], updatedAt: null };
+    const raw = typeof rows[0].flags === "string" ? JSON.parse(rows[0].flags) : rows[0].flags;
+    return {
+      flags: Array.isArray(raw) ? raw.filter((x) => typeof x === "string") : [],
+      updatedAt: rows[0].updated_at ? new Date(rows[0].updated_at).toISOString() : null,
+    };
+  } catch {
+    return { flags: [], updatedAt: null }; // table not migrated yet → behave as empty
+  }
+}
+
+export async function setBriefSteering(db: Querier, flags: string[]): Promise<void> {
+  const clean = (Array.isArray(flags) ? flags : []).filter((x) => typeof x === "string").slice(0, 50);
+  await db.query(
+    `INSERT INTO brief_steering(id, flags, updated_at) VALUES (1, $1, now())
+     ON CONFLICT (id) DO UPDATE SET flags = EXCLUDED.flags, updated_at = now()`,
+    [JSON.stringify(clean)]
   );
 }
 

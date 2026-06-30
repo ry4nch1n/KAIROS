@@ -64,6 +64,25 @@ describe("brief publish (token-gated)", () => {
     expect(r.status).toBe(401);
   });
 
+  it("brief steering: empty → 401 without token → upsert with token → reflected", async () => {
+    const empty = await (await fetch(`${base}/api/brief/steering`)).json();
+    expect(empty.flags).toEqual([]);
+    const bad = await fetch(`${base}/api/brief/steering`, {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ flags: ["x"] }),
+    });
+    expect(bad.status).toBe(401);
+    process.env.PUBLISH_TOKEN = "test-token-123";
+    const ok = await fetch(`${base}/api/brief/steering`, {
+      method: "POST", headers: { "content-type": "application/json", authorization: "Bearer test-token-123" },
+      body: JSON.stringify({ flags: ["browser-first", "extraction-lite"] }),
+    });
+    expect(ok.status).toBe(200);
+    const got = await (await fetch(`${base}/api/brief/steering`)).json();
+    expect(got.flags).toEqual(["browser-first", "extraction-lite"]);
+    expect(got.updatedAt).toBeTruthy();
+  });
+
   it("publishes with token and the edition becomes fetchable", async () => {
     process.env.PUBLISH_TOKEN = "test-token-123";
     const r = await fetch(`${base}/api/brief/publish`, {

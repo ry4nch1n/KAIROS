@@ -211,6 +211,13 @@ export interface BriefEdition extends BriefEditionMeta {
   payload: BriefPayload;
 }
 
+// Current "Standing Flags" (interests) steering the brief — curated on Notion,
+// mirrored read-only into KAIROS by the routine.
+export interface BriefSteering {
+  flags: string[];
+  updatedAt: string | null;
+}
+
 export interface GenreRow {
   genre: string;
   games: number;

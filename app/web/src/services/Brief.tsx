@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { BriefEditionMeta, BriefEdition, BriefNotable } from "shared";
+import type { BriefEditionMeta, BriefEdition, BriefNotable, BriefSteering } from "shared";
 import { api } from "../lib/api.ts";
 import { isSameWeek } from "../lib/week.ts";
 
@@ -63,6 +63,7 @@ export function Brief({ hidden }: { hidden: boolean }) {
   const [sel, setSel] = useState<string | null>(null);
   const [ed, setEd] = useState<BriefEdition | null>(null);
   const [loaded, setLoaded] = useState(false);
+  const [steering, setSteering] = useState<BriefSteering | null>(null);
 
   useEffect(() => {
     api.briefEditions().then((l) => {
@@ -70,6 +71,7 @@ export function Brief({ hidden }: { hidden: boolean }) {
       setLoaded(true);
       if (l.length) setSel(l[0].editionDate);
     });
+    api.briefSteering().then(setSteering, () => setSteering(null));
   }, []);
 
   useEffect(() => {
@@ -103,6 +105,13 @@ export function Brief({ hidden }: { hidden: boolean }) {
         {thisWeek.map(editionRow)}
         {earlier.length > 0 && <div className="nav-label">Earlier</div>}
         {earlier.map(editionRow)}
+        {steering && steering.flags.length > 0 && (
+          <div className="steer">
+            <div className="nav-label">Steering this brief</div>
+            <ul className="steer-list">{steering.flags.map((f, i) => <li key={i}>{f}</li>)}</ul>
+            <div className="steer-note">curated on Notion · synced each run</div>
+          </div>
+        )}
         <div className="side-foot"><span className="pulse"></span>Auto-published<br />Routine: indie-brief</div>
       </aside>
 
