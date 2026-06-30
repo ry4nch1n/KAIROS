@@ -135,6 +135,10 @@ describe("parseReleaseDate", () => {
   it("parses Steam's display date to ISO", () => {
     expect(parseReleaseDate("17 Sep, 2020")).toBe("2020-09-17");
   });
+  it("parses month-first en-US format", () => {
+    expect(parseReleaseDate("Mar 25, 2025")).toBe("2025-03-25");
+    expect(parseReleaseDate("Sep 17, 2020")).toBe("2020-09-17");
+  });
   it("null for coming-soon / unparseable", () => {
     expect(parseReleaseDate("")).toBeNull();
     expect(parseReleaseDate("Coming soon")).toBeNull();

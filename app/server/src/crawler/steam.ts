@@ -53,14 +53,22 @@ const MONTHS: Record<string, string> = {
   jan: "01", feb: "02", mar: "03", apr: "04", may: "05", jun: "06",
   jul: "07", aug: "08", sep: "09", oct: "10", nov: "11", dec: "12",
 };
-/** Steam release_date.date is a display string like "17 Sep, 2020". Return ISO or null. */
+/** Steam release_date.date — handles both "17 Sep, 2020" (intl) and "Mar 25, 2025" (en-US). */
 export function parseReleaseDate(s: string | null | undefined): string | null {
   if (!s) return null;
-  const m = s.match(/(\d{1,2})\s+([A-Za-z]{3})[A-Za-z]*,?\s+(\d{4})/);
-  if (!m) return null;
-  const mm = MONTHS[m[2].toLowerCase()];
-  if (!mm) return null;
-  return `${m[3]}-${mm}-${String(m[1]).padStart(2, "0")}`;
+  // Day-first: "17 Sep, 2020"
+  const dayFirst = s.match(/(\d{1,2})\s+([A-Za-z]{3})[A-Za-z]*,?\s+(\d{4})/);
+  if (dayFirst) {
+    const mm = MONTHS[dayFirst[2].toLowerCase()];
+    if (mm) return `${dayFirst[3]}-${mm}-${String(dayFirst[1]).padStart(2, "0")}`;
+  }
+  // Month-first: "Mar 25, 2025"
+  const monFirst = s.match(/([A-Za-z]{3})[A-Za-z]*\s+(\d{1,2}),?\s+(\d{4})/);
+  if (monFirst) {
+    const mm = MONTHS[monFirst[1].toLowerCase()];
+    if (mm) return `${monFirst[3]}-${mm}-${String(monFirst[2]).padStart(2, "0")}`;
+  }
+  return null;
 }
 
 /** Top-N SteamSpy tags by weight (the rich genre-like signal). */
