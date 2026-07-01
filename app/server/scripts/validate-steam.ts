@@ -52,17 +52,17 @@ console.table(sample.slice(0, 8));
 // pipeline produced fresh, correctly-classified data — the class of bug shape-tests miss.
 const comparables = await getSteamComparables(db, 14);
 const aaaN = tiers.find((t) => t.tier === "aaa")?.games ?? 0;
+// The validator crawls one fresh sample, so the whole sample IS the fresh cohort.
 const dq = assessSteamDataQuality(
   {
-    total: games.length,
+    crawled: games.length,
     withDate: games.filter((g) => g.releaseDate).length,
     rated: games.filter((g) => g.rating != null).length,
     indie: games.length - aaaN,
     comparables: comparables.length,
   },
-  // The validator crawls a small sample (STEAM_VALIDATE_LIMIT), so scale the size floors down;
-  // the fill/recency ratios stay meaningful.
-  { minTotal: Math.min(10, games.length), minDateFill: 0.5, minRatedFill: 0.4, minIndie: 3, minComparables: 1 }
+  // Small sample (STEAM_VALIDATE_LIMIT) — scale the size floors down; fill ratios stay meaningful.
+  { minCrawled: Math.min(10, games.length), minDateFill: 0.5, minRatedFill: 0.4, minIndie: 3, minComparables: 1 }
 );
 console.log("\nE5 data-quality:", dq.metrics, dq.ok ? "✅" : "❌");
 console.log("E5 comparables (recent, indie):", comparables.map((c) => `${c.releaseDate ?? "—"} ${c.title}`).slice(0, 8));

@@ -13,24 +13,34 @@ const GOLDEN_AAA = new Set(["730", "578080"]);        // CS2 (Valve), PUBG (Kraf
 (async () => {
   const db = await appDb();
 
+  // Accuracy/seed checks over the FRESHEST crawl cohort (games whose latest snapshot is from
+  // the most recent crawl day) — not the whole append-only DB, whose legacy rows keep null
+  // dates a single crawl can't fix and would false-fail the gate forever.
   const agg = (await db.query(
-    `SELECT count(*)::int AS total,
-            count(*) FILTER (WHERE g.release_date IS NOT NULL)::int AS with_date,
-            count(*) FILTER (WHERE l.rating IS NOT NULL)::int AS rated,
-            count(*) FILTER (WHERE l.scale_tier IS NULL OR l.scale_tier <> 'aaa')::int AS indie
-     FROM v_latest l JOIN games g ON g.id = l.game_id JOIN sources s ON s.id = g.source_id
-     WHERE g.is_live AND s.name = 'steam'`
+    `WITH steam AS (
+       SELECT l.*, g.release_date
+       FROM v_latest l JOIN games g ON g.id = l.game_id JOIN sources s ON s.id = g.source_id
+       WHERE g.is_live AND s.name = 'steam'
+     ), fresh AS (
+       SELECT * FROM steam WHERE captured_at::date = (SELECT max(captured_at::date) FROM steam)
+     )
+     SELECT count(*)::int AS crawled,
+            count(*) FILTER (WHERE release_date IS NOT NULL)::int AS with_date,
+            count(*) FILTER (WHERE rating IS NOT NULL)::int AS rated,
+            count(*) FILTER (WHERE scale_tier IS NULL OR scale_tier <> 'aaa')::int AS indie
+     FROM fresh`
   ))[0];
 
+  // Comparables is the actual queryable UI output over ALL live Steam games.
   const comparables = await getSteamComparables(db, 14);
   const res = assessSteamDataQuality({
-    total: Number(agg.total), withDate: Number(agg.with_date),
+    crawled: Number(agg.crawled), withDate: Number(agg.with_date),
     rated: Number(agg.rated), indie: Number(agg.indie), comparables: comparables.length,
   });
 
   const m = res.metrics;
-  console.log("Steam data-quality:", {
-    total: m.total, dateFill: `${Math.round(m.dateFillPct * 100)}%`,
+  console.log("Steam data-quality (latest crawl cohort):", {
+    crawled: m.crawled, dateFill: `${Math.round(m.dateFillPct * 100)}%`,
     rated: `${Math.round(m.ratedPct * 100)}%`, indie: m.indie, comparables: m.comparables,
   });
 

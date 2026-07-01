@@ -110,13 +110,15 @@ Added 2026-06-30. The primary Phase 2 goal: ingest PC Steam data as a new `'stea
 
 **Mechanism.** `assessSteamDataQuality` (pure, unit-tested — see DQ) encodes the invariants; `server/scripts/check-steam-data.ts` runs them against the live DB plus golden-appid spot-checks and exits non-zero on failure. Wired as the **final step of the daily crawl** (`crawl.yml`) so a degenerate crawl turns the run **red** instead of looking green. Run locally with `npm run check:steam`.
 
+F1–F4 are measured over the **freshest crawl cohort** (games whose latest snapshot is from the most recent crawl day), not the whole append-only DB — legacy rows keep null dates a single crawl can't fix, so all-time measurement would false-fail forever. F5 is the exception: the actual queryable UI output over all live Steam games.
+
 | # | Invariant | Fails when | Status |
 |---|---|---|---|
-| F1 | crawl produced data | `total < 50` Steam games | ⬜ |
-| F2 | date accuracy | `release_date` fill `< 50%` (date parser / locale regression) | ⬜ |
-| F3 | rating fill | rating fill `< 40%` | ⬜ |
-| F4 | indie cohort non-degenerate | `indie (non-aaa) < 15` (empty indie seed → all-AAA, or scale-as-AAA over-classification) | ⬜ |
-| F5 | recent comparables populated | `getSteamComparables < 3` (recency window / seed-recency regression) | ⬜ |
+| F1 | crawl produced data | latest crawl `< 50` games | ⬜ |
+| F2 | date accuracy | `release_date` fill `< 50%` of the fresh cohort (date parser / locale regression) | ⬜ |
+| F3 | rating fill | rating fill `< 40%` of the fresh cohort | ⬜ |
+| F4 | indie cohort non-degenerate | fresh-cohort `indie (non-aaa) < 15` (empty indie seed → all-AAA, or scale-as-AAA over-classification) | ⬜ |
+| F5 | recent comparables populated | `getSteamComparables < 3` over all live Steam (recency window / seed-recency regression) | ⬜ |
 | F6 | golden classifications | Hades (1145360) is `aaa`, or CS2 (730) / PUBG (578080) is not `aaa` | ⬜ |
 
 Thresholds are deliberately conservative (fire only on genuine degeneracy, not normal variance) and live in one place (`DEFAULT_STEAM_QUALITY`). The gate **detects, not prevents** — the append-only load has already happened — but a red run surfaces the exact silent-bad-data failure mode a green crawl would hide.
