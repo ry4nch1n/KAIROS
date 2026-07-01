@@ -10,6 +10,7 @@
     "crawl:crazygames": "tsx src/crawler/run.ts crazygames",
     "crawl:poki": "tsx src/crawler/run.ts poki",
     "crawl:steam": "tsx src/crawler/run.ts steam",
+    "backfill:tiers": "tsx scripts/backfill-major-tiers.ts",
     "test": "vitest run"
   },
   "dependencies": {

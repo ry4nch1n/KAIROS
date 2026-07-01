@@ -1,0 +1,23 @@
+name: Backfill Major Tiers
+# One-off / maintenance: re-classify existing Steam rows whose developer is a major backer
+# (e.g. Sucker Punch → Ghost of Tsushima) to scale_tier='aaa'. Idempotent — safe to re-run.
+# Manual only. Runs in CI because the Neon DATABASE_URL secret is masked for local dev:exec.
+on:
+  workflow_dispatch: {}
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: npm install
+      - name: Promote major-backed Steam rows to aaa in Neon
+        run: npm run backfill:tiers
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}

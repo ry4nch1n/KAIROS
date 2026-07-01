@@ -17,6 +17,7 @@
     "crawl:crazygames": "npm -w server run crawl:crazygames",
     "crawl:poki": "npm -w server run crawl:poki",
     "crawl:steam": "npm -w server run crawl:steam",
+    "backfill:tiers": "npm -w server run backfill:tiers",
     "test": "npm -w server run test && npm -w web run test"
   },
   "devDependencies": {
