@@ -546,11 +546,13 @@ export async function getSteamGenreEconomics(
   }));
 }
 
-// Indie-tier rated games — the realistic "comparables" peer set. Ordered by release date
-// (newest first), floored at 2024-01-01 so only recent titles appear, with an owners
-// floor so games shown still have real traction.
+// Indie-tier rated games — the realistic "comparables" peer set, focused on RECENT releases:
+// a rolling ~2-year window (start of the current year minus 2 → 2024-01-01 today, keeping all
+// of 2024 incl. Balatro; rolls forward automatically each year). Ordered newest first, with an
+// owners floor so games shown still have real traction. Older classics are intentionally
+// dropped here — the crawl seeds from indie TOP SELLERS so the recent set stays well populated.
 const COMPARABLE_OWNERS_FLOOR = 20_000;
-const COMPARABLE_DATE_FLOOR = "2024-01-01";
+const COMPARABLE_RECENCY_YEARS = 2;
 export async function getSteamComparables(db: Querier, limit = 12): Promise<SteamComparable[]> {
   const rows = await db.query(
     `SELECT g.title, l.scale_tier AS tier, l.genre, l.rating, l.votes,
@@ -559,7 +561,7 @@ export async function getSteamComparables(db: Querier, limit = 12): Promise<Stea
      WHERE g.is_live AND src.name = 'steam' AND l.rating IS NOT NULL
        AND (l.scale_tier IS NULL OR l.scale_tier <> 'aaa')
        AND coalesce(l.owners_est, 0) >= ${COMPARABLE_OWNERS_FLOOR}
-       AND g.release_date >= '${COMPARABLE_DATE_FLOOR}'
+       AND g.release_date >= (date_trunc('year', CURRENT_DATE) - INTERVAL '${COMPARABLE_RECENCY_YEARS} years')
      ORDER BY g.release_date DESC NULLS LAST, l.owners_est DESC NULLS LAST
      LIMIT $1`,
     [limit]

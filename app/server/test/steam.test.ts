@@ -5,6 +5,7 @@ import { freshMemoryDb, applySchema, type Querier } from "../src/db/db.ts";
 import {
   parseOwners, normalizeSteamRating, classifyScaleTier, isMajorBacked,
   isSelfPublished, parseReleaseDate, parseSteamGame, STEAM_BASE_URL, mergeSeeds, appDetailsUrl,
+  rankTagByOwners, INDIE_CANON, parseSearchAppids,
 } from "../src/crawler/steam.ts";
 import { loadGames } from "../src/crawler/load.ts";
 import { crazygames } from "../src/crawler/crazygames.ts";
@@ -61,6 +62,49 @@ describe("D2b mergeSeeds — round-robin so indie coverage survives a small limi
   });
 });
 
+describe("D2c rankTagByOwners — owners-desc, NOT Object.keys appid order", () => {
+  it("ranks a SteamSpy tag object by estimated owners, ignoring key order", () => {
+    // Keys are ascending-appid (what Object.keys would yield); owners are the opposite order.
+    const tagJson = {
+      "50": { appid: 50, name: "Ancient Obscure Indie", owners: "20,000 .. 50,000" },
+      "646570": { appid: 646570, name: "Slay the Spire", owners: "5,000,000 .. 10,000,000" },
+      "2379780": { appid: 2379780, name: "Balatro", owners: "2,000,000 .. 5,000,000" },
+    };
+    // Object.keys order would put appid 50 first; owners ranking must put it last.
+    expect(rankTagByOwners(tagJson)).toEqual([646570, 2379780, 50]);
+  });
+  it("tolerates empty / malformed input", () => {
+    expect(rankTagByOwners({})).toEqual([]);
+    expect(rankTagByOwners(undefined as any)).toEqual([]);
+  });
+});
+
+describe("D2e parseSearchAppids — appids from Steam store-search results_html", () => {
+  it("extracts and dedups data-ds-appid attributes in order", () => {
+    const html = `
+      <a data-ds-appid="4704690"><span class="title">MECCHA CHAMELEON</span></a>
+      <a data-ds-appid="1623730"><span class="title">Palworld</span></a>
+      <a data-ds-appid="4704690"><span class="title">dup ignored</span></a>`;
+    expect(parseSearchAppids(html)).toEqual([4704690, 1623730]);
+  });
+  it("returns [] for empty/malformed html", () => {
+    expect(parseSearchAppids("")).toEqual([]);
+    expect(parseSearchAppids(undefined as any)).toEqual([]);
+  });
+});
+
+describe("D2d INDIE_CANON — recognizable benchmarks are always seedable", () => {
+  it("includes the modern indie hits users compare against", () => {
+    expect(INDIE_CANON).toContain(646570);  // Slay the Spire
+    expect(INDIE_CANON).toContain(1145360); // Hades
+    expect(INDIE_CANON).toContain(2379780); // Balatro
+    // canon is seeded first so a small round-robin limit still keeps them all
+    expect(mergeSeeds([INDIE_CANON, [1, 2, 3]], 8)).toEqual(
+      expect.arrayContaining([646570, 1145360, 2379780])
+    );
+  });
+});
+
 describe("D2 parseOwners (SteamSpy bucket → midpoint estimate)", () => {
   it("takes the midpoint of a range", () => {
     expect(parseOwners("5,000,000 .. 10,000,000")).toBe(7_500_000);
@@ -109,10 +153,15 @@ describe("D4 classifyScaleTier", () => {
     expect(classifyScaleTier({ reviews: 300, owners: 20_000, selfPublished: true })).toBe("hobby");
     expect(classifyScaleTier({ reviews: 5_000, owners: 100_000, selfPublished: true })).toBe("small_indie");
     expect(classifyScaleTier({ reviews: 50_000, owners: 800_000, selfPublished: false })).toBe("est_indie");
-    expect(classifyScaleTier({ reviews: 282_133, owners: 7_500_000, selfPublished: true })).toBe("aaa");
   });
   it("a publisher-backed title is at least small_indie", () => {
     expect(classifyScaleTier({ reviews: 100, owners: 10_000, selfPublished: false })).toBe("small_indie");
+  });
+  it("a self-published breakout is est_indie, NOT aaa (scale != AAA)", () => {
+    // Hades-scale: 282k reviews, 7.5M owners, self-published (Supergiant) — a huge INDIE hit.
+    expect(classifyScaleTier({ reviews: 282_133, owners: 7_500_000, selfPublished: true })).toBe("est_indie");
+    // Terraria-scale self-pub megahit stays est_indie too.
+    expect(classifyScaleTier({ reviews: 1_000_000, owners: 35_000_000, selfPublished: true })).toBe("est_indie");
   });
   it("a major-backed title is aaa even at modest Steam scale (console port)", () => {
     // Ghost of Tsushima DIRECTOR'S CUT: 62k reviews, 3.5M owners — below scale thresholds,
@@ -143,7 +192,7 @@ describe("D5 parseSteamGame (Hades — 3 real fixtures → RawGame)", () => {
     expect(g.discountPct).toBe(75);
     expect(g.metacritic).toBe(93);
     expect(g.releaseDate).toBe("2020-09-17");
-    expect(g.scaleTier).toBe("aaa");
+    expect(g.scaleTier).toBe("est_indie"); // self-published megahit — a big INDIE, not AAA
     expect(g.tags.length).toBeGreaterThan(0);
     expect(g.tags).toContain("Action Roguelike");
   });
@@ -183,7 +232,7 @@ describe("D7 loader persists Steam fields", () => {
     expect(Number(s.owners_est)).toBe(7_500_000);
     expect(Number(s.plays)).toBe(7_500_000);
     expect(Number(s.metacritic)).toBe(93);
-    expect(s.scale_tier).toBe("aaa");
+    expect(s.scale_tier).toBe("est_indie"); // self-published megahit — a big INDIE, not AAA
     expect(Number(s.votes)).toBe(282133);
     const g = (await db.query(`SELECT release_date, developer FROM games LIMIT 1`))[0];
     expect(new Date(g.release_date).toISOString().slice(0, 10)).toBe("2020-09-17");

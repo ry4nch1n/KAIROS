@@ -43,6 +43,7 @@ const TIERS: ScaleTier[] = ["hobby", "small_indie", "est_indie", "aaa"];
 // normalized substring; deliberately EXCLUDES indie-friendly publishers (Devolver, Annapurna,
 // Raw Fury, Team17, Coffee Stain, tinyBuild…) whose games ARE valid indie comps. Tune as needed.
 const MAJOR_BACKERS = [
+  "valve",
   "playstation", "sony interactive", "naughty dog", "sucker punch", "guerrilla",
   "insomniac", "santa monica studio", "polyphony", "bungie", "bend studio",
   "xbox game studios", "microsoft", "bethesda", "zenimax", "mojang", "343 industries",
@@ -63,17 +64,24 @@ export function isMajorBacked(developers: string[] = [], publishers: string[] = 
   return names.some((n) => MAJOR_BACKERS.some((m) => n.includes(m)));
 }
 
-/** Infer a market-scale tier (no budget field on Steam). Reviews are the best single proxy. */
+/**
+ * Infer a market-scale tier. KEY PRINCIPLE: "AAA" means major-publisher BACKING, not units sold.
+ * A self-published breakout (Terraria, Stardew, Hades, Balatro) is the ultimate INDIE success,
+ * not AAA — so scale alone never promotes a non-major-backed title past est_indie. This is what
+ * keeps the recognizable indie hits in the Comparables set instead of being filtered out as AAA.
+ */
 export function classifyScaleTier(x: {
   reviews: number; owners: number | null; selfPublished: boolean; majorBacked?: boolean;
 }): ScaleTier {
-  // Major-publisher backing overrides scale — a modest-selling console port is still AAA.
+  // Backing — not scale — defines AAA.
   if (x.majorBacked) return "aaa";
   const r = x.reviews || 0;
   const o = x.owners || 0;
   const byReviews = r > 150_000 ? 3 : r >= 20_000 ? 2 : r >= 2_000 ? 1 : 0;
   const byOwners = o > 5_000_000 ? 3 : o >= 500_000 ? 2 : o >= 50_000 ? 1 : 0;
   let t = Math.max(byReviews, byOwners);
+  // A non-major-backed hit, however large, is an ESTABLISHED INDIE — never AAA by scale alone.
+  if (t >= 3) t = 2;
   // a title with a distinct publisher has backing → at least small_indie
   if (!x.selfPublished && t < 1) t = 1;
   return TIERS[t];
@@ -155,6 +163,46 @@ export function parseSteamGame(
 
 const SEED_LIMIT_DEFAULT = 60;
 
+// Canonical indie benchmarks — always seeded FIRST so the Comparables peer set contains the
+// recognizable modern hits regardless of SteamSpy ranking drift (appids probe-verified).
+// Curated; extend freely. AAA-adjacent smashes (PUBG etc.) are excluded here — they surface
+// via the ranked stream and get tier-filtered by classifyScaleTier anyway.
+export const INDIE_CANON: number[] = [
+  2379780, // Balatro
+  1145360, // Hades
+  1145350, // Hades II
+  646570,  // Slay the Spire
+  1794680, // Vampire Survivors
+  367520,  // Hollow Knight
+  413150,  // Stardew Valley
+  105600,  // Terraria
+];
+
+/** Parse appids from a Steam store-search `results_html` fragment (data-ds-appid attributes). */
+export function parseSearchAppids(html: string): number[] {
+  const ids: number[] = [];
+  const re = /data-ds-appid="(\d+)"/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(html ?? ""))) {
+    const id = Number(m[1]);
+    if (Number.isFinite(id) && id > 0 && !ids.includes(id)) ids.push(id);
+  }
+  return ids;
+}
+
+/**
+ * Rank a SteamSpy tag response (an object keyed by appid) by estimated owners, descending.
+ * Critical: do NOT use Object.keys() — integer-like keys enumerate in ASCENDING NUMERIC order,
+ * which returns the oldest appids (obscure ancient games) and discards SteamSpy's owners ranking.
+ */
+export function rankTagByOwners(tagJson: Record<string, any>): number[] {
+  return Object.values(tagJson ?? {})
+    .map((g: any) => ({ appid: Number(g?.appid), owners: parseOwners(g?.owners) ?? 0 }))
+    .filter((g) => Number.isFinite(g.appid) && g.appid > 0)
+    .sort((a, b) => b.owners - a.owners)
+    .map((g) => g.appid);
+}
+
 /**
  * Round-robin merge of several seed lists into one deduped, limited list.
  * Round-robin (not concat-then-slice) is deliberate: the trending/top-seller lists
@@ -183,10 +231,22 @@ export async function seedAppIds(limit = SEED_LIMIT_DEFAULT): Promise<number[]> 
     try { return (await fn()).filter((n) => Number.isFinite(n) && n > 0); }
     catch (e) { console.warn(`seed ${label} failed:`, String(e)); return []; }
   };
-  // (1) Indie-targeted — counters the AAA skew of the lists below (priority for the indie cohort)
-  const indie = await fetchIds("tag=Indie", async () => {
-    const j = JSON.parse(await politeFetch(`${STEAMSPY}?request=tag&tag=Indie`));
-    return Object.keys(j).map(Number);
+  // (0) Recent + high-traction indies — Steam's TOP-SELLING Indie-tagged titles (tags=492).
+  // This is the primary recency lever: top sellers skew to what's selling NOW, and the 2-year
+  // Comparables window then keeps only the recent ones (filters out evergreen classics like
+  // Terraria/Stardew that also chart). Released_DESC was rejected — it's near-zero-owner shovelware.
+  const recent = await fetchIds("search topsellers Indie", async () => {
+    const url = `${STORE}/search/results/?query&start=0&count=100&filter=topsellers`
+      + `&tags=492&category1=998&supportedlang=english&infinite=1&json=1&cc=us&l=english`;
+    const j = JSON.parse(await politeFetch(url));
+    return parseSearchAppids(j?.results_html ?? "");
+  });
+  // (1) Indie breadth — SteamSpy Indie tag ranked by owners (all-time; broadens the mid-tier).
+  // NOTE: SteamSpy tags are case-sensitive — "Indie" returns {} (empty); "indie" is the real tag.
+  // Rank by owners (rankTagByOwners), NOT Object.keys, so we seed the top indie hits not the oldest.
+  const indie = await fetchIds("tag=indie", async () => {
+    const j = JSON.parse(await politeFetch(`${STEAMSPY}?request=tag&tag=indie`));
+    return rankTagByOwners(j);
   });
   // (2) SteamSpy trending — broad demand context, CCU-weighted (AAA-heavy)
   const trending = await fetchIds("top100in2weeks", async () => {
@@ -202,7 +262,9 @@ export async function seedAppIds(limit = SEED_LIMIT_DEFAULT): Promise<number[]> 
     }
     return ids;
   });
-  return mergeSeeds([indie, trending, featured], limit);
+  // Canon first (recognizable benchmarks always present) → recent top-sellers (the recency
+  // focus) → trending/featured for demand context → owners-ranked indie breadth last.
+  return mergeSeeds([INDIE_CANON, recent, trending, featured, indie], limit);
 }
 
 /** Store appdetails URL. l=english fixes locale leakage (genres came back as e.g. "Ação");
