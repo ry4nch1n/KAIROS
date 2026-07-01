@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { freshMemoryDb, applySchema, type Querier } from "../src/db/db.ts";
 import {
-  parseOwners, normalizeSteamRating, classifyScaleTier,
+  parseOwners, normalizeSteamRating, classifyScaleTier, isMajorBacked,
   isSelfPublished, parseReleaseDate, parseSteamGame, STEAM_BASE_URL, mergeSeeds, appDetailsUrl,
 } from "../src/crawler/steam.ts";
 import { loadGames } from "../src/crawler/load.ts";
@@ -93,6 +93,17 @@ describe("D6 isSelfPublished", () => {
   });
 });
 
+describe("D6c isMajorBacked", () => {
+  it("true for a mega-publisher / first-party label", () => {
+    expect(isMajorBacked(["Sucker Punch Productions"], ["PlayStation Publishing LLC"])).toBe(true);
+    expect(isMajorBacked(["DICE"], ["Electronic Arts"])).toBe(true);
+  });
+  it("false for indie devs and indie-friendly publishers", () => {
+    expect(isMajorBacked(["tobyfox"], [])).toBe(false);
+    expect(isMajorBacked(["Some Studio"], ["Devolver Digital"])).toBe(false);
+  });
+});
+
 describe("D4 classifyScaleTier", () => {
   it("classifies by review/owner scale", () => {
     expect(classifyScaleTier({ reviews: 300, owners: 20_000, selfPublished: true })).toBe("hobby");
@@ -102,6 +113,13 @@ describe("D4 classifyScaleTier", () => {
   });
   it("a publisher-backed title is at least small_indie", () => {
     expect(classifyScaleTier({ reviews: 100, owners: 10_000, selfPublished: false })).toBe("small_indie");
+  });
+  it("a major-backed title is aaa even at modest Steam scale (console port)", () => {
+    // Ghost of Tsushima DIRECTOR'S CUT: 62k reviews, 3.5M owners — below scale thresholds,
+    // but Sony first-party → not an indie comparable.
+    expect(classifyScaleTier({
+      reviews: 61_939, owners: 3_500_000, selfPublished: false, majorBacked: true,
+    })).toBe("aaa");
   });
 });
 

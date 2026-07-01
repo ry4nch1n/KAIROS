@@ -37,8 +37,38 @@ export function isSelfPublished(developers: string[] = [], publishers: string[] 
 export type ScaleTier = "hobby" | "small_indie" | "est_indie" | "aaa";
 const TIERS: ScaleTier[] = ["hobby", "small_indie", "est_indie", "aaa"];
 
+// Mega-publishers and their first-party/wholly-owned studio labels. A title backed by any of
+// these is AAA regardless of Steam review/owner counts — a console port (e.g. a Sony first-party
+// game) can have modest Steam numbers yet is not a realistic indie comparable. Match is a
+// normalized substring; deliberately EXCLUDES indie-friendly publishers (Devolver, Annapurna,
+// Raw Fury, Team17, Coffee Stain, tinyBuild…) whose games ARE valid indie comps. Tune as needed.
+const MAJOR_BACKERS = [
+  "playstation", "sony interactive", "naughty dog", "sucker punch", "guerrilla",
+  "insomniac", "santa monica studio", "polyphony", "bungie", "bend studio",
+  "xbox game studios", "microsoft", "bethesda", "zenimax", "mojang", "343 industries",
+  "the coalition", "id software", "arkane", "machinegames",
+  "nintendo",
+  "electronic arts", "ea sports", "ea dice", "bioware", "respawn",
+  "ubisoft",
+  "activision", "blizzard",
+  "take-two", "take two", "rockstar games", "2k games",
+  "square enix", "bandai namco", "capcom", "sega", "atlus",
+  "warner bros", "wb games", "epic games",
+  "tencent", "netease", "krafton", "nexon", "konami",
+  "hoyoverse", "mihoyo", "cognosphere", "cd projekt",
+];
+/** True if any developer or publisher is a known mega-publisher / first-party label. */
+export function isMajorBacked(developers: string[] = [], publishers: string[] = []): boolean {
+  const names = [...developers, ...publishers].map((n) => n.toLowerCase());
+  return names.some((n) => MAJOR_BACKERS.some((m) => n.includes(m)));
+}
+
 /** Infer a market-scale tier (no budget field on Steam). Reviews are the best single proxy. */
-export function classifyScaleTier(x: { reviews: number; owners: number | null; selfPublished: boolean }): ScaleTier {
+export function classifyScaleTier(x: {
+  reviews: number; owners: number | null; selfPublished: boolean; majorBacked?: boolean;
+}): ScaleTier {
+  // Major-publisher backing overrides scale — a modest-selling console port is still AAA.
+  if (x.majorBacked) return "aaa";
   const r = x.reviews || 0;
   const o = x.owners || 0;
   const byReviews = r > 150_000 ? 3 : r >= 20_000 ? 2 : r >= 2_000 ? 1 : 0;
@@ -90,6 +120,7 @@ export function parseSteamGame(
   const totalReviews = Number(reviewSummary?.total_reviews ?? 0);
   const positive = Number(reviewSummary?.total_positive ?? 0);
   const selfPublished = isSelfPublished(developers, publishers);
+  const majorBacked = isMajorBacked(developers, publishers);
   const price = appData?.price_overview;
   const tags = topTags(steamspy?.tags);
 
@@ -116,7 +147,7 @@ export function parseSteamGame(
     ccu: steamspy?.ccu != null ? Number(steamspy.ccu) : null,
     medianPlaytimeMin: steamspy?.median_forever != null ? Number(steamspy.median_forever) : null,
     metacritic: appData?.metacritic?.score ?? null,
-    scaleTier: classifyScaleTier({ reviews: totalReviews, owners, selfPublished }),
+    scaleTier: classifyScaleTier({ reviews: totalReviews, owners, selfPublished, majorBacked }),
   };
 }
 
