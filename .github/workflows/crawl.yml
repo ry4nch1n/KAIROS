@@ -44,3 +44,11 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           CRAWL_LIMIT: "200"
+      # Recency + accuracy gate: fails the run (loud alert) if the crawl produced degenerate
+      # data (empty indie seed → all-AAA, broken date parser → null dates, collapsed
+      # comparables). Append-only load already happened, so this detects rather than prevents —
+      # but a red run surfaces the silent-bad-data failure mode that "green crawl" would hide.
+      - name: Steam data-quality gate (recency + accuracy)
+        run: npm run check:steam
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}

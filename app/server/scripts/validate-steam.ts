@@ -6,7 +6,8 @@ import { writeFileSync } from "node:fs";
 import { makePglite, applySchema } from "../src/db/db.ts";
 import { steamCrawl } from "../src/crawler/steam.ts";
 import { loadGames } from "../src/crawler/load.ts";
-import { getScaleTierBreakdown, getSteamGenreEconomics } from "../src/queries/index.ts";
+import { getScaleTierBreakdown, getSteamGenreEconomics, getSteamComparables } from "../src/queries/index.ts";
+import { assessSteamDataQuality } from "../src/checks/steamDataQuality.ts";
 
 const limit = Number(process.env.STEAM_VALIDATE_LIMIT || 10);
 const db = await makePglite();
@@ -47,14 +48,35 @@ console.table(indie.slice(0, 6).map((r) => ({
 })));
 console.table(sample.slice(0, 8));
 
+// E5 — recency + accuracy gate (same invariants as the post-crawl canary). Asserts the live
+// pipeline produced fresh, correctly-classified data — the class of bug shape-tests miss.
+const comparables = await getSteamComparables(db, 14);
+const aaaN = tiers.find((t) => t.tier === "aaa")?.games ?? 0;
+const dq = assessSteamDataQuality(
+  {
+    total: games.length,
+    withDate: games.filter((g) => g.releaseDate).length,
+    rated: games.filter((g) => g.rating != null).length,
+    indie: games.length - aaaN,
+    comparables: comparables.length,
+  },
+  // The validator crawls a small sample (STEAM_VALIDATE_LIMIT), so scale the size floors down;
+  // the fill/recency ratios stay meaningful.
+  { minTotal: Math.min(10, games.length), minDateFill: 0.5, minRatedFill: 0.4, minIndie: 3, minComparables: 1 }
+);
+console.log("\nE5 data-quality:", dq.metrics, dq.ok ? "✅" : "❌");
+console.log("E5 comparables (recent, indie):", comparables.map((c) => `${c.releaseDate ?? "—"} ${c.title}`).slice(0, 8));
+if (!dq.ok) dq.failures.forEach((f) => console.error("   - " + f));
+
 const out = {
   generatedAtUTC: new Date().toISOString(),
   limit, parsed: games.length, inserted: res.inserted,
   fill, tiers, cohort: { indie: indieN, all: allN },
   indieEconomics: indie, allEconomics: all, sample,
+  dataQuality: dq, comparables,
 };
 if (process.env.STEAM_DUMP_JSON) {
   writeFileSync(process.env.STEAM_DUMP_JSON, JSON.stringify(out, null, 2));
   console.log("wrote", process.env.STEAM_DUMP_JSON);
 }
-process.exit(0);
+process.exit(dq.ok ? 0 : 1);

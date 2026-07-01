@@ -11,6 +11,7 @@
     "crawl:poki": "tsx src/crawler/run.ts poki",
     "crawl:steam": "tsx src/crawler/run.ts steam",
     "backfill:tiers": "tsx scripts/backfill-major-tiers.ts",
+    "check:steam": "tsx scripts/check-steam-data.ts",
     "test": "vitest run"
   },
   "dependencies": {

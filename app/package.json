@@ -18,6 +18,7 @@
     "crawl:poki": "npm -w server run crawl:poki",
     "crawl:steam": "npm -w server run crawl:steam",
     "backfill:tiers": "npm -w server run backfill:tiers",
+    "check:steam": "npm -w server run check:steam",
     "test": "npm -w server run test && npm -w web run test"
   },
   "devDependencies": {

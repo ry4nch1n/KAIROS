@@ -78,7 +78,12 @@ Added 2026-06-30. The primary Phase 2 goal: ingest PC Steam data as a new `'stea
 | D1 | schema has Steam columns | fresh PGlite has `games.release_date` + `game_snapshots.{price_cents,discount_pct,owners_est,ccu,median_playtime_min,metacritic,scale_tier,plays}`; re-applying schema is idempotent | ⬜ |
 | D2 | `parseOwners` | SteamSpy `"5,000,000 .. 10,000,000"` → midpoint `7,500,000`; handles single + malformed → null | ⬜ |
 | D3 | `normalizeSteamRating` | `276574/282133` → `4.90` on a 0–5 scale; 0 reviews → null | ⬜ |
-| D4 | `classifyScaleTier` | self-published + low reviews → `hobby`/`small_indie`; big publisher or >150k reviews/ >5M owners → `aaa`; boundary cases correct | ⬜ |
+| D4 | `classifyScaleTier` | **AAA = publisher backing, not units sold.** A self-published breakout (Hades/Terraria-scale) caps at `est_indie`; only a major-backed title (via `isMajorBacked`) is `aaa`; small self-pub → `hobby`/`small_indie` | ⬜ |
+| D2c | `rankTagByOwners` | ranks a SteamSpy tag object by estimated owners **desc**, NOT `Object.keys` appid order (which returns oldest games) | ⬜ |
+| D2e | `parseSearchAppids` | extracts + dedups `data-ds-appid` from a Steam store-search `results_html` fragment | ⬜ |
+| D6c | `isMajorBacked` | mega-publisher / first-party label (Sony, Valve, EA…) → true; indie-friendly publisher (Devolver…) → false | ⬜ |
+| DR | `parseReleaseDate` | **both** day-first (`"17 Sep, 2020"`) and month-first (`"Mar 25, 2025"`) display strings → ISO; coming-soon → null | ⬜ |
+| DQ | `assessSteamDataQuality` | flags all-null dates, all-AAA (empty indie seed), collapsed comparables, near-empty crawl; passes a healthy sample | ⬜ |
 | D5 | `parseSteamGame` (Hades fixture) | maps 3 endpoints → RawGame: rating 4.90, votes 282133, ownersEst 7.5M, price 550¢, developer "Supergiant Games", tags from SteamSpy, genre, releaseDate, scaleTier valid | ⬜ |
 | D6 | self-published detection | publisher ⊆ developer (or empty) ⇒ `selfPublished=true`; distinct big publisher ⇒ false | ⬜ |
 | D7 | loader persists Steam fields | loading a Steam RawGame writes price/owners/ccu/tier/plays into `game_snapshots`; browser path unaffected (new cols null) | ⬜ |
@@ -91,12 +96,30 @@ Added 2026-06-30. The primary Phase 2 goal: ingest PC Steam data as a new `'stea
 
 | # | Check | Pass criterion | Status |
 |---|---|---|---|
-| E1 | live seed | `seedAppIds()` returns a deduped appid list from SteamSpy top100in2weeks + featuredcategories (broad) **and** the `tag=Indie` stream (indie coverage) | ⬜ |
+| E1 | live seed | `seedAppIds()` returns a deduped, owners-ranked list: indie **top-sellers** (recency) + `tag=indie` (**lowercase** — case-sensitive; owners-ranked via `rankTagByOwners`, not appid-order) + trending + featured + `INDIE_CANON`. The **indie stream is non-empty** (guards the `tag=Indie` empty-response bug) | ⬜ |
 | E2 | live enrich→load | crawling N real appids into a fresh PGlite inserts N snapshots with non-null rating/votes/owners/price for the majority | ⬜ |
 | E3 | indie analytics on real data | `getSteamGenreEconomics` over the live sample yields sane rows (positive owners, price in cents, revenue proxy), indie cohort < full cohort | ⬜ |
 | E4 | tier distribution sane | live sample spans ≥2 tiers; AAA share excluded from indie-default analytics | ⬜ |
+| E5 | **recency + accuracy gate** | live sample: `release_date` non-null for the **majority** (guards the date-parser/locale regression); indie cohort **non-degenerate** (not all-AAA); `getSteamComparables` **populated** and every row within the recency window; golden appids classify correctly (Hades → indie-tier, CS2/PUBG → aaa). Same invariants as the §F canary. | ⬜ |
 
 **Deferred to a follow-on build (documented, not in this turn's DoD):** promotion-capture homepage crawl; React UI surfaces (Bridge / Comparables / Opportunity board, Steam platform selector); daily `crawl.yml` wiring. The data layer this turn must be production-shaped so those land cleanly.
+
+## F. Ongoing data-quality canary (post-crawl gate) — added 2026-07-01
+
+**Why this layer exists.** The A/D tests validate *shape* (right columns, deduped, platform-isolated); they cannot see *stale or wrong data*. Every recency/accuracy bug shipped this session slipped through green suites: a crawl "succeeded" while the indie seed was silently empty (all-AAA fallback), a broken date parser left `release_date` all-null, and Comparables collapsed to two rows. Data bugs also regress **after** merge when the upstream (Steam/SteamSpy) changes — locale leaks, API/tag changes, ranking shifts. A one-time test can't catch that; a standing gate can.
+
+**Mechanism.** `assessSteamDataQuality` (pure, unit-tested — see DQ) encodes the invariants; `server/scripts/check-steam-data.ts` runs them against the live DB plus golden-appid spot-checks and exits non-zero on failure. Wired as the **final step of the daily crawl** (`crawl.yml`) so a degenerate crawl turns the run **red** instead of looking green. Run locally with `npm run check:steam`.
+
+| # | Invariant | Fails when | Status |
+|---|---|---|---|
+| F1 | crawl produced data | `total < 50` Steam games | ⬜ |
+| F2 | date accuracy | `release_date` fill `< 50%` (date parser / locale regression) | ⬜ |
+| F3 | rating fill | rating fill `< 40%` | ⬜ |
+| F4 | indie cohort non-degenerate | `indie (non-aaa) < 15` (empty indie seed → all-AAA, or scale-as-AAA over-classification) | ⬜ |
+| F5 | recent comparables populated | `getSteamComparables < 3` (recency window / seed-recency regression) | ⬜ |
+| F6 | golden classifications | Hades (1145360) is `aaa`, or CS2 (730) / PUBG (578080) is not `aaa` | ⬜ |
+
+Thresholds are deliberately conservative (fire only on genuine degeneracy, not normal variance) and live in one place (`DEFAULT_STEAM_QUALITY`). The gate **detects, not prevents** — the append-only load has already happened — but a red run surfaces the exact silent-bad-data failure mode a green crawl would hide.
 
 ---
 
@@ -180,3 +203,20 @@ Steam wired into the live GameRadar dashboard as a fourth platform (selector All
 
 ### Phase 2 fix — `all` is browser-only (D15, 2026-06-30)
 **Bug caught via the live dashboard:** with Steam loaded, the browser "Genre vote-velocity" chart on platform `all` showed large fake negatives (Horror −513, Idle −225…). Cause: `pf("all")` returned no source filter, so Steam's single later crawl date (06-30, vs browser's 06-26) entered the shared date axis; `genreVotesByDate` zero-fills missing (genre,date) cells, so browser genres read as dropping to 0 on the Steam date → velocity `(0 − first)/days` went hugely negative (and Steam-only genres got fake positives). **Fix:** `pf("all")` = `src.name IN ('poki','crazygames')` — Steam is an asymmetric surface and never feeds browser analytics. Regression test **D15**. Post-fix: Horror −513 → +930, Steam genres absent from browser `all`, gamesTracked back to 120. Server suite now 64 green (86 total).
+
+---
+
+## Verification run — Recency & accuracy hardening (2026-07-01)
+
+**Context.** A batch of Steam Comparables defects surfaced in prod that the green suite hadn't caught — all **recency/accuracy** (data-wrong, shape-right), which the plan validated poorly. Root causes fixed: month-first `release_date` strings parsed to null; `classifyScaleTier` treated commercial scale as AAA (filtering out self-published hits like Hades/Balatro); the indie seed used `tag=Indie` (capital-I → SteamSpy returns `{}`, empty stream) and `Object.keys` appid-ordering (oldest games first); Comparables window too narrow on a sparsely-dated column. Recency seed added (indie top-sellers search); AAA redefined as **publisher backing, not scale**.
+
+**New coverage (this is the point):**
+- **Unit accuracy (§D):** `parseReleaseDate` both date formats (DR), `classifyScaleTier` backing-not-scale (D4), `isMajorBacked` (D6c), `rankTagByOwners` (D2c), `parseSearchAppids` (D2e), `assessSteamDataQuality` degeneracy detection (DQ, 6 cases).
+- **Live data-quality (§E5):** recency + parse-fill + tier-sanity + golden-appid asserts folded into `validate-steam.ts` (now exits non-zero on failure).
+- **Ongoing canary (§F):** `check:steam` gate wired as the daily crawl's final step — fails the run on empty indie seed, null-date epidemic, collapsed comparables, or a golden misclassification.
+
+**Automated: 115 green** (server **90** + web 25). New: `test/steamDataQuality.test.ts` (6) + the accuracy units above. Command `npm test`.
+
+**Canary validated against real crawled data (local, 60 games):** `total 60 · dateFill 100% · rated 80% · indie 45 · comparables 6` → **gate passed**; golden live: **PUBG=aaa, Hades=est_indie, CS2=aaa** (backing-not-scale semantics confirmed end-to-end).
+
+**Stale entries corrected (self-annealing):** D4 (was "scale → aaa") and E1 (was "`tag=Indie`" + old seed mix) now document the as-built behavior; they previously *encoded the bugs*.
