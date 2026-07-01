@@ -1,0 +1,22 @@
+name: Data Quality Check
+# On-demand Steam recency/accuracy gate against live Neon (the same check that runs at the end
+# of the daily crawl). Use to verify prod data health without waiting for or running a full crawl.
+on:
+  workflow_dispatch: {}
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: npm install
+      - name: Steam data-quality gate (recency + accuracy)
+        run: npm run check:steam
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
