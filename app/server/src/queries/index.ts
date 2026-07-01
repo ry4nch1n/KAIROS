@@ -547,9 +547,10 @@ export async function getSteamGenreEconomics(
 }
 
 // Indie-tier rated games — the realistic "comparables" peer set. Ordered by release date
-// (newest first) so the set skews recent rather than to long-tail classics, with an owners
-// floor so the recent games shown still have real traction.
+// (newest first), floored at 2024-01-01 so only recent titles appear, with an owners
+// floor so games shown still have real traction.
 const COMPARABLE_OWNERS_FLOOR = 20_000;
+const COMPARABLE_DATE_FLOOR = "2024-01-01";
 export async function getSteamComparables(db: Querier, limit = 12): Promise<SteamComparable[]> {
   const rows = await db.query(
     `SELECT g.title, l.scale_tier AS tier, l.genre, l.rating, l.votes,
@@ -558,6 +559,7 @@ export async function getSteamComparables(db: Querier, limit = 12): Promise<Stea
      WHERE g.is_live AND src.name = 'steam' AND l.rating IS NOT NULL
        AND (l.scale_tier IS NULL OR l.scale_tier <> 'aaa')
        AND coalesce(l.owners_est, 0) >= ${COMPARABLE_OWNERS_FLOOR}
+       AND g.release_date >= '${COMPARABLE_DATE_FLOOR}'
      ORDER BY g.release_date DESC NULLS LAST, l.owners_est DESC NULLS LAST
      LIMIT $1`,
     [limit]
