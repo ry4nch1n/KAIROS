@@ -12,9 +12,12 @@ export default async (req: Request, _context: Context) => {
   //  • GET /api/contract — non-sensitive taxonomy/versions, read by producers at run start.
   //  • POST /api/pitches — the weekly routine posts with its own bearer token (function-enforced),
   //    while GET /api/pitches (the private pitch data) stays behind the gate.
+  //  • DELETE /api/pitches/:slug — pitch curation (kairos-pitch skill / routines), bearer-enforced
+  //    in the function, same as POST; GET /api/pitches stays gated.
   const { pathname } = new URL(req.url);
   if (pathname === "/api/contract") return;
   if (req.method === "POST" && pathname === "/api/pitches") return;
+  if (req.method === "DELETE" && pathname.startsWith("/api/pitches/")) return;
 
   const user = Netlify.env.get("SITE_USER") || "kairos";
   const expected = "Basic " + btoa(`${user}:${password}`);
