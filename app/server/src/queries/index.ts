@@ -1003,3 +1003,9 @@ export async function publishPitch(db: Querier, p: PitchInput): Promise<void> {
     ]
   );
 }
+
+// Curation: remove a pitch by slug. Returns true if a row existed. Token-gated at the route.
+export async function deletePitch(db: Querier, slug: string): Promise<boolean> {
+  const rows = await db.query("DELETE FROM pitches WHERE slug = $1 RETURNING slug", [slug]);
+  return rows.length > 0;
+}
