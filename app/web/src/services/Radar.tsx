@@ -196,11 +196,12 @@ function GemsView({ ov, rows }: { ov: Overview; rows: HiddenGem[] | null }) {
   );
 }
 
+const TRAJ_LABEL: Record<string, string> = { rising: "▲ rising", plateau: "▬ plateau", decaying: "▼ decaying", new: "· new" };
 function NewReleasesView({ rows }: { rows: NewRelease[] }) {
   return (
-    <div className="card">{head(I.releases, "New Releases", `${rows.length} new in last 14 days`)}
-      <table className="dtable"><thead><tr><th>Game</th><th>Genre</th><th className="r">Rating</th><th className="r">Votes</th></tr></thead>
-        <tbody>{rows.map((r) => (<tr key={r.gameId}><td><a className="gname" href={r.url} target="_blank" rel="noreferrer">{r.title}</a></td><td>{r.genre}</td><td className="r">{r.rating ? r.rating.toFixed(2) : "—"}</td><td className="r">{fmt(r.votes)}</td></tr>))}</tbody></table>
+    <div className="card">{head(I.releases, "New Releases", `${rows.length} new in last 14 days · age-adjusted momentum`)}
+      <table className="dtable"><thead><tr><th>Game</th><th>Genre</th><th className="r">Rating</th><th className="r">Votes</th><th className="r" title="Votes gained per day over the tracked window — a rocket and a dead evergreen with equal total votes read differently here">Votes/day</th><th title="Later-half momentum vs earlier-half: rising / plateau / decaying">Trend</th></tr></thead>
+        <tbody>{rows.map((r) => (<tr key={r.gameId}><td><a className="gname" href={r.url} target="_blank" rel="noreferrer">{r.title}</a></td><td>{r.genre}</td><td className="r">{r.rating ? r.rating.toFixed(2) : "—"}</td><td className="r">{fmt(r.votes)}</td><td className="r">{r.votesPerDay > 0 ? "+" + fmt(r.votesPerDay) : "—"}</td><td><span className={"traj traj-" + r.trajectory}>{TRAJ_LABEL[r.trajectory] || r.trajectory}</span></td></tr>))}</tbody></table>
     </div>
   );
 }

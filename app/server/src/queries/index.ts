@@ -3,7 +3,7 @@ import type { Querier } from "../db/db.ts";
 import type {
   Platform, Overview, OverviewKPI, GenreMomentum, TagFreq, ScatterPoint,
   HiddenGem, MarketGap, FeatureHeatmap, Insight, BriefEditionMeta, BriefEdition,
-  GenreRow, DeveloperRow, NewRelease, GenreLandscapePoint, GenreVelocityBar, GlossaryRow, BriefSteering,
+  GenreRow, DeveloperRow, NewRelease, Trajectory, GenreLandscapePoint, GenreVelocityBar, GlossaryRow, BriefSteering,
   ScaleTierRow, SteamGenreEconomics, SteamCohort, SteamComparable, SteamOverview,
   SteamGap, SteamPriceBand, SteamOwnershipRow, SteamDeveloperRow, SteamNewRelease,
   Pitch, PitchInput,
@@ -165,6 +165,28 @@ function velocity(values: number[], daySpan: number): number {
   if (values.length < 2 || daySpan <= 0) return 0;
   const first = values[0], last = values[values.length - 1];
   return (last - first) / daySpan;
+}
+
+/**
+ * Age-adjusted momentum for one title from its vote time-series. Raw cumulative votes
+ * can't tell a fresh rocket (167K votes in two weeks, still climbing) from a dead
+ * evergreen (167K votes years ago, flat) — velocity can, and without a launch date:
+ * a corpse gains ~0 votes/day now, a rocket gains thousands. Trajectory compares the
+ * later half of the window to the earlier half so a title that spiked then stalled
+ * reads "decaying", not "rising".
+ */
+export function classifyTrajectory(series: number[], daySpan: number): { votesPerDay: number; trajectory: Trajectory } {
+  const pts = series.filter((v) => Number.isFinite(v));
+  if (pts.length < 2 || daySpan <= 0) return { votesPerDay: 0, trajectory: "new" };
+  const votesPerDay = Math.max(0, Math.round((pts[pts.length - 1] - pts[0]) / daySpan));
+  if (pts.length < 3) return { votesPerDay, trajectory: "plateau" };
+  const mid = Math.floor(pts.length / 2);
+  const early = (pts[mid] - pts[0]) / Math.max(1, mid);
+  const late = (pts[pts.length - 1] - pts[mid]) / Math.max(1, pts.length - 1 - mid);
+  let trajectory: Trajectory = "plateau";
+  if (late > early * 1.25 && late > 0) trajectory = "rising";
+  else if (late < early * 0.5) trajectory = "decaying";
+  return { votesPerDay, trajectory };
 }
 
 function pf(platform: Platform): string {
@@ -360,7 +382,30 @@ export async function getNewReleases(db: Querier, platform: Platform): Promise<N
      WHERE g.is_live ${pf(platform)} AND g.first_seen_at >= (SELECT max(first_seen_at) FROM games) - interval '14 days'
      ORDER BY g.first_seen_at DESC, l.votes DESC NULLS LAST LIMIT 60`
   );
-  return rows.map((r) => ({ gameId: num(r.id), title: r.title, genre: r.genre ?? "—", rating: num(r.rating), votes: num(r.votes), url: r.url }));
+  // Per-title vote series over the same new-release cohort → age-adjusted votes/day +
+  // trajectory, so two titles with equal cumulative votes but different momentum diverge.
+  const series = await db.query(
+    `SELECT s.game_id AS id, s.captured_at AS d, max(s.votes) AS votes
+     FROM game_snapshots s JOIN games g ON g.id = s.game_id JOIN sources src ON src.id = g.source_id
+     WHERE g.is_live ${pf(platform)} AND g.first_seen_at >= (SELECT max(first_seen_at) FROM games) - interval '14 days'
+       AND s.votes IS NOT NULL
+     GROUP BY s.game_id, s.captured_at ORDER BY s.game_id, s.captured_at`
+  );
+  const byId = new Map<number, { t: number[]; v: number[] }>();
+  for (const r of series) {
+    const id = num(r.id);
+    let g = byId.get(id);
+    if (!g) { g = { t: [], v: [] }; byId.set(id, g); }
+    g.t.push(new Date(r.d).getTime());
+    g.v.push(num(r.votes));
+  }
+  const momentum = (id: number): { votesPerDay: number; trajectory: Trajectory } => {
+    const g = byId.get(id);
+    if (!g || g.v.length < 2) return { votesPerDay: 0, trajectory: "new" };
+    const daySpan = (g.t[g.t.length - 1] - g.t[0]) / 86400000;
+    return classifyTrajectory(g.v, daySpan);
+  };
+  return rows.map((r) => ({ gameId: num(r.id), title: r.title, genre: r.genre ?? "—", rating: num(r.rating), votes: num(r.votes), url: r.url, ...momentum(num(r.id)) }));
 }
 
 export async function getInsights(db: Querier, platform: Platform, deps?: { gd?: GenreDates; gaps?: MarketGap[]; landscape?: GenreLandscapePoint[]; gems?: HiddenGem[] }): Promise<Insight[]> {
