@@ -274,3 +274,12 @@ button{font-family:inherit}
 .traj-decaying{background:rgba(194,98,10,.13);color:var(--accent)}
 .traj-plateau{background:var(--surface-2);color:var(--text-3)}
 .traj-new{background:rgba(37,99,235,.1);color:var(--primary)}
+
+/* Team-size "est." chips on Steam comparables (issue #9) */
+.est-chip{display:inline-block;font-family:'Fira Code';font-size:10px;font-weight:600;letter-spacing:.03em;padding:2px 7px;border-radius:999px;white-space:nowrap;text-decoration:none;border:1px solid transparent}
+a.est-chip:hover{text-decoration:underline}
+.est-chip.team-solo{background:#e7f3ec;color:#1a7f4b;border-color:#cbe7d6}
+.est-chip.team-small{background:#eaf5ee;color:#227a4d;border-color:#d6ebdd}
+.est-chip.team-mid{background:#fdf1e5;color:#b4531a;border-color:#f0dcc8}
+.est-chip.team-large{background:#f6e9e6;color:#a23b2d;border-color:#ecd3cd}
+.est-chip.est-unknown{background:var(--surface-2);color:var(--text-3)}

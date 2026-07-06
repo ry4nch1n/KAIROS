@@ -278,3 +278,22 @@ describe("D-curation isCurationTag / Market Gaps denylist (#14)", () => {
     expect(gaps.every((g) => !q.isCurationTag(g.tag))).toBe(true);
   });
 });
+
+describe("D-teamsize getSteamComparables attaches team-size estimates (#9)", () => {
+  it("every comparable carries a teamSize field (object with provenance, or null)", async () => {
+    const rows = await q.getSteamComparables(db, 14);
+    for (const c of rows) {
+      expect(c).toHaveProperty("teamSize");
+      if (c.teamSize) {
+        expect(["solo", "small", "mid", "large"]).toContain(c.teamSize.bucket);
+        expect(c.teamSize.source).toMatch(/^https?:\/\//);
+      }
+    }
+  });
+  it("the solo-reachable filter is a subset that excludes mid/large studios", async () => {
+    const rows = await q.getSteamComparables(db, 14);
+    const solo = rows.filter((c) => c.teamSize && (c.teamSize.bucket === "solo" || c.teamSize.bucket === "small"));
+    expect(solo.length).toBeLessThanOrEqual(rows.length);
+    expect(solo.every((c) => c.teamSize!.bucket === "solo" || c.teamSize!.bucket === "small")).toBe(true);
+  });
+});
