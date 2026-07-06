@@ -239,6 +239,8 @@ export interface DeveloperRow {
   avgVotes: number;
   topGenre: string;
 }
+// Age-adjusted momentum: "new" = too little history to judge yet.
+export type Trajectory = "rising" | "plateau" | "decaying" | "new";
 export interface NewRelease {
   gameId: number;
   title: string;
@@ -246,6 +248,8 @@ export interface NewRelease {
   rating: number;
   votes: number;
   url: string;
+  votesPerDay: number; // votes gained per day over the tracked window (launch-date-independent)
+  trajectory: Trajectory;
 }
 
 export interface LibraryItem {

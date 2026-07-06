@@ -236,3 +236,30 @@ describe("p11 memoization guard", () => {
     expect(ov.scatter.filter((p) => p.gem).length).toBe(gems.length);
   });
 });
+
+describe("D-momentum classifyTrajectory — age-adjusted velocity (#10)", () => {
+  it("a flat evergreen reads ~0 votes/day and is not 'rising'", () => {
+    const r = q.classifyTrajectory([167000, 167010, 167020], 10);
+    expect(r.votesPerDay).toBeLessThan(5);
+    expect(r.trajectory).not.toBe("rising");
+  });
+  it("a fresh rocket reads high votes/day and 'rising'", () => {
+    const r = q.classifyTrajectory([100, 20000, 167000], 14);
+    expect(r.votesPerDay).toBeGreaterThan(1000);
+    expect(r.trajectory).toBe("rising");
+  });
+  it("a spike that stalls reads 'decaying'", () => {
+    expect(q.classifyTrajectory([0, 10000, 10500], 10).trajectory).toBe("decaying");
+  });
+  it("too little history → 'new', zero velocity", () => {
+    expect(q.classifyTrajectory([500], 0)).toEqual({ votesPerDay: 0, trajectory: "new" });
+    expect(q.classifyTrajectory([500, 900], 0).trajectory).toBe("new"); // zero span guarded
+  });
+  it("getNewReleases attaches votesPerDay + a valid trajectory to every row", async () => {
+    const rows = await q.getNewReleases(db, "all");
+    for (const r of rows) {
+      expect(r.votesPerDay).toBeGreaterThanOrEqual(0);
+      expect(["rising", "plateau", "decaying", "new"]).toContain(r.trajectory);
+    }
+  });
+});
