@@ -158,7 +158,7 @@ button{font-family:inherit}
 .thumb.noimg .ph{position:static;background:transparent;color:var(--text-3);font-size:12px;backdrop-filter:none}
 .thumb.banner{display:grid;place-items:center}
 .thumb.banner .bwordmark{color:#fff;font-weight:700;font-size:15px;letter-spacing:.3px;text-shadow:0 1px 6px rgba(0,0,0,.25)}
-.pf-uefn{background:linear-gradient(135deg,#4f46e5,#7c3aed)}
+.pf-signal{background:linear-gradient(135deg,#4f46e5,#7c3aed)}
 .pf-crazy{background:linear-gradient(135deg,#7c3aed,#db2777)}
 .pf-poki{background:linear-gradient(135deg,#f5a524,#d97706)}
 .pf-itch{background:linear-gradient(135deg,#fa5c5c,#db2777)}

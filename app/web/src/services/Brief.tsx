@@ -17,16 +17,15 @@ function md(s: string): string {
 const srcLink = { fontFamily: "'Fira Code'", fontSize: 11, color: "var(--primary)", marginTop: 8, display: "inline-block" } as const;
 const steamCover = (appid?: string | null) => (appid ? `https://cdn.cloudflare.steamstatic.com/steam/apps/${appid}/header.jpg` : null);
 const CAT: Record<string, string> = { "Contained-systemic": "teal", "Cozy/management": "green", "Automation/logistics": "blue", "City-builder": "indigo", "Bigger-budget": "amber", "Market signal": "gray", "Foundational update": "purple", "Loop reference": "amber" };
-const KIND: Record<string, string> = { "UEFN/Creative": "pink", "Browser game": "cyan", "Browser platform": "gray", "Loop signal": "teal" };
+const KIND: Record<string, string> = { "Browser game": "cyan", "Browser platform": "gray", "Loop signal": "teal" };
 const isUrl = (s?: string | null) => typeof s === "string" && /^https?:\/\//i.test(s.trim());
 
 function platformOf(it: BriefNotable) {
   const s = `${it.source || ""} ${it.name || ""} ${it.kind || ""}`.toLowerCase();
-  if (/uefn|fortnite|epic\s*games|creative/.test(s) || (it.kind || "").startsWith("UEFN")) return { label: "UEFN · Fortnite Creative", cls: "pf-uefn", icon: "🏝️" };
   if (/crazygames/.test(s)) return { label: "CrazyGames", cls: "pf-crazy", icon: "🕹️" };
   if (/\bpoki\b/.test(s)) return { label: "Poki", cls: "pf-poki", icon: "🎮" };
   if (/itch\.io|itch /.test(s)) return { label: "itch.io", cls: "pf-itch", icon: "🎮" };
-  if ((it.kind || "") === "Loop signal") return { label: "Loop signal", cls: "pf-uefn", icon: "📈" };
+  if ((it.kind || "") === "Loop signal") return { label: "Loop signal", cls: "pf-signal", icon: "📈" };
   return { label: it.kind || "Browser", cls: "pf-web", icon: "🌐" };
 }
 
@@ -159,7 +158,7 @@ export function Brief({ hidden }: { hidden: boolean }) {
 
               {p.browser && p.browser.length > 0 && (
                 <>
-                  <div className="section-title"><span className="n">3</span>Browser &amp; UEFN</div>
+                  <div className="section-title"><span className="n">3</span>Browser</div>
                   <div className="bcard-grid">{p.browser.map((n, i) => <RichCard key={i} item={n} kind="browser" />)}</div>
                 </>
               )}

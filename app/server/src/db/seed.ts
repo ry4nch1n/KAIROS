@@ -214,7 +214,7 @@ export async function seed(db: Querier): Promise<void> {
   // Real indie-brief edition shape (matches build-brief.js brief-content-<date>.json)
   const ed1 = {
     weekday: "Thursday",
-    phase_badge: "Recovery + discovery · Jun 2026 · study UEFN loops, no production",
+    phase_badge: "Recovery + discovery · Jun 2026 · study proven loops, no production",
     top_signals: [
       "**Survivor-likes still climbing** on CrazyGames — 4th week up; cross-check the Radar gap list.",
       "**Cozy automation** breaking out: management hybrids over-index in demand on browser portals.",
