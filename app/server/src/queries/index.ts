@@ -8,7 +8,7 @@ import type {
   SteamGap, SteamPriceBand, SteamOwnershipRow, SteamDeveloperRow, SteamNewRelease,
   Pitch, PitchInput,
 } from "shared";
-import { assertPitchInput, validateBriefPayload } from "shared";
+import { assertPitchInput, validateBriefPayload } from "../../../shared/src/contract.ts";
 
 const fmtDate = (d: any) => new Date(d).toISOString().slice(5, 10); // "MM-DD"
 

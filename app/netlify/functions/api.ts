@@ -3,7 +3,7 @@
 import { appDb } from "../../server/src/db/db.ts";
 import * as q from "../../server/src/queries/index.ts";
 import type { Platform } from "shared";
-import { CONTRACT } from "shared";
+import { CONTRACT } from "../../shared/src/contract.ts";
 
 const PLATFORMS = ["all", "poki", "crazygames", "steam"];
 const pp = (v: string | null): Platform => (v && PLATFORMS.includes(v) ? v : "all") as Platform;

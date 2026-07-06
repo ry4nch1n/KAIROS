@@ -3,7 +3,7 @@ import express from "express";
 import cors from "cors";
 import type { Querier } from "../db/db.ts";
 import type { Platform } from "shared";
-import { CONTRACT } from "shared";
+import { CONTRACT } from "../../../shared/src/contract.ts";
 import * as q from "../queries/index.ts";
 
 const PLATFORMS = ["all", "poki", "crazygames", "steam"];
