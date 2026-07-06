@@ -1,0 +1,23 @@
+name: Migrate DB
+# Cheap, on-demand schema apply to Neon (idempotent). Use after a schema change lands
+# on main, instead of waiting for the nightly crawl or running a full crawl. ~2 min.
+# The nightly Daily Crawl also migrates first, so this is just a fast manual trigger.
+on:
+  workflow_dispatch: {}
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: npm install
+      - name: Apply schema to Neon (idempotent — CREATE TABLE IF NOT EXISTS / additive ALTERs)
+        run: npm run db:migrate
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
