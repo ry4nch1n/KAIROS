@@ -224,6 +224,22 @@ export async function getTagFrequency(db: Querier, platform: Platform): Promise<
 }
 
 const GEM_RATING_PCTILE = 0.75, GEM_VOTES_PCTILE = 0.25;
+// Sample-size gate (issue #8): a rating from a handful of votes is noise, not quality.
+// A game must clear MIN_GEM_VOTES to be a "gem", and gems rank by a Bayesian-shrunk
+// rating (few votes are pulled toward the prior mean) rather than the raw score.
+const MIN_GEM_VOTES = 30;
+const GEM_PRIOR_MEAN = 4.2, GEM_PRIOR_WEIGHT = 20;
+
+/** Bayesian-shrunk rating: (v·R + k·C) / (v + k). Few votes → near the prior mean C. */
+export function bayesianGemScore(
+  rating: number,
+  votes: number,
+  priorMean = GEM_PRIOR_MEAN,
+  priorWeight = GEM_PRIOR_WEIGHT
+): number {
+  const v = Math.max(0, votes || 0);
+  return (v * rating + priorWeight * priorMean) / (v + priorWeight);
+}
 
 async function gemBase(db: Querier, platform: Platform) {
   return db.query(
@@ -237,7 +253,7 @@ async function gemBase(db: Querier, platform: Platform) {
        WHERE g.is_live AND l.rating IS NOT NULL AND l.votes IS NOT NULL ${pf(platform)}
      )
      SELECT id, title, genre, rating, votes, rp, vp,
-            (rp >= ${GEM_RATING_PCTILE} AND vp <= ${GEM_VOTES_PCTILE}) AS gem
+            (rp >= ${GEM_RATING_PCTILE} AND vp <= ${GEM_VOTES_PCTILE} AND votes >= ${MIN_GEM_VOTES}) AS gem
      FROM base`
   );
 }
@@ -251,7 +267,8 @@ export async function getHiddenGems(db: Querier, platform: Platform, rows?: Reco
   rows ??= await gemBase(db, platform);
   return rows
     .filter((r) => r.gem)
-    .sort((a, b) => (num(b.rp) - num(b.vp)) - (num(a.rp) - num(a.vp)))
+    // Rank by Bayesian-shrunk rating so well-supported quality outranks thin-sample flukes.
+    .sort((a, b) => bayesianGemScore(num(b.rating), num(b.votes)) - bayesianGemScore(num(a.rating), num(a.votes)))
     .slice(0, 30)
     .map((r) => ({ gameId: num(r.id), title: r.title, rating: num(r.rating), votes: num(r.votes), genre: r.genre ?? "—" }));
 }
