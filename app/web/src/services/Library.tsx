@@ -159,7 +159,7 @@ export function Library({ hidden }: { hidden: boolean }) {
       <main className="main">
         <div className="topbar">
           <h2>
-            {activeName} <small>your work, next to the market intel that informs it</small>
+            {activeName} <small>ideas and explorations, next to the market intel that informs them</small>
           </h2>
         </div>
 
