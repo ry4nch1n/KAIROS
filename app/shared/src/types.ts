@@ -19,6 +19,17 @@ export interface SteamGenreEconomics {
   revenueProxy: number; // owners × price, in dollars (rough monetizability signal)
 }
 
+// Curated, researched team-size estimate (see server data/teamSize.ts). solo=1–2, small=3–10,
+// mid=11–30, large=30+. Always rendered as "est." with its source — never as fact.
+export type TeamSizeBucket = "solo" | "small" | "mid" | "large";
+export type TeamSizeConfidence = "high" | "medium" | "low";
+export interface ComparableTeamSize {
+  bucket: TeamSizeBucket;
+  headcount: string; // e.g. "~25", "1 (solo)"
+  source: string; // citation URL
+  confidence: TeamSizeConfidence;
+}
+
 export interface SteamComparable {
   title: string;
   tier: string;
@@ -29,6 +40,7 @@ export interface SteamComparable {
   priceCents: number | null;
   developer: string | null;
   releaseDate: string | null; // ISO YYYY-MM-DD (for the "Released" year column)
+  teamSize: ComparableTeamSize | null; // curated estimate, or null when the studio isn't researched
 }
 
 export interface SteamGap {

@@ -9,6 +9,7 @@ import type {
   Pitch, PitchInput,
 } from "shared";
 import { assertPitchInput, validateBriefPayload } from "../../../shared/src/contract.ts";
+import { teamSizeFor } from "../data/teamSize.ts";
 
 const fmtDate = (d: any) => new Date(d).toISOString().slice(5, 10); // "MM-DD"
 
@@ -645,15 +646,19 @@ export async function getSteamComparables(db: Querier, limit = 12): Promise<Stea
      LIMIT $1`,
     [limit]
   );
-  return rows.map((r) => ({
-    title: r.title, tier: r.tier ?? "—", genre: r.genre ?? "—",
-    rating: r.rating == null ? null : +Number(r.rating).toFixed(2),
-    votes: r.votes == null ? null : num(r.votes),
-    owners: r.owners == null ? null : num(r.owners),
-    priceCents: r.price == null ? null : num(r.price),
-    developer: r.developer ?? null,
-    releaseDate: r.release_date == null ? null : new Date(r.release_date).toISOString().slice(0, 10),
-  }));
+  return rows.map((r) => {
+    const ts = teamSizeFor(r.developer);
+    return {
+      title: r.title, tier: r.tier ?? "—", genre: r.genre ?? "—",
+      rating: r.rating == null ? null : +Number(r.rating).toFixed(2),
+      votes: r.votes == null ? null : num(r.votes),
+      owners: r.owners == null ? null : num(r.owners),
+      priceCents: r.price == null ? null : num(r.price),
+      developer: r.developer ?? null,
+      releaseDate: r.release_date == null ? null : new Date(r.release_date).toISOString().slice(0, 10),
+      teamSize: ts ? { bucket: ts.bucket, headcount: ts.headcount, source: ts.source, confidence: ts.confidence } : null,
+    };
+  });
 }
 
 // Steam pricing: price-band breakdown over the indie cohort (how indies price + what each band is worth).

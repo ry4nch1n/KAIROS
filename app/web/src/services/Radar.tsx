@@ -280,20 +280,50 @@ function NewReleasesTable({ rows }: { rows: SteamNewRelease[] }) {
   );
 }
 
+const TEAM_META: Record<string, { label: string; cls: string }> = {
+  solo: { label: "Solo", cls: "team-solo" }, small: { label: "Small", cls: "team-small" },
+  mid: { label: "Mid", cls: "team-mid" }, large: { label: "Large", cls: "team-large" },
+};
+const isSoloReachable = (c: SteamComparable) => c.teamSize != null && (c.teamSize.bucket === "solo" || c.teamSize.bucket === "small");
+const TEAM_TIP = "Team size is not in any Steam/3rd-party API — these are researched estimates (bucket by the team that shipped the studio's breakout). Click for the source.";
+
 function ComparablesTable({ rows }: { rows: SteamComparable[] }) {
   return (
-    <table className="dtable"><thead><tr><th>Game</th><th>Tier</th><th>Genre</th><th className="r">Released</th><th className="r">Rating</th><th className="r">Reviews</th><th className="r" title={OWNERS_TIP}>Owners</th><th className="r">Price</th><th>Developer</th></tr></thead>
+    <table className="dtable"><thead><tr><th>Game</th><th>Tier</th><th title={TEAM_TIP}>Team (est.)</th><th>Genre</th><th className="r">Released</th><th className="r">Rating</th><th className="r">Reviews</th><th className="r" title={OWNERS_TIP}>Owners</th><th className="r">Price</th><th>Developer</th></tr></thead>
       <tbody>{rows.map((c, i) => {
         const tm = TIER_META[c.tier] ?? { label: c.tier, cls: "t-hobby" };
+        const ts = c.teamSize;
+        const meta = ts ? TEAM_META[ts.bucket] : null;
         return (
           <tr key={i}><td className="gname">{c.title}</td>
             <td><span className={"tier-chip " + tm.cls}>{tm.label}</span></td>
+            <td>{ts && meta
+              ? <a className={"est-chip " + meta.cls} href={ts.source} target="_blank" rel="noreferrer" title={`${ts.headcount} · ${ts.confidence} confidence · estimated`}>{meta.label} · est.</a>
+              : <span className="est-chip est-unknown" title="Team size not researched yet">—</span>}</td>
             <td>{c.genre}</td><td className="r">{c.releaseDate ? c.releaseDate.slice(0, 4) : "—"}</td>
             <td className="r">{rate(c.rating)}</td><td className="r">{c.votes == null ? "—" : fmt(c.votes)}</td>
             <td className="r">{fmtOwners(c.owners)}</td><td className="r">{money(c.priceCents)}</td>
             <td style={{ color: "var(--ink-3, #6b7280)" }}>{c.developer ?? "—"}</td></tr>
         );
       })}</tbody></table>
+  );
+}
+
+function ComparablesCard({ rows }: { rows: SteamComparable[] }) {
+  const [cohort, setCohort] = useState<"all" | "solo">("all");
+  const shown = cohort === "solo" ? rows.filter(isSoloReachable) : rows;
+  const soloN = rows.filter(isSoloReachable).length;
+  return (
+    <div className="card">
+      <h3>{I.gems}Indie comparables<span className="sub">the realistic peer set — indie-tier games, most recent first</span>
+        <span className="seg" role="tablist" aria-label="Cohort" style={{ marginLeft: "auto" }}>
+          <button className={"seg-btn" + (cohort === "all" ? " active" : "")} onClick={() => setCohort("all")}>All ({rows.length})</button>
+          <button className={"seg-btn" + (cohort === "solo" ? " active" : "")} onClick={() => setCohort("solo")}>Solo-reachable ({soloN})</button>
+        </span>
+      </h3>
+      {cohort === "solo" && <p className="view-head">Studios a <b>1–2 or 3–10 person</b> team could realistically match, by researched team-size estimate. Untagged studios are hidden rather than assumed solo.</p>}
+      {shown.length ? <ComparablesTable rows={shown} /> : <p className="view-head">No solo-reachable comparables tagged in the current set yet.</p>}
+    </div>
   );
 }
 
@@ -338,7 +368,7 @@ function SteamView({ data, section }: { data: SteamOverview; section: SteamSecti
       </>
     );
   if (section === "comparables")
-    return <div className="card">{head(I.gems, "Indie comparables", "the realistic peer set — indie-tier games, most recent first")}<ComparablesTable rows={data.comparables} /></div>;
+    return <ComparablesCard rows={data.comparables} />;
   if (section === "opportunity")
     return <div className="card">{head(I.gaps, "Opportunity — what to build next", "indie genre × tag: high demand, low supply, monetizable")}<OppList gaps={data.opportunity} /></div>;
   // overview (default) — KPIs + tier distribution + highlights
