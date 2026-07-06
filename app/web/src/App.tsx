@@ -3,6 +3,7 @@ import { Rail, type Service } from "./components/Rail.tsx";
 import { Radar } from "./services/Radar.tsx";
 import { Brief } from "./services/Brief.tsx";
 import { Library } from "./services/Library.tsx";
+import { Revenue } from "./services/Revenue.tsx";
 
 export default function App() {
   const [svc, setSvc] = useState<Service>("radar");
@@ -12,6 +13,7 @@ export default function App() {
       <Radar hidden={svc !== "radar"} />
       <Brief hidden={svc !== "brief"} />
       <Library hidden={svc !== "library"} />
+      <Revenue hidden={svc !== "revenue"} />
     </div>
   );
 }

@@ -1,4 +1,4 @@
-export type Service = "radar" | "brief" | "library";
+export type Service = "radar" | "brief" | "library" | "revenue";
 
 export function Rail({ active, onSelect }: { active: Service; onSelect: (s: Service) => void }) {
   return (
@@ -46,6 +46,17 @@ export function Rail({ active, onSelect }: { active: Service; onSelect: (s: Serv
             <rect x="14" y="3" width="7" height="7" rx="1" />
             <rect x="3" y="14" width="7" height="7" rx="1" />
             <rect x="14" y="14" width="7" height="7" rx="1" />
+          </svg>
+        </button>
+        <button
+          className={"rail-btn" + (active === "revenue" ? " active" : "")}
+          data-label="Revenue Model"
+          onClick={() => onSelect("revenue")}
+          aria-label="Revenue Model"
+        >
+          <svg viewBox="0 0 24 24">
+            <path d="M3 3v18h18" />
+            <path d="M7 14l4-4 3 3 5-6" />
           </svg>
         </button>
       </div>
