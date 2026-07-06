@@ -501,7 +501,7 @@ export function Radar({ hidden }: { hidden: boolean }) {
               {view === "market-gaps" && (ov ? <div className="card">{head(I.gaps, "Market Gaps", "ranked by opportunity score")}<GapList gaps={ov.gaps} /></div> : <Skel />)}
             </>
           )}
-          <div className="foot-note">KAIROS · GameRadar · live from Neon · platform via source_id</div>
+          <div className="foot-note">KAIROS · GameRadar · live from Neon</div>
         </div>
       </main>
     </section>

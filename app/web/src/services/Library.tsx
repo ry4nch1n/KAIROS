@@ -8,9 +8,6 @@ const COLLECTIONS = [
   { key: "all", name: "All items", icon: <><rect x="3" y="3" width="18" height="18" rx="2" /><path d="M3 9h18" /></> },
   { key: "pitch", name: "Pitches", icon: <><path d="M12 2l2.4 6.9H21l-5.3 4 2 6.6L12 15.8 6.3 19.5l2-6.6L3 8.9h6.6z" /></> },
   { key: "prototype", name: "Prototypes", icon: <><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M14 2v6h6" /></> },
-  { key: "design_doc", name: "Design Docs", icon: <><path d="M4 4h16v16H4z" /><path d="M8 8h8M8 12h8M8 16h5" /></> },
-  { key: "art", name: "Art Explorations", icon: <><circle cx="9" cy="9" r="2" /><path d="M4 4h16v16H4z" /><path d="M4 16l5-4 4 3 3-2 4 3" /></> },
-  { key: "reference", name: "References", icon: <><path d="M12 3l8 4-8 4-8-4z" /><path d="M4 12l8 4 8-4M4 17l8 4 8-4" /></> },
 ] as const;
 
 const LOOP_LABEL: Record<string, string> = {
@@ -105,9 +102,6 @@ function groupByDate(pitches: Pitch[]): [string, Pitch[]][] {
 
 const COLLECTION_BLURB: Record<string, string> = {
   prototype: "Playable builds and paper tests will collect here — each one linked back to the loop family it validates.",
-  design_doc: "One-page briefs, scope cuts and test plans will live here, next to the market intel that informs them.",
-  art: "Art-style explorations and mood references will collect here once a concept moves past the loop test.",
-  reference: "Foundational reference games and teardown notes will live here, one click from the radar.",
 };
 
 export function Library({ hidden }: { hidden: boolean }) {
@@ -139,7 +133,7 @@ export function Library({ hidden }: { hidden: boolean }) {
       <aside className="side">
         <div className="side-head">
           <b>Library</b>
-          <span>work showcase</span>
+          <span>idea exploration</span>
         </div>
         <div className="nav-label">Collections</div>
         {COLLECTIONS.map((c) => (
