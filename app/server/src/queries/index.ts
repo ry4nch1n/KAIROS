@@ -6,6 +6,7 @@ import type {
   GenreRow, DeveloperRow, NewRelease, GenreLandscapePoint, GenreVelocityBar, GlossaryRow, BriefSteering,
   ScaleTierRow, SteamGenreEconomics, SteamCohort, SteamComparable, SteamOverview,
   SteamGap, SteamPriceBand, SteamOwnershipRow, SteamDeveloperRow, SteamNewRelease,
+  Pitch, PitchInput,
 } from "shared";
 
 const fmtDate = (d: any) => new Date(d).toISOString().slice(5, 10); // "MM-DD"
@@ -831,4 +832,88 @@ export async function getBriefEdition(db: Querier, editionDate: string): Promise
     sourceCount: num(r.source_count),
     payload,
   };
+}
+
+// ---- pitches (Library "Pitches" collection) ----
+
+function rowToPitch(r: any): Pitch {
+  const d = r.pitch_date;
+  return {
+    id: num(r.id),
+    slug: r.slug,
+    rank: r.rank === null || r.rank === undefined ? null : num(r.rank),
+    title: r.title,
+    oneLiner: r.one_liner ?? null,
+    loopFamily: r.loop_family ?? null,
+    platformLadder: r.platform_ladder ?? null,
+    status: r.status ?? "proposed",
+    badge: r.badge ?? null,
+    loopDetail: r.loop_detail ?? null,
+    browserMvp: r.browser_mvp ?? null,
+    steamLadder: r.steam_ladder ?? null,
+    evidence: r.evidence ?? null,
+    risk: r.risk ?? null,
+    d1Fit: r.d1_fit === null || r.d1_fit === undefined ? null : num(r.d1_fit),
+    steamCeiling: r.steam_ceiling === null || r.steam_ceiling === undefined ? null : num(r.steam_ceiling),
+    buildCost: r.build_cost === null || r.build_cost === undefined ? null : num(r.build_cost),
+    pitchDate: typeof d === "string" ? d.slice(0, 10) : new Date(d).toISOString().slice(0, 10),
+    batch: r.batch ?? null,
+    source: r.source ?? null,
+  };
+}
+
+export async function getPitches(db: Querier): Promise<Pitch[]> {
+  try {
+    const rows = await db.query(
+      `SELECT id, slug, rank, title, one_liner, loop_family, platform_ladder, status, badge,
+              loop_detail, browser_mvp, steam_ladder, evidence, risk, d1_fit, steam_ceiling,
+              build_cost, pitch_date, batch, source
+       FROM pitches
+       ORDER BY pitch_date DESC, COALESCE(rank, 999) ASC, id ASC`
+    );
+    return rows.map(rowToPitch);
+  } catch {
+    return []; // table not migrated yet → behave as empty
+  }
+}
+
+export async function publishPitch(db: Querier, p: PitchInput): Promise<void> {
+  if (!p?.slug || !p?.title || !p?.pitchDate) throw new Error("slug, title and pitchDate required");
+  await db.query(
+    `INSERT INTO pitches
+       (slug, rank, title, one_liner, loop_family, platform_ladder, status, badge,
+        loop_detail, browser_mvp, steam_ladder, evidence, risk, d1_fit, steam_ceiling,
+        build_cost, pitch_date, batch, source, updated_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19, now())
+     ON CONFLICT (slug) DO UPDATE SET
+       rank = EXCLUDED.rank, title = EXCLUDED.title, one_liner = EXCLUDED.one_liner,
+       loop_family = EXCLUDED.loop_family, platform_ladder = EXCLUDED.platform_ladder,
+       status = EXCLUDED.status, badge = EXCLUDED.badge, loop_detail = EXCLUDED.loop_detail,
+       browser_mvp = EXCLUDED.browser_mvp, steam_ladder = EXCLUDED.steam_ladder,
+       evidence = EXCLUDED.evidence, risk = EXCLUDED.risk, d1_fit = EXCLUDED.d1_fit,
+       steam_ceiling = EXCLUDED.steam_ceiling, build_cost = EXCLUDED.build_cost,
+       pitch_date = EXCLUDED.pitch_date, batch = EXCLUDED.batch, source = EXCLUDED.source,
+       updated_at = now()`,
+    [
+      p.slug,
+      p.rank ?? null,
+      p.title,
+      p.oneLiner ?? null,
+      p.loopFamily ?? null,
+      p.platformLadder ?? "browser->steam",
+      p.status ?? "proposed",
+      p.badge ?? null,
+      p.loopDetail ?? null,
+      p.browserMvp ?? null,
+      p.steamLadder ?? null,
+      p.evidence ?? null,
+      p.risk ?? null,
+      p.d1Fit ?? null,
+      p.steamCeiling ?? null,
+      p.buildCost ?? null,
+      p.pitchDate,
+      p.batch ?? null,
+      p.source ?? null,
+    ]
+  );
 }

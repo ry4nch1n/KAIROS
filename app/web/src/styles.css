@@ -147,6 +147,38 @@ button{font-family:inherit}
 .btn-soft svg{width:15px;height:15px;stroke:#fff;fill:none;stroke-width:2}
 .soon{font-size:11px;font-family:'Fira Code';margin-top:10px;color:var(--text-3);background:var(--surface-2);padding:4px 10px;border-radius:20px}
 
+/* --- Library: pitch cards --- */
+.pgroup{display:flex;flex-direction:column;gap:12px}
+.pgroup+.pgroup{margin-top:8px}
+.section-title .pbatch{margin-left:auto;font-family:'Fira Code';font-size:10px;font-weight:600;color:var(--text-3);letter-spacing:.3px;text-transform:none}
+.pcard{padding:16px 18px 15px}
+.pcard-head{display:flex;gap:12px;align-items:flex-start}
+.prank{flex-shrink:0;width:26px;height:26px;border-radius:8px;background:linear-gradient(160deg,var(--primary),var(--primary-deep));color:#fff;display:grid;place-items:center;font-family:'Fira Code';font-size:13px;font-weight:700;margin-top:1px}
+.pcard-headmain{min-width:0}
+.pcard .btags{margin-bottom:5px}
+.ptag{font-size:9.5px;font-family:'Fira Code';font-weight:700;letter-spacing:.4px;padding:2px 7px;border-radius:5px;background:var(--surface-2);color:var(--text-2);white-space:nowrap}
+.ptag.lf{background:rgba(37,99,235,.1);color:var(--primary-deep)}
+.ptag.st{text-transform:capitalize}
+.ptag.st-proposed{background:rgba(217,119,6,.13);color:var(--accent)}
+.ptag.st-prototyping{background:rgba(5,150,105,.13);color:var(--green)}
+.ptag.st-shelved{background:var(--surface-2);color:var(--text-3)}
+.ptag.st-shipped{background:rgba(124,58,237,.13);color:var(--violet)}
+.ptag.badge-recommended{background:var(--primary);color:#fff}
+.ptag.badge-retention-safe{background:rgba(37,99,235,.12);color:var(--primary-deep);box-shadow:inset 0 0 0 1px rgba(37,99,235,.4)}
+.ptag.badge-cashflow{background:rgba(5,150,105,.13);color:var(--green)}
+.ptag.badge-cheapest-build{background:rgba(8,145,178,.12);color:var(--cyan)}
+.pcard h3{font-size:15px;font-weight:700;margin:1px 0}
+.pone{margin-top:0;color:var(--text-2);font-size:12.8px}
+.pfields{display:flex;flex-direction:column;gap:7px;margin-top:11px;padding-top:11px;border-top:1px solid var(--border-soft)}
+.pfields>div{font-size:12.3px;color:var(--text-2);line-height:1.45}
+.plabel{display:inline-block;font-family:'Fira Code';font-size:9.5px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--primary);background:rgba(37,99,235,.08);padding:1px 6px;border-radius:4px;margin-right:7px;vertical-align:1px}
+.pfields .prisk .plabel{color:var(--accent);background:rgba(217,119,6,.1)}
+.pscores{display:flex;flex-wrap:wrap;gap:14px;margin-top:12px;padding-top:10px;border-top:1px solid var(--border-soft);font-family:'Fira Code';font-size:10px;color:var(--text-3);letter-spacing:.3px}
+.pscores span{display:inline-flex;align-items:center;gap:5px}
+.pdots-row{display:inline-flex;gap:3px}
+.pdot{width:6px;height:6px;border-radius:50%;background:var(--border)}
+.pdot.on{background:var(--primary)}
+
 /* ── Rich brief cards (cover image + branded banners), light mode ── */
 .bcard-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px}
 .bcard{background:#fff;border:1px solid var(--border-soft);border-radius:13px;overflow:hidden;box-shadow:var(--shadow);display:flex;flex-direction:column;transition:.16s}

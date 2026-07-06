@@ -82,5 +82,25 @@ export function createApp(db: Querier) {
     res.json(rows);
   });
 
+  app.get("/api/pitches", async (_req, res) => {
+    try {
+      res.json(await q.getPitches(db));
+    } catch (e) {
+      res.status(500).json({ error: String(e) });
+    }
+  });
+  app.post("/api/pitches", async (req, res) => {
+    const token = process.env.PUBLISH_TOKEN;
+    const auth = req.headers.authorization || "";
+    if (!token || auth !== `Bearer ${token}`) return res.status(401).json({ error: "unauthorized" });
+    try {
+      const items = Array.isArray(req.body) ? req.body : [req.body];
+      for (const it of items) await q.publishPitch(db, it);
+      res.json({ ok: true, count: items.length });
+    } catch (e) {
+      res.status(400).json({ error: String(e) });
+    }
+  });
+
   return app;
 }

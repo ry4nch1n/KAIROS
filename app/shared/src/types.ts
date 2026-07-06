@@ -251,3 +251,51 @@ export interface LibraryItem {
   tags: string[];
   status: string;
 }
+
+// A game-concept pitch — the Library "Pitches" collection. Dated + classified so
+// batches stay grouped. Written by the weekly kairos-iterate routine (upsert on slug).
+export interface Pitch {
+  id: number;
+  slug: string;
+  rank: number | null;
+  title: string;
+  oneLiner: string | null;
+  loopFamily: string | null;
+  platformLadder: string | null;
+  status: string;
+  badge: string | null;
+  loopDetail: string | null;
+  browserMvp: string | null;
+  steamLadder: string | null;
+  evidence: string | null;
+  risk: string | null;
+  d1Fit: number | null;
+  steamCeiling: number | null;
+  buildCost: number | null;
+  pitchDate: string; // YYYY-MM-DD
+  batch: string | null;
+  source: string | null;
+}
+
+// Input for publishing/upserting a pitch (token-gated POST /api/pitches).
+export interface PitchInput {
+  slug: string;
+  title: string;
+  pitchDate: string;
+  rank?: number | null;
+  oneLiner?: string | null;
+  loopFamily?: string | null;
+  platformLadder?: string | null;
+  status?: string | null;
+  badge?: string | null;
+  loopDetail?: string | null;
+  browserMvp?: string | null;
+  steamLadder?: string | null;
+  evidence?: string | null;
+  risk?: string | null;
+  d1Fit?: number | null;
+  steamCeiling?: number | null;
+  buildCost?: number | null;
+  batch?: string | null;
+  source?: string | null;
+}

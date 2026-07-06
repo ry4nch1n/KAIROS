@@ -62,6 +62,16 @@ export default async (req: Request) => {
     }
     if (path === "/library")
       return json(await db.query("SELECT id, kind, title, summary, tags, status FROM library_items ORDER BY created_at DESC"));
+    if (req.method === "POST" && path === "/pitches") {
+      const token = process.env.PUBLISH_TOKEN;
+      const auth = req.headers.get("authorization") || "";
+      if (!token || auth !== `Bearer ${token}`) return json({ error: "unauthorized" }, 401);
+      const body = await req.json();
+      const items = Array.isArray(body) ? body : [body];
+      for (const it of items) await q.publishPitch(db, it);
+      return json({ ok: true, count: items.length });
+    }
+    if (path === "/pitches") return json(await q.getPitches(db));
     return json({ error: "not found", path }, 404);
   } catch (e) {
     return json({ error: String(e) }, 500);

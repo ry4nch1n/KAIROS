@@ -120,3 +120,32 @@ CREATE TABLE IF NOT EXISTS library_items (
   status     TEXT DEFAULT 'draft',
   created_at TIMESTAMPTZ DEFAULT now()
 );
+
+-- pitches namespace: game-concept pitches (the Library "Pitches" collection).
+-- Written by the weekly kairos-iterate routine (token-gated POST /api/pitches, upsert on slug).
+-- Dated + classified so future batches stay cleanly grouped and sortable.
+CREATE TABLE IF NOT EXISTS pitches (
+  id              BIGSERIAL PRIMARY KEY,
+  slug            TEXT UNIQUE NOT NULL,          -- stable natural key for upsert
+  rank            INT,                            -- presentation order within a batch
+  title           TEXT NOT NULL,
+  one_liner       TEXT,
+  loop_family     TEXT,                           -- extraction-lite | automation-under-pressure | wave-defense-prep | cozy-craft | contained-systemic | idle-tycoon
+  platform_ladder TEXT DEFAULT 'browser->steam',
+  status          TEXT DEFAULT 'proposed',        -- proposed | prototyping | shelved | shipped
+  badge           TEXT,                           -- recommended | retention-safe | cashflow | cheapest-build | ...
+  loop_detail     TEXT,
+  browser_mvp     TEXT,
+  steam_ladder    TEXT,
+  evidence        TEXT,
+  risk            TEXT,
+  d1_fit          INT,                            -- 1..3 (retention-gate fit)
+  steam_ceiling   INT,                            -- 1..3
+  build_cost      INT,                            -- 1..3 (higher = cheaper/easier)
+  pitch_date      DATE NOT NULL,                  -- as-of date (batch dating)
+  batch           TEXT,                           -- cohort label, e.g. '2026-07-06'
+  source          TEXT,                           -- provenance, e.g. 'kairos-review 2026-07-06'
+  created_at      TIMESTAMPTZ DEFAULT now(),
+  updated_at      TIMESTAMPTZ DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_pitches_date ON pitches (pitch_date DESC, rank ASC);
