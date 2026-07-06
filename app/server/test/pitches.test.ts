@@ -65,6 +65,14 @@ describe("P1 pitches table + queries", () => {
     // @ts-expect-error intentionally invalid
     await expect(q.publishPitch(db, { title: "x" })).rejects.toThrow();
   });
+
+  it("deletePitch removes a row and reports whether it existed", async () => {
+    const db = await freshMemoryDb();
+    await q.publishPitch(db, base);
+    expect(await q.deletePitch(db, "salvage-line")).toBe(true);
+    expect(await q.getPitches(db)).toEqual([]);
+    expect(await q.deletePitch(db, "salvage-line")).toBe(false); // already gone
+  });
 });
 
 describe("P2 /api/pitches route", () => {
@@ -94,6 +102,33 @@ describe("P2 /api/pitches route", () => {
       const list = await (await fetch(url)).json();
       expect(list).toHaveLength(2);
       expect(list[0].slug).toBe("salvage-line"); // rank 1 first
+    } finally {
+      server.close();
+    }
+  });
+});
+
+describe("P3 DELETE /api/pitches/:slug", () => {
+  it("is token-gated, deletes an existing pitch, 404s a missing one", async () => {
+    process.env.PUBLISH_TOKEN = "test-token";
+    const db = await freshMemoryDb();
+    await q.publishPitch(db, base);
+    const app = createApp(db);
+    const server = app.listen(0);
+    await new Promise<void>((r) => server.once("listening", () => r()));
+    const addr = server.address();
+    const port = typeof addr === "object" && addr ? addr.port : 0;
+    const u = (slug: string) => `http://localhost:${port}/api/pitches/${slug}`;
+    try {
+      // no token → 401
+      expect((await fetch(u("salvage-line"), { method: "DELETE" })).status).toBe(401);
+      // valid token → 200, row gone
+      const ok = await fetch(u("salvage-line"), { method: "DELETE", headers: { authorization: "Bearer test-token" } });
+      expect(ok.status).toBe(200);
+      expect((await q.getPitches(db)).length).toBe(0);
+      // missing slug → 404
+      const gone = await fetch(u("salvage-line"), { method: "DELETE", headers: { authorization: "Bearer test-token" } });
+      expect(gone.status).toBe(404);
     } finally {
       server.close();
     }

@@ -70,6 +70,14 @@ export default async (req: Request) => {
       for (const it of items) await q.publishPitch(db, it);
       return json({ ok: true, count: items.length });
     }
+    if (req.method === "DELETE" && path.startsWith("/pitches/")) {
+      const token = process.env.PUBLISH_TOKEN;
+      const auth = req.headers.get("authorization") || "";
+      if (!token || auth !== `Bearer ${token}`) return json({ error: "unauthorized" }, 401);
+      const slug = decodeURIComponent(path.replace("/pitches/", ""));
+      const deleted = await q.deletePitch(db, slug);
+      return deleted ? json({ ok: true, deleted: slug }) : json({ error: "not found" }, 404);
+    }
     if (path === "/pitches") return json(await q.getPitches(db));
     return json({ error: "not found", path }, 404);
   } catch (e) {

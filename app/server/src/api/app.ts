@@ -107,6 +107,18 @@ export function createApp(db: Querier) {
       res.status(400).json({ error: String(e) });
     }
   });
+  app.delete("/api/pitches/:slug", async (req, res) => {
+    const token = process.env.PUBLISH_TOKEN;
+    const auth = req.headers.authorization || "";
+    if (!token || auth !== `Bearer ${token}`) return res.status(401).json({ error: "unauthorized" });
+    try {
+      const deleted = await q.deletePitch(db, req.params.slug);
+      if (!deleted) return res.status(404).json({ error: "not found" });
+      res.json({ ok: true, deleted: req.params.slug });
+    } catch (e) {
+      res.status(400).json({ error: String(e) });
+    }
+  });
 
   return app;
 }
