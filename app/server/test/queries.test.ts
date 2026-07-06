@@ -263,3 +263,18 @@ describe("D-momentum classifyTrajectory — age-adjusted velocity (#10)", () => 
     }
   });
 });
+
+describe("D-curation isCurationTag / Market Gaps denylist (#14)", () => {
+  it("flags platform-curation, brand, and device labels (case + ' Games' suffix insensitive)", () => {
+    for (const t of ["Popular Games", "New Games", "Crazy Games", "Mobile Games", "poki", "TRENDING", "Featured"])
+      expect(q.isCurationTag(t)).toBe(true);
+  });
+  it("does not flag real gameplay tags", () => {
+    for (const t of ["tower defense", "farming", "racing", "board games", "idle"])
+      expect(q.isCurationTag(t)).toBe(false);
+  });
+  it("no Market Gap is scored on a curation tag", async () => {
+    const gaps = await q.getMarketGaps(db, "all");
+    expect(gaps.every((g) => !q.isCurationTag(g.tag))).toBe(true);
+  });
+});

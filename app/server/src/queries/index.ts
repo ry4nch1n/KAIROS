@@ -126,6 +126,19 @@ function defineTag(name: string): string {
     : `A platform tag with no formal definition (inferred).`;
 }
 
+// Platform curation / brand / device labels — how a portal merchandises its catalog
+// (Popular, New, Trending) or brands itself (CrazyGames, Poki), or a device bucket
+// (Mobile) — NOT gameplay genres. A Market Gap built on one is an artifact of the tag
+// taxonomy, not a real market opening (#14), so these are denied before gaps are scored.
+const CURATION_TAGS = new Set([
+  "popular", "new", "trending", "hot", "featured", "crazygames", "crazy", "poki", "mobile", "fun",
+]);
+/** True if a tag is a platform-curation / brand / non-gameplay label rather than a genre. */
+export function isCurationTag(name: string): boolean {
+  const n = String(name).toLowerCase().trim().replace(/\s+/g, " ");
+  return CURATION_TAGS.has(n) || CURATION_TAGS.has(n.replace(/\s*games?$/, "").trim());
+}
+
 interface GenreDates { dates: string[]; order: string[]; byGenre: Record<string, number[]>; daySpan: number; }
 async function genreVotesByDate(db: Querier, platform: Platform): Promise<GenreDates> {
   const rows = await db.query(
@@ -313,14 +326,16 @@ export async function getMarketGaps(db: Querier, platform: Platform): Promise<Ma
     ),
     gapExamples(db, platform),
   ]);
-  if (rows.length < 2) return [];
+  // Drop platform-curation tags up front so they don't seed junk gaps OR skew the z-baseline.
+  const clean = rows.filter((r) => !isCurationTag(r.tag));
+  if (clean.length < 2) return [];
   const z = (vals: number[]) => { const m = vals.reduce((a, b) => a + b, 0) / vals.length;
     const sd = Math.sqrt(vals.reduce((a, b) => a + (b - m) ** 2, 0) / vals.length) || 1;
     return (v: number) => (v - m) / sd; };
-  const zApp = z(rows.map((r) => num(r.appetite)));
-  const zSup = z(rows.map((r) => num(r.supply_n)));
-  const zQual = z(rows.map((r) => num(r.quality_ceil)));
-  return rows
+  const zApp = z(clean.map((r) => num(r.appetite)));
+  const zSup = z(clean.map((r) => num(r.supply_n)));
+  const zQual = z(clean.map((r) => num(r.quality_ceil)));
+  return clean
     .map((r) => ({
       label: `${r.genre} × ${r.tag}`,
       genre: r.genre,
