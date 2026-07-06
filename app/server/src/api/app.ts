@@ -19,6 +19,10 @@ export function createApp(db: Querier) {
   app.get("/api/health", (_req, res) => res.json({ ok: true }));
   app.get("/api/contract", (_req, res) => res.json(CONTRACT));
 
+  // NOTE: this dev server has no edition-deletion route. Prod (netlify/functions/api.ts)
+  // exposes `DELETE /api/brief/edition/:date` for live-data cleanup of a bad edition — a
+  // deliberate prod-only divergence (dev just re-seeds), pinned in routeParity.test.ts's
+  // KNOWN_PROD_ONLY allowlist. Publish itself is identical on both sides.
   app.post("/api/brief/publish", async (req, res) => {
     const token = process.env.PUBLISH_TOKEN;
     const auth = req.headers.authorization || "";

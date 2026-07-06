@@ -26,13 +26,10 @@ export default async (req: Request) => {
       const auth = req.headers.get("authorization") || "";
       if (!token || auth !== `Bearer ${token}`) return json({ error: "unauthorized" }, 401);
       const body = await req.json();
-      if (body.delete && body.editionDate) {
-        await db.query("DELETE FROM brief_editions WHERE edition_date = $1", [body.editionDate]);
-        return json({ ok: true, deleted: body.editionDate });
-      }
       await q.publishEdition(db, body);
       return json({ ok: true, editionDate: body.editionDate });
     }
+    // Deletion is via the explicit DELETE route below (prod-only; see app.ts note).
     if (req.method === "DELETE" && path.startsWith("/brief/edition/")) {
       const token = process.env.PUBLISH_TOKEN;
       const auth = req.headers.get("authorization") || "";
