@@ -1,5 +1,10 @@
 // Shared types across web + server. Single source of truth for API shapes.
 
+// The data contract (versions, taxonomy enums, payload validators) lives in contract.ts
+// and is re-exported here so `import { CONTRACT, ... } from "shared"` resolves (shared's
+// main is this file).
+export * from "./contract.ts";
+
 export type Platform = "all" | "poki" | "crazygames" | "steam";
 
 // ── Phase 2: Steam / PC analytics ──

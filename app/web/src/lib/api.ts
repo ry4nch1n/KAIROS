@@ -1,5 +1,5 @@
 import type {
-  Overview, Platform, BriefEditionMeta, BriefEdition, LibraryItem, Pitch,
+  Overview, Platform, BriefEditionMeta, BriefEdition, LibraryItem, Pitch, Contract,
   GenreRow, DeveloperRow, NewRelease, HiddenGem, SteamOverview, BriefSteering,
 } from "shared";
 
@@ -21,4 +21,5 @@ export const api = {
   briefEdition: (date: string) => getJSON<BriefEdition>(`/api/brief/edition/${date}`),
   library: () => getJSON<LibraryItem[]>(`/api/library`),
   pitches: () => getJSON<Pitch[]>(`/api/pitches`),
+  contract: () => getJSON<Contract>(`/api/contract`),
 };

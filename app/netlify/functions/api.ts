@@ -3,6 +3,7 @@
 import { appDb } from "../../server/src/db/db.ts";
 import * as q from "../../server/src/queries/index.ts";
 import type { Platform } from "shared";
+import { CONTRACT } from "shared";
 
 const PLATFORMS = ["all", "poki", "crazygames", "steam"];
 const pp = (v: string | null): Platform => (v && PLATFORMS.includes(v) ? v : "all") as Platform;
@@ -18,6 +19,7 @@ export default async (req: Request) => {
   const platform = pp(url.searchParams.get("platform"));
   try {
     if (path === "/health") return json({ ok: true });
+    if (path === "/contract") return json(CONTRACT);
     const db = await appDb();
     if (req.method === "POST" && path === "/brief/publish") {
       const token = process.env.PUBLISH_TOKEN;

@@ -3,6 +3,7 @@ import express from "express";
 import cors from "cors";
 import type { Querier } from "../db/db.ts";
 import type { Platform } from "shared";
+import { CONTRACT } from "shared";
 import * as q from "../queries/index.ts";
 
 const PLATFORMS = ["all", "poki", "crazygames", "steam"];
@@ -16,6 +17,7 @@ export function createApp(db: Querier) {
   app.use(express.json({ limit: "1mb" }));
 
   app.get("/api/health", (_req, res) => res.json({ ok: true }));
+  app.get("/api/contract", (_req, res) => res.json(CONTRACT));
 
   app.post("/api/brief/publish", async (req, res) => {
     const token = process.env.PUBLISH_TOKEN;

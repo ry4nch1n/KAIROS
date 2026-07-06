@@ -8,6 +8,7 @@ import type {
   SteamGap, SteamPriceBand, SteamOwnershipRow, SteamDeveloperRow, SteamNewRelease,
   Pitch, PitchInput,
 } from "shared";
+import { assertPitchInput, validateBriefPayload } from "shared";
 
 const fmtDate = (d: any) => new Date(d).toISOString().slice(5, 10); // "MM-DD"
 
@@ -775,6 +776,9 @@ export interface PublishInput {
 
 export async function publishEdition(db: Querier, e: PublishInput): Promise<void> {
   if (!e?.editionDate || !e?.payload) throw new Error("editionDate and payload required");
+  // Advisory only — warn on format drift but never reject, so a lagging brief can't blank the dashboard.
+  const bv = validateBriefPayload(e.payload);
+  if (bv.warnings.length) console.warn(`[contract] brief ${e.editionDate}: ${bv.warnings.join("; ")}`);
   await db.query(
     `INSERT INTO brief_editions(edition_date, weekday, brief_type, payload, rendered_html, local_path, source_count)
      VALUES ($1,$2,$3,$4,$5,$6,$7)
@@ -878,7 +882,7 @@ export async function getPitches(db: Querier): Promise<Pitch[]> {
 }
 
 export async function publishPitch(db: Querier, p: PitchInput): Promise<void> {
-  if (!p?.slug || !p?.title || !p?.pitchDate) throw new Error("slug, title and pitchDate required");
+  assertPitchInput(p); // strict: validates required fields + taxonomy enums + score ranges against the contract
   await db.query(
     `INSERT INTO pitches
        (slug, rank, title, one_liner, loop_family, platform_ladder, status, badge,
