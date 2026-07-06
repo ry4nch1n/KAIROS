@@ -8,6 +8,14 @@ export default async (req: Request, _context: Context) => {
   const password = Netlify.env.get("SITE_PASSWORD");
   if (!password) return; // not configured yet -> allow through
 
+  // Method-aware bypasses (the config excludedPath below can't distinguish method):
+  //  • GET /api/contract — non-sensitive taxonomy/versions, read by producers at run start.
+  //  • POST /api/pitches — the weekly routine posts with its own bearer token (function-enforced),
+  //    while GET /api/pitches (the private pitch data) stays behind the gate.
+  const { pathname } = new URL(req.url);
+  if (pathname === "/api/contract") return;
+  if (req.method === "POST" && pathname === "/api/pitches") return;
+
   const user = Netlify.env.get("SITE_USER") || "kairos";
   const expected = "Basic " + btoa(`${user}:${password}`);
   const got = req.headers.get("authorization") || "";
