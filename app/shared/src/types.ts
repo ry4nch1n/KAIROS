@@ -41,6 +41,10 @@ export interface SteamComparable {
   developer: string | null;
   releaseDate: string | null; // ISO YYYY-MM-DD (for the "Released" year column)
   teamSize: ComparableTeamSize | null; // curated estimate, or null when the studio isn't researched
+  // Reviews gained per day over the trailing 30-day snapshot window — the public proxy for
+  // wishlist velocity (wishlist counts aren't acquirable). null when the snapshot history
+  // can't support a rate (<2 points in the window), never a misleading 0.
+  reviewVelocity: number | null;
 }
 
 export interface SteamGap {

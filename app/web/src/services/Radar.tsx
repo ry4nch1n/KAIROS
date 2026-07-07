@@ -286,10 +286,11 @@ const TEAM_META: Record<string, { label: string; cls: string }> = {
 };
 const isSoloReachable = (c: SteamComparable) => c.teamSize != null && (c.teamSize.bucket === "solo" || c.teamSize.bucket === "small");
 const TEAM_TIP = "Team size is not in any Steam/3rd-party API — these are researched estimates (bucket by the team that shipped the studio's breakout). Click for the source.";
+const VELOCITY_TIP = "Reviews gained per day over the trailing 30-day snapshot window — the public leading-indicator proxy for wishlist velocity (wishlist counts aren't acquirable). Total reviews/owners lag a launch by months; this doesn't. — = not enough snapshot history yet.";
 
 function ComparablesTable({ rows }: { rows: SteamComparable[] }) {
   return (
-    <table className="dtable"><thead><tr><th>Game</th><th>Tier</th><th title={TEAM_TIP}>Team (est.)</th><th>Genre</th><th className="r">Released</th><th className="r">Rating</th><th className="r">Reviews</th><th className="r" title={OWNERS_TIP}>Owners</th><th className="r">Price</th><th>Developer</th></tr></thead>
+    <table className="dtable"><thead><tr><th>Game</th><th>Tier</th><th title={TEAM_TIP}>Team (est.)</th><th>Genre</th><th className="r">Released</th><th className="r">Rating</th><th className="r">Reviews</th><th className="r" title={VELOCITY_TIP}>Rev./day</th><th className="r" title={OWNERS_TIP}>Owners</th><th className="r">Price</th><th>Developer</th></tr></thead>
       <tbody>{rows.map((c, i) => {
         const tm = TIER_META[c.tier] ?? { label: c.tier, cls: "t-hobby" };
         const ts = c.teamSize;
@@ -302,6 +303,7 @@ function ComparablesTable({ rows }: { rows: SteamComparable[] }) {
               : <span className="est-chip est-unknown" title="Team size not researched yet">—</span>}</td>
             <td>{c.genre}</td><td className="r">{c.releaseDate ? c.releaseDate.slice(0, 4) : "—"}</td>
             <td className="r">{rate(c.rating)}</td><td className="r">{c.votes == null ? "—" : fmt(c.votes)}</td>
+            <td className="r">{c.reviewVelocity == null ? "—" : fmt(c.reviewVelocity)}</td>
             <td className="r">{fmtOwners(c.owners)}</td><td className="r">{money(c.priceCents)}</td>
             <td style={{ color: "var(--ink-3, #6b7280)" }}>{c.developer ?? "—"}</td></tr>
         );

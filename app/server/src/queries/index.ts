@@ -633,9 +633,62 @@ export async function getSteamGenreEconomics(
 // dropped here — the crawl seeds from indie TOP SELLERS so the recent set stays well populated.
 const COMPARABLE_OWNERS_FLOOR = 20_000;
 const COMPARABLE_RECENCY_YEARS = 2;
+
+// Trailing window for the review-velocity leading indicator (#11). Owners/review totals
+// lag a launch by months; reviews-per-day over recent snapshots is the standard public
+// proxy for wishlist velocity (wishlist counts aren't publicly acquirable).
+const REVIEW_VELOCITY_WINDOW_DAYS = 30;
+
+/**
+ * Δreviews/Δdays over the trailing window of one game's review-count series
+ * (times ascending, votes aligned). null — never a misleading 0 — when the history
+ * can't support a rate: <2 snapshots inside the window, or zero time span.
+ * Review purges (negative deltas) clamp to 0.
+ */
+export function computeReviewVelocity(
+  times: number[],
+  votes: number[],
+  windowDays = REVIEW_VELOCITY_WINDOW_DAYS
+): number | null {
+  if (times.length < 2 || times.length !== votes.length) return null;
+  const end = times[times.length - 1];
+  const windowStart = end - windowDays * 86400000;
+  let i = 0;
+  while (i < times.length && times[i] < windowStart) i++;
+  if (times.length - i < 2) return null;
+  const spanDays = (end - times[i]) / 86400000;
+  if (spanDays <= 0) return null;
+  return +Math.max(0, (votes[votes.length - 1] - votes[i]) / spanDays).toFixed(1);
+}
+
+// Per-game review time-series for the given ids → reviewVelocity map (#11).
+async function reviewVelocities(db: Querier, ids: number[]): Promise<Map<number, number | null>> {
+  const out = new Map<number, number | null>();
+  if (!ids.length) return out;
+  const ph = ids.map((_, i) => `$${i + 1}`).join(",");
+  const series = await db.query(
+    `SELECT game_id AS id, captured_at AS d, max(votes) AS votes
+     FROM game_snapshots
+     WHERE game_id IN (${ph}) AND votes IS NOT NULL
+     GROUP BY game_id, captured_at
+     ORDER BY game_id, captured_at`,
+    ids
+  );
+  const byId = new Map<number, { t: number[]; v: number[] }>();
+  for (const r of series) {
+    const id = num(r.id);
+    let g = byId.get(id);
+    if (!g) { g = { t: [], v: [] }; byId.set(id, g); }
+    g.t.push(new Date(r.d).getTime());
+    g.v.push(num(r.votes));
+  }
+  for (const [id, g] of byId) out.set(id, computeReviewVelocity(g.t, g.v));
+  return out;
+}
+
 export async function getSteamComparables(db: Querier, limit = 12): Promise<SteamComparable[]> {
   const rows = await db.query(
-    `SELECT g.title, l.scale_tier AS tier, l.genre, l.rating, l.votes,
+    `SELECT g.id AS id, g.title, l.scale_tier AS tier, l.genre, l.rating, l.votes,
             l.owners_est AS owners, l.price_cents AS price, g.developer, g.release_date
      FROM v_latest l JOIN games g ON g.id = l.game_id JOIN sources src ON src.id = g.source_id
      WHERE g.is_live AND src.name = 'steam' AND l.rating IS NOT NULL
@@ -646,6 +699,7 @@ export async function getSteamComparables(db: Querier, limit = 12): Promise<Stea
      LIMIT $1`,
     [limit]
   );
+  const velocities = await reviewVelocities(db, rows.map((r) => num(r.id)));
   return rows.map((r) => {
     const ts = teamSizeFor(r.developer);
     return {
@@ -657,6 +711,7 @@ export async function getSteamComparables(db: Querier, limit = 12): Promise<Stea
       developer: r.developer ?? null,
       releaseDate: r.release_date == null ? null : new Date(r.release_date).toISOString().slice(0, 10),
       teamSize: ts ? { bucket: ts.bucket, headcount: ts.headcount, source: ts.source, confidence: ts.confidence } : null,
+      reviewVelocity: velocities.get(num(r.id)) ?? null,
     };
   });
 }
