@@ -386,6 +386,45 @@ describe("D12b getSteamComparables prefers recent releases", () => {
   });
 });
 
+describe("D12c review velocity — the wishlist-proxy leading indicator (#11)", () => {
+  const DAY = 86400000;
+  const t0 = Date.parse("2026-06-01T00:00:00Z");
+
+  it("computeReviewVelocity: Δreviews/Δdays over the trailing window", () => {
+    expect(q.computeReviewVelocity([t0, t0 + 10 * DAY], [1000, 2000])).toBe(100);
+    // snapshots older than the window must not dilute the recent rate
+    expect(q.computeReviewVelocity([t0, t0 + 40 * DAY, t0 + 50 * DAY], [0, 4000, 4500], 30)).toBe(50);
+  });
+
+  it("is null (not a misleading 0) when history can't support a rate", () => {
+    expect(q.computeReviewVelocity([t0], [100])).toBeNull();          // single snapshot
+    expect(q.computeReviewVelocity([t0, t0], [100, 200])).toBeNull(); // zero time span
+    // 2 points exist but only 1 falls inside the trailing window
+    expect(q.computeReviewVelocity([t0, t0 + 40 * DAY], [100, 200], 30)).toBeNull();
+  });
+
+  it("clamps review purges to 0 rather than reporting a negative rate", () => {
+    expect(q.computeReviewVelocity([t0, t0 + 5 * DAY], [2000, 1500])).toBe(0);
+  });
+
+  it("getSteamComparables surfaces reviewVelocity from snapshot deltas", async () => {
+    const db = await freshMemoryDb();
+    const g = steamGame({ sourceGameId: "vel", title: "Velocity Game", scaleTier: "small_indie", releaseDate: "2025-05-01", ownersEst: 90_000, rating: 4.4, votes: 1_000 });
+    await loadGames(db, "steam", STEAM_BASE_URL, [g], "2026-06-20T00:00:00.000Z");
+    await loadGames(db, "steam", STEAM_BASE_URL, [{ ...g, votes: 2_000 }], "2026-06-30T00:00:00.000Z");
+    const row = (await q.getSteamComparables(db, 10)).find((x) => x.title === "Velocity Game")!;
+    expect(row.reviewVelocity).toBe(100); // +1,000 reviews over 10 days
+  });
+
+  it("single-snapshot games report null velocity", async () => {
+    const db = await freshMemoryDb();
+    await seedSteamSample(db); // one crawl day → 1 snapshot per game
+    const c = await q.getSteamComparables(db, 10);
+    expect(c.length).toBeGreaterThan(0);
+    expect(c.every((x) => x.reviewVelocity === null)).toBe(true);
+  });
+});
+
 describe("D13b getSteamOverview kpi.indieMedianPriceCents", () => {
   it("computes median price over the indie cohort (excludes AAA)", async () => {
     const db = await freshMemoryDb();

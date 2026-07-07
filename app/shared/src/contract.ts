@@ -7,7 +7,8 @@
 // (e.g. a new loop family) is a contract change, on purpose.
 
 export const CONTRACT = {
-  version: 1,
+  // v2: SteamComparable gained `reviewVelocity` (reviews/day, wishlist-velocity proxy — #11).
+  version: 2,
   pitch: {
     version: 1,
     loopFamilies: [
