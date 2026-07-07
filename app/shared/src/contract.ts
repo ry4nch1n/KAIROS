@@ -8,7 +8,8 @@
 
 export const CONTRACT = {
   // v2: SteamComparable gained `reviewVelocity` (reviews/day, wishlist-velocity proxy — #11).
-  version: 2,
+  // v3: SteamGenreEconomics gained `medianRevenuePerGame` + `meanRevenuePerGame` (#24).
+  version: 3,
   pitch: {
     version: 1,
     loopFamilies: [

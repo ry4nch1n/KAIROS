@@ -360,6 +360,33 @@ describe("D10b getSteamGenreEconomics — medianRating null when cohort has no r
   });
 });
 
+describe("D10c genre economics per-game revenue — size vs opportunity (#24)", () => {
+  it("adds median (skew-resistant) and mean revenue per game alongside the total", async () => {
+    const db = await freshMemoryDb();
+    await loadGames(db, "steam", STEAM_BASE_URL, [
+      // one $10 genre with a top-heavy spread: $100k / $200k / $900k
+      steamGame({ sourceGameId: "s1", genre: "Sim", scaleTier: "small_indie", ownersEst: 10_000, priceCents: 1000 }),
+      steamGame({ sourceGameId: "s2", genre: "Sim", scaleTier: "small_indie", ownersEst: 20_000, priceCents: 1000 }),
+      steamGame({ sourceGameId: "s3", genre: "Sim", scaleTier: "small_indie", ownersEst: 90_000, priceCents: 1000 }),
+    ], "2026-06-30T00:00:00.000Z");
+    const row = (await q.getSteamGenreEconomics(db)).find((r) => r.genre === "Sim")!;
+    expect(row.revenueProxy).toBe(1_200_000);         // category size
+    expect(row.medianRevenuePerGame).toBe(200_000);   // typical outcome
+    expect(row.meanRevenuePerGame).toBe(400_000);     // hit-skewed mean exposes top-heaviness
+  });
+
+  it("counts free/unpriced games as $0 in the median instead of skipping them", async () => {
+    const db = await freshMemoryDb();
+    await loadGames(db, "steam", STEAM_BASE_URL, [
+      steamGame({ sourceGameId: "f1", genre: "Arcade", scaleTier: "hobby", ownersEst: 50_000, priceCents: 0 }),
+      steamGame({ sourceGameId: "f2", genre: "Arcade", scaleTier: "hobby", ownersEst: 40_000, priceCents: 0 }),
+      steamGame({ sourceGameId: "f3", genre: "Arcade", scaleTier: "hobby", ownersEst: 10_000, priceCents: 1000 }),
+    ], "2026-06-30T00:00:00.000Z");
+    const row = (await q.getSteamGenreEconomics(db)).find((r) => r.genre === "Arcade")!;
+    expect(row.medianRevenuePerGame).toBe(0); // mostly-free genre medians honestly at $0
+  });
+});
+
 describe("D12 getSteamComparables", () => {
   it("returns indie-tier rated games (AAA excluded, only rated)", async () => {
     const db = await freshMemoryDb();
