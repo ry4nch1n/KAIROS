@@ -101,13 +101,17 @@ function OverviewView({ ov }: { ov: Overview }) {
   );
 }
 
+// The opportunity score is not a black box (#12): the exact formula is stated in each
+// list's legend and unpacked here. Pinned by the server test "opportunity score formula".
+const Z_TIP = "z(x) = how many standard deviations x sits above the average across all genre × tag pairs ranked here. Positive score = better opportunity than the average pair; each term contributes roughly ±1 per standard deviation.";
+
 function GapList({ gaps }: { gaps: Overview["gaps"] }) {
   return (
     <div className="gaplist">
-      <p className="gap-legend">high appetite + high quality ceiling + low supply = opportunity</p>
+      <p className="gap-legend" title={Z_TIP}>opportunity = z(appetite: median votes/title) + z(quality ceiling: P90 rating) − z(supply: games)</p>
       {gaps.map((g, i) => (
         <div className="gap" key={i}><span className="rank num">{i + 1}</span>
-          <div className="name">{g.label}<small>opportunity {g.score.toFixed(1)}</small></div>
+          <div className="name">{g.label}<small title={Z_TIP}>opportunity {g.score.toFixed(1)}</small></div>
           <div className="gap-stats num">
             <span><b>{fmt(g.appetite)}</b> median votes/title</span>
             <span><b>{g.supplyN}</b> games</span>
@@ -227,10 +231,10 @@ function OppList({ gaps }: { gaps: SteamGap[] }) {
   if (!gaps.length) return <p className="view-head">Not enough indie data yet to rank genre × tag opportunities — accrues as the crawl grows.</p>;
   return (
     <div className="gaplist">
-      <p className="gap-legend">high demand (owners) + high quality + low supply + monetizable = opportunity</p>
+      <p className="gap-legend" title={Z_TIP}>opportunity = z(demand: median owners) + z(quality ceiling: P90 rating) − z(supply: games) · median price is context, not scored</p>
       {gaps.map((g, i) => (
         <div className="gap" key={i}><span className="rank num">{i + 1}</span>
-          <div className="name">{g.label}<small>opportunity {g.score.toFixed(1)}</small></div>
+          <div className="name">{g.label}<small title={Z_TIP}>opportunity {g.score.toFixed(1)}</small></div>
           <div className="gap-stats num">
             <span><b>{fmtOwners(g.medianOwners)}</b> median owners</span>
             <span><b>{g.supplyN}</b> games</span>
