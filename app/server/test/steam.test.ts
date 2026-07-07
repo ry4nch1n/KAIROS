@@ -544,6 +544,33 @@ describe("D16 Steam sub-sections (Pricing / Ownership / Developers / New release
   });
 });
 
+describe("D16c opportunity score formula is pinned (#12)", () => {
+  // The UI legend states: opportunity = z(demand) + z(quality ceiling) − z(supply),
+  // with price shown as context but NOT scored. This fixture is built so the z-terms
+  // are hand-computable: two pairs with equal supply (z=0) whose demand and quality
+  // z-scores are exactly ±1 → scores must be exactly +2.0 and −2.0. If the formula
+  // changes, this test fails and the Radar legend/tooltip must be updated with it.
+  it("score = z(median owners) + z(P90 rating) − z(supply); price not scored", async () => {
+    const db = await freshMemoryDb();
+    await loadGames(db, "steam", STEAM_BASE_URL, [
+      // pair 1: Action × roguelike — median owners 150k, P90 rating 4.36
+      steamGame({ sourceGameId: "a1", genre: "Action", tags: ["roguelike"], ownersEst: 100_000, rating: 4.0, priceCents: 100 }),
+      steamGame({ sourceGameId: "a2", genre: "Action", tags: ["roguelike"], ownersEst: 200_000, rating: 4.4, priceCents: 100 }),
+      // pair 2: Puzzle × roguelike — median owners 30k, P90 rating 3.36, far pricier
+      steamGame({ sourceGameId: "p1", genre: "Puzzle", tags: ["roguelike"], ownersEst: 20_000, rating: 3.0, priceCents: 9900 }),
+      steamGame({ sourceGameId: "p2", genre: "Puzzle", tags: ["roguelike"], ownersEst: 40_000, rating: 3.4, priceCents: 9900 }),
+    ], "2026-06-30T00:00:00.000Z");
+    const opp = await q.getSteamOpportunity(db);
+    const action = opp.find((g) => g.genre === "Action")!;
+    const puzzle = opp.find((g) => g.genre === "Puzzle")!;
+    // z(demand)=±1, z(quality)=±1, z(supply)=0 (equal supply) → ±2.0 exactly
+    expect(action.score).toBeCloseTo(2.0, 5);
+    expect(puzzle.score).toBeCloseTo(-2.0, 5);
+    // price is context only: the cheap pair outranks the expensive one purely on demand+quality
+    expect(opp[0].genre).toBe("Action");
+  });
+});
+
 describe("D14 GET /api/steam", () => {
   it("serves the steam overview as JSON", async () => {
     const db = await freshMemoryDb();
