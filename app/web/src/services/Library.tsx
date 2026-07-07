@@ -85,7 +85,11 @@ function LibCard({ it }: { it: LibraryItem }) {
         <span className={"ptag st st-" + it.status}>{it.status}</span>
       </div>
       <h3>{it.title}</h3>
+      {it.date && <div className="bmeta">Published {fmtDate(it.date)}</div>}
       {it.summary && <p className="bblurb">{it.summary}</p>}
+      {it.mediaUrl && (
+        <a className="plink" href={it.mediaUrl} target="_blank" rel="noreferrer">▶ Play prototype</a>
+      )}
     </article>
   );
 }

@@ -1,6 +1,7 @@
 // Deterministic sample-data generator. Powers local verification of every chart.
 // Uses a fixed base date + seeded PRNG so results are stable across runs.
 import { appDb, applySchema, type Querier } from "./db.ts";
+import { ensureLibraryPrototypes } from "./library-seed.ts";
 import { fileURLToPath } from "node:url";
 
 const WEEKS = 12;
@@ -264,7 +265,9 @@ export async function seed(db: Querier): Promise<void> {
     `INSERT INTO brief_editions(edition_date, weekday, brief_type, payload, source_count) VALUES ($1,$2,$3,$4,$5)`,
     ["2026-06-23", "mon", "indie", JSON.stringify(ed2), 11]
   );
-  // library_items intentionally empty (V2)
+  // library_items: seed the curated Prototypes collection (idempotent inserter,
+  // shared with the prod migrate path so local and Neon stay in sync).
+  await ensureLibraryPrototypes(db);
 }
 
 export { weekLabels };

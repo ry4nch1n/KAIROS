@@ -1,6 +1,7 @@
 node_modules/
 **/node_modules/
 app/server/.data/
+**/.data/
 app/web/dist/
 .netlify/
 .env

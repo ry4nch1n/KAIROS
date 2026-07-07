@@ -83,7 +83,9 @@ export function createApp(db: Querier) {
 
   app.get("/api/library", async (_req, res) => {
     const rows = await db.query(
-      "SELECT id, kind, title, summary, tags, status FROM library_items ORDER BY created_at DESC"
+      `SELECT id, kind, title, summary, tags, status, media_url AS "mediaUrl",
+              to_char(created_at, 'YYYY-MM-DD') AS date
+       FROM library_items ORDER BY created_at DESC`
     );
     res.json(rows);
   });

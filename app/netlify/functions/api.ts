@@ -60,7 +60,11 @@ export default async (req: Request) => {
       return ed ? json(ed) : json({ error: "not found" }, 404);
     }
     if (path === "/library")
-      return json(await db.query("SELECT id, kind, title, summary, tags, status FROM library_items ORDER BY created_at DESC"));
+      return json(await db.query(
+        `SELECT id, kind, title, summary, tags, status, media_url AS "mediaUrl",
+                to_char(created_at, 'YYYY-MM-DD') AS date
+         FROM library_items ORDER BY created_at DESC`
+      ));
     if (req.method === "POST" && path === "/pitches") {
       const token = process.env.PUBLISH_TOKEN;
       const auth = req.headers.get("authorization") || "";
