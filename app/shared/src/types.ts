@@ -17,6 +17,10 @@ export interface SteamGenreEconomics {
   medianRating: number | null; // null when the cohort has no rated games yet (honest, not 0)
   totalOwners: number;
   revenueProxy: number; // owners × price, in dollars (rough monetizability signal)
+  // Per-game reads (#24): total conflates market size with opportunity — 248 games
+  // splitting $8.5B is a worse solo-dev bet than 8 splitting $136M.
+  medianRevenuePerGame: number; // dollars; the "typical outcome", resists mega-hit skew
+  meanRevenuePerGame: number;   // dollars; mean ≫ median = category is top-heavy
 }
 
 // Curated, researched team-size estimate (see server data/teamSize.ts). solo=1–2, small=3–10,

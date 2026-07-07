@@ -215,14 +215,23 @@ const OWNERS_TIP = "Owners are SteamSpy bucket midpoints (estimates).";
 const PROXY_TIP = "Revenue proxy = owners × current price (directional, not a P&L).";
 const playH = (m: number) => (m ? Math.round(m / 60) + "h" : "—");
 
+// Per-game revenue reads (#24): total revenue answers "how big is this category",
+// not "what does a typical game here earn" — the question that matters when picking
+// where to compete. Median/game is the headline (resists mega-hit skew).
+const MED_REV_TIP = "Median revenue proxy per game — the typical outcome for one title in this genre. Resists mega-hit skew; the honest solo-dev opportunity read.";
+const MEAN_REV_TIP = "Mean revenue proxy per game (total ÷ games). Mean far above median = top-heavy category where a few hits hold most of the pool.";
+const TOTAL_REV_TIP = "Total revenue proxy = Σ owners × current price across the genre (directional, not a P&L). Measures category size, not per-game opportunity.";
+
 function EconTable({ rows }: { rows: SteamGenreEconomics[] }) {
   return (
-    <table className="dtable"><thead><tr><th>Genre</th><th className="r">Games</th><th className="r">Median price</th><th className="r">Median rating</th><th className="r" title={OWNERS_TIP}>Total owners</th><th className="r" title={PROXY_TIP}>Revenue proxy</th></tr></thead>
+    <table className="dtable"><thead><tr><th>Genre</th><th className="r">Games</th><th className="r">Median price</th><th className="r">Median rating</th><th className="r" title={OWNERS_TIP}>Total owners</th><th className="r" title={MED_REV_TIP}>Median rev/game</th><th className="r" title={MEAN_REV_TIP}>Mean rev/game</th><th className="r" title={TOTAL_REV_TIP}>Total rev proxy</th></tr></thead>
       <tbody>{rows.map((r) => (
         <tr key={r.genre}><td className="gname">{r.genre}</td>
           <td className="r">{r.games}</td><td className="r">{money(r.medianPriceCents)}</td>
           <td className="r">{rate(r.medianRating)}</td><td className="r">{fmtOwners(r.totalOwners)}</td>
-          <td className="r" style={{ fontWeight: 600 }}>{proxy(r.revenueProxy)}</td></tr>
+          <td className="r" style={{ fontWeight: 600 }}>{proxy(r.medianRevenuePerGame)}</td>
+          <td className="r">{proxy(r.meanRevenuePerGame)}</td>
+          <td className="r">{proxy(r.revenueProxy)}</td></tr>
       ))}</tbody></table>
   );
 }

@@ -611,11 +611,15 @@ export async function getSteamGenreEconomics(
             percentile_cont(0.5) WITHIN GROUP (ORDER BY l.price_cents)::float AS med_price,
             percentile_cont(0.5) WITHIN GROUP (ORDER BY l.rating)::float AS med_rating,
             coalesce(sum(l.owners_est), 0)::float AS total_owners,
-            coalesce(sum(l.owners_est * l.price_cents), 0)::float AS rev_cents
+            coalesce(sum(l.owners_est * l.price_cents), 0)::float AS rev_cents,
+            percentile_cont(0.5) WITHIN GROUP (
+              ORDER BY coalesce(l.owners_est, 0) * coalesce(l.price_cents, 0))::float AS med_rev_cents
      FROM v_latest l JOIN games g ON g.id = l.game_id JOIN sources src ON src.id = g.source_id
      WHERE g.is_live AND src.name = 'steam' AND l.genre IS NOT NULL ${tierFilter}
      GROUP BY l.genre ORDER BY total_owners DESC`
   );
+  // Per-game reads (#24): free/unpriced games count as $0 in the median (coalesce above)
+  // rather than being skipped — a genre of mostly-free games honestly medians near $0.
   return rows.map((r) => ({
     genre: r.genre,
     games: num(r.games),
@@ -623,6 +627,8 @@ export async function getSteamGenreEconomics(
     medianRating: r.med_rating == null ? null : +Number(r.med_rating).toFixed(2),
     totalOwners: num(r.total_owners),
     revenueProxy: Math.round(num(r.rev_cents) / 100),
+    medianRevenuePerGame: Math.round(num(r.med_rev_cents) / 100),
+    meanRevenuePerGame: num(r.games) ? Math.round(num(r.rev_cents) / 100 / num(r.games)) : 0,
   }));
 }
 
