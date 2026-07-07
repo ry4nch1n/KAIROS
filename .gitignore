@@ -3,6 +3,8 @@ node_modules/
 app/server/.data/
 **/.data/
 app/web/dist/
+app/web/playwright-report/
+app/web/test-results/
 .netlify/
 .env
 .env.*
