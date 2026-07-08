@@ -280,6 +280,7 @@ export interface LibraryItem {
   tags: string[];
   status: string;
   mediaUrl: string | null; // playable/asset link (e.g. a hosted prototype)
+  imageUrl: string | null; // poster/thumbnail shown on the card
   date: string | null;     // YYYY-MM-DD — e.g. a prototype's publish date
 }
 
