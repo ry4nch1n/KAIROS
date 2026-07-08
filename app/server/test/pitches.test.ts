@@ -41,6 +41,24 @@ describe("P1 pitches table + queries", () => {
     expect(p.pitchDate).toBe("2026-07-06");
   });
 
+  it("publishPitch round-trips the v2 visual-card fields", async () => {
+    const db = await freshMemoryDb();
+    await q.publishPitch(db, {
+      ...base,
+      setting: "derelict deep-space refinery",
+      artStyle: "moody minimalist low-poly",
+      codeName: "IRONVEIL",
+      headerUrl: "https://kairos-pitch-art.netlify.app/salvage-line/header.png",
+      shotUrl: "https://kairos-pitch-art.netlify.app/salvage-line/shot.png",
+    });
+    const p = (await q.getPitches(db))[0];
+    expect(p.setting).toBe("derelict deep-space refinery");
+    expect(p.artStyle).toBe("moody minimalist low-poly");
+    expect(p.codeName).toBe("IRONVEIL");
+    expect(p.headerUrl).toBe("https://kairos-pitch-art.netlify.app/salvage-line/header.png");
+    expect(p.shotUrl).toBe("https://kairos-pitch-art.netlify.app/salvage-line/shot.png");
+  });
+
   it("publishPitch upserts on slug (no duplicate rows)", async () => {
     const db = await freshMemoryDb();
     await q.publishPitch(db, base);

@@ -46,6 +46,11 @@ function Dots({ n, of = 3 }: { n: number | null; of?: number }) {
 function PitchCard({ p }: { p: Pitch }) {
   return (
     <article className="bcard pcard">
+      {p.headerUrl && (
+        <div className="pcapsule">
+          <img src={p.headerUrl} alt={(p.codeName || p.title) + " — header capsule"} loading="lazy" />
+        </div>
+      )}
       <div className="pcard-head">
         {p.rank !== null && <span className="prank">{p.rank}</span>}
         <div className="pcard-headmain">
@@ -54,18 +59,26 @@ function PitchCard({ p }: { p: Pitch }) {
             {p.loopFamily && <span className="ptag lf">{LOOP_LABEL[p.loopFamily] || p.loopFamily}</span>}
             <span className={"ptag st st-" + p.status}>{p.status}</span>
           </div>
-          <h3>{p.title}</h3>
+          <h3>{p.title}{p.codeName && <span className="pcode">"{p.codeName}"</span>}</h3>
           <div className="bmeta">{ladder(p.platformLadder)} · {fmtDate(p.pitchDate)}</div>
         </div>
       </div>
       {p.oneLiner && <p className="bblurb pone">{p.oneLiner}</p>}
       <div className="pfields">
         {p.loopDetail && <div><span className="plabel">Loop</span>{p.loopDetail}</div>}
+        {p.setting && <div><span className="plabel">Setting</span>{p.setting}</div>}
+        {p.artStyle && <div><span className="plabel">Art style</span>{p.artStyle}</div>}
         {p.browserMvp && <div><span className="plabel">Browser MVP</span>{p.browserMvp}</div>}
         {p.steamLadder && <div><span className="plabel">Steam ladder</span>{p.steamLadder}</div>}
         {p.evidence && <div><span className="plabel">Evidence</span>{p.evidence}</div>}
         {p.risk && <div className="prisk"><span className="plabel">Risk</span>{p.risk}</div>}
       </div>
+      {p.shotUrl && (
+        <figure className="pshot">
+          <img src={p.shotUrl} alt={(p.codeName || p.title) + " — in-game"} loading="lazy" />
+          <figcaption>In-game concept</figcaption>
+        </figure>
+      )}
       {(p.d1Fit !== null || p.steamCeiling !== null || p.buildCost !== null) && (
         <div className="pscores">
           <span>D1 fit <Dots n={p.d1Fit} /></span>

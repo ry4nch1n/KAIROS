@@ -149,3 +149,9 @@ CREATE TABLE IF NOT EXISTS pitches (
   updated_at      TIMESTAMPTZ DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_pitches_date ON pitches (pitch_date DESC, rank ASC);
+-- Visual card (contract pitch v2): world/style dimensions + generated art. Additive so prod migrates in place.
+ALTER TABLE pitches ADD COLUMN IF NOT EXISTS setting    TEXT;
+ALTER TABLE pitches ADD COLUMN IF NOT EXISTS art_style  TEXT;
+ALTER TABLE pitches ADD COLUMN IF NOT EXISTS code_name  TEXT;   -- placeholder project name shown on the header capsule
+ALTER TABLE pitches ADD COLUMN IF NOT EXISTS header_url TEXT;   -- Steam-style header capsule image
+ALTER TABLE pitches ADD COLUMN IF NOT EXISTS shot_url   TEXT;   -- in-game screenshot image

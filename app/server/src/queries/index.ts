@@ -1006,6 +1006,11 @@ function rowToPitch(r: any): Pitch {
     pitchDate: typeof d === "string" ? d.slice(0, 10) : new Date(d).toISOString().slice(0, 10),
     batch: r.batch ?? null,
     source: r.source ?? null,
+    setting: r.setting ?? null,
+    artStyle: r.art_style ?? null,
+    codeName: r.code_name ?? null,
+    headerUrl: r.header_url ?? null,
+    shotUrl: r.shot_url ?? null,
   };
 }
 
@@ -1014,7 +1019,7 @@ export async function getPitches(db: Querier): Promise<Pitch[]> {
     const rows = await db.query(
       `SELECT id, slug, rank, title, one_liner, loop_family, platform_ladder, status, badge,
               loop_detail, browser_mvp, steam_ladder, evidence, risk, d1_fit, steam_ceiling,
-              build_cost, pitch_date, batch, source
+              build_cost, pitch_date, batch, source, setting, art_style, code_name, header_url, shot_url
        FROM pitches
        ORDER BY pitch_date DESC, COALESCE(rank, 999) ASC, id ASC`
     );
@@ -1030,8 +1035,8 @@ export async function publishPitch(db: Querier, p: PitchInput): Promise<void> {
     `INSERT INTO pitches
        (slug, rank, title, one_liner, loop_family, platform_ladder, status, badge,
         loop_detail, browser_mvp, steam_ladder, evidence, risk, d1_fit, steam_ceiling,
-        build_cost, pitch_date, batch, source, updated_at)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19, now())
+        build_cost, pitch_date, batch, source, setting, art_style, code_name, header_url, shot_url, updated_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24, now())
      ON CONFLICT (slug) DO UPDATE SET
        rank = EXCLUDED.rank, title = EXCLUDED.title, one_liner = EXCLUDED.one_liner,
        loop_family = EXCLUDED.loop_family, platform_ladder = EXCLUDED.platform_ladder,
@@ -1040,6 +1045,8 @@ export async function publishPitch(db: Querier, p: PitchInput): Promise<void> {
        evidence = EXCLUDED.evidence, risk = EXCLUDED.risk, d1_fit = EXCLUDED.d1_fit,
        steam_ceiling = EXCLUDED.steam_ceiling, build_cost = EXCLUDED.build_cost,
        pitch_date = EXCLUDED.pitch_date, batch = EXCLUDED.batch, source = EXCLUDED.source,
+       setting = EXCLUDED.setting, art_style = EXCLUDED.art_style, code_name = EXCLUDED.code_name,
+       header_url = EXCLUDED.header_url, shot_url = EXCLUDED.shot_url,
        updated_at = now()`,
     [
       p.slug,
@@ -1061,6 +1068,11 @@ export async function publishPitch(db: Querier, p: PitchInput): Promise<void> {
       p.pitchDate,
       p.batch ?? null,
       p.source ?? null,
+      p.setting ?? null,
+      p.artStyle ?? null,
+      p.codeName ?? null,
+      p.headerUrl ?? null,
+      p.shotUrl ?? null,
     ]
   );
 }
