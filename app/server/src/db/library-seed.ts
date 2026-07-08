@@ -4,6 +4,7 @@
 // on every Neon migrate (and after the local seed truncate) without duplicating rows.
 import type { Querier } from "./db.ts";
 
+const ART = "https://kairos-pitch-art.netlify.app";
 export const LIBRARY_PROTOTYPES = [
   {
     kind: "prototype",
@@ -11,6 +12,7 @@ export const LIBRARY_PROTOTYPES = [
     summary:
       "First-person shooter test build — WASD movement, mouse aim, unlimited ammo against targets. Browser-playable.",
     mediaUrl: "https://peregrine-glider-prototype.netlify.app",
+    imageUrl: `${ART}/prototypes/peregrine.webp`,
     tags: ["Peregrine", "FPS", "browser"],
     status: "shipped",
     date: "2026-03-26",
@@ -21,6 +23,7 @@ export const LIBRARY_PROTOTYPES = [
     summary:
       "Interactive deduction prototype — examine evidence cards and link clues in a 'Mind Palace' to solve a murder. Browser-playable.",
     mediaUrl: "https://silver-palace-deduction-proto.netlify.app",
+    imageUrl: `${ART}/prototypes/silver-palace.webp`,
     tags: ["Silver Palace", "deduction", "browser"],
     status: "shipped",
     date: "2026-03-17",
@@ -31,21 +34,28 @@ export const LIBRARY_PROTOTYPES = [
     summary:
       "Draw-a-connection logistics toy on a day/night planet — wire generators through forges to colonies to deliver energy cells before the terminator or your link budget runs out. Browser-playable.",
     mediaUrl: "https://solar-forge-globe-toy.netlify.app",
+    imageUrl: `${ART}/solar-forge-20260706/header.png`,
     tags: ["Solar Forge", "logistics", "browser"],
     status: "shipped",
     date: "2026-07-08",
   },
 ] as const;
 
-// Insert any prototype not already present (keyed on media_url). Idempotent: running
-// it repeatedly is a no-op, so both the local seed and the prod migrate can call it.
+// Insert any prototype not already present (keyed on media_url), and keep its card image
+// in sync. Idempotent: the INSERT no-ops when the row exists; the UPDATE only writes when
+// image_url actually differs — so both the local seed and the prod migrate can call it freely.
 export async function ensureLibraryPrototypes(db: Querier): Promise<void> {
   for (const p of LIBRARY_PROTOTYPES) {
     await db.query(
-      `INSERT INTO library_items (kind, title, summary, media_url, tags, status, created_at)
-       SELECT $1, $2, $3, $4, $5::text[], $6, $7::timestamptz
+      `INSERT INTO library_items (kind, title, summary, media_url, image_url, tags, status, created_at)
+       SELECT $1, $2, $3, $4, $5, $6::text[], $7, $8::timestamptz
        WHERE NOT EXISTS (SELECT 1 FROM library_items WHERE media_url = $4)`,
-      [p.kind, p.title, p.summary, p.mediaUrl, [...p.tags], p.status, p.date]
+      [p.kind, p.title, p.summary, p.mediaUrl, p.imageUrl, [...p.tags], p.status, p.date]
+    );
+    await db.query(
+      `UPDATE library_items SET image_url = $2
+       WHERE media_url = $1 AND image_url IS DISTINCT FROM $2`,
+      [p.mediaUrl, p.imageUrl]
     );
   }
 }

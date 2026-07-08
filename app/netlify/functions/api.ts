@@ -62,7 +62,7 @@ export default async (req: Request) => {
     if (path === "/library")
       return json(await db.query(
         `SELECT id, kind, title, summary, tags, status, media_url AS "mediaUrl",
-                to_char(created_at, 'YYYY-MM-DD') AS date
+                image_url AS "imageUrl", to_char(created_at, 'YYYY-MM-DD') AS date
          FROM library_items ORDER BY created_at DESC`
       ));
     if (req.method === "POST" && path === "/pitches") {

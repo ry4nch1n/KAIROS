@@ -121,6 +121,10 @@ CREATE TABLE IF NOT EXISTS library_items (
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
+-- Prototype card art: a poster/thumbnail for the Library → Prototypes card.
+-- Additive so prod migrates in place (existing rows keep NULL until backfilled).
+ALTER TABLE library_items ADD COLUMN IF NOT EXISTS image_url TEXT;
+
 -- pitches namespace: game-concept pitches (the Library "Pitches" collection).
 -- Written by the weekly kairos-iterate routine (token-gated POST /api/pitches, upsert on slug).
 -- Dated + classified so future batches stay cleanly grouped and sortable.

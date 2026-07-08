@@ -93,6 +93,11 @@ function PitchCard({ p }: { p: Pitch }) {
 function LibCard({ it }: { it: LibraryItem }) {
   return (
     <article className="bcard pcard">
+      {it.imageUrl && (
+        <div className="pcapsule">
+          <img src={it.imageUrl} alt={it.title + " — preview"} loading="lazy" />
+        </div>
+      )}
       <div className="btags">
         {(it.tags || []).slice(0, 4).map((t) => <span key={t} className="ptag lf">{t}</span>)}
         <span className={"ptag st st-" + it.status}>{it.status}</span>

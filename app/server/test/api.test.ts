@@ -52,6 +52,15 @@ describe("A13 API routes", () => {
     expect(r.status).toBe(200);
     expect(Array.isArray(await r.json())).toBe(true);
   });
+
+  it("GET /api/library exposes prototype card image_url", async () => {
+    const rows = await (await fetch(`${base}/api/library`)).json();
+    const proto = rows.find((it: any) => it.kind === "prototype");
+    expect(proto).toBeTruthy();
+    // seed wires each prototype to a hosted card image — proves the column + query path
+    expect(typeof proto.imageUrl).toBe("string");
+    expect(proto.imageUrl).toContain("kairos-pitch-art");
+  });
 });
 
 describe("brief publish (token-gated)", () => {
