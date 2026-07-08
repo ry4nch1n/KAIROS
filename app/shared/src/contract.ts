@@ -11,7 +11,9 @@ export const CONTRACT = {
   // v3: SteamGenreEconomics gained `medianRevenuePerGame` + `meanRevenuePerGame` (#24).
   version: 3,
   pitch: {
-    version: 1,
+    // v2: added visual-card fields — setting, artStyle, codeName, headerUrl, shotUrl
+    // (all free-text, non-enum; no new validation, but the shape changed so the version bumps).
+    version: 2,
     loopFamilies: [
       "extraction-lite",
       "automation-under-pressure",

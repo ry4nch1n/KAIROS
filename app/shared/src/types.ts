@@ -306,6 +306,12 @@ export interface Pitch {
   pitchDate: string; // YYYY-MM-DD
   batch: string | null;
   source: string | null;
+  // Visual card (contract pitch v2): world/style dimensions + generated art.
+  setting: string | null;
+  artStyle: string | null;
+  codeName: string | null;  // placeholder project name shown on the header capsule
+  headerUrl: string | null; // Steam-style header capsule image
+  shotUrl: string | null;   // in-game screenshot image
 }
 
 // Input for publishing/upserting a pitch (token-gated POST /api/pitches).
@@ -329,4 +335,9 @@ export interface PitchInput {
   buildCost?: number | null;
   batch?: string | null;
   source?: string | null;
+  setting?: string | null;
+  artStyle?: string | null;
+  codeName?: string | null;
+  headerUrl?: string | null;
+  shotUrl?: string | null;
 }
