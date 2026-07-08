@@ -25,6 +25,16 @@ export const LIBRARY_PROTOTYPES = [
     status: "shipped",
     date: "2026-03-17",
   },
+  {
+    kind: "prototype",
+    title: "Solar Forge — Globe Toy (Phase 0)",
+    summary:
+      "Draw-a-connection logistics toy on a day/night planet — wire generators through forges to colonies to deliver energy cells before the terminator or your link budget runs out. Browser-playable.",
+    mediaUrl: "https://solar-forge-globe-toy.netlify.app",
+    tags: ["Solar Forge", "logistics", "browser"],
+    status: "shipped",
+    date: "2026-07-08",
+  },
 ] as const;
 
 // Insert any prototype not already present (keyed on media_url). Idempotent: running
