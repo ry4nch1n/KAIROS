@@ -43,7 +43,14 @@ jobs:
 
       - name: Check for undeployed changes
         id: check
+        env:
+          HAS_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN != '' }}
         run: |
+          if [ "$HAS_TOKEN" != "true" ]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::NETLIFY_AUTH_TOKEN secret is not set — skipping deploy. Add it (Settings ▸ Secrets ▸ Actions) to switch daily deploys on."
+            exit 0
+          fi
           HEAD=$(git rev-parse HEAD)
           echo "head=$HEAD" >> "$GITHUB_OUTPUT"
           if git rev-parse -q --verify "refs/tags/live^{commit}" >/dev/null 2>&1; then
