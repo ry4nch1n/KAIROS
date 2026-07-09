@@ -59,6 +59,15 @@ export default async (req: Request) => {
       const ed = await q.getBriefEdition(db, decodeURIComponent(m[1]));
       return ed ? json(ed) : json({ error: "not found" }, 404);
     }
+    if (req.method === "POST" && path === "/library") {
+      const token = process.env.PUBLISH_TOKEN;
+      const auth = req.headers.get("authorization") || "";
+      if (!token || auth !== `Bearer ${token}`) return json({ error: "unauthorized" }, 401);
+      const body = await req.json();
+      const items = Array.isArray(body) ? body : [body];
+      for (const it of items) await q.publishLibraryItem(db, it);
+      return json({ ok: true, count: items.length });
+    }
     if (path === "/library")
       return json(await db.query(
         `SELECT id, kind, title, summary, tags, status, media_url AS "mediaUrl",

@@ -6,7 +6,7 @@ import type {
   GenreRow, DeveloperRow, NewRelease, Trajectory, GenreLandscapePoint, GenreVelocityBar, GlossaryRow, BriefSteering,
   ScaleTierRow, SteamGenreEconomics, SteamCohort, SteamComparable, SteamOverview,
   SteamGap, SteamPriceBand, SteamOwnershipRow, SteamDeveloperRow, SteamNewRelease,
-  Pitch, PitchInput,
+  Pitch, PitchInput, LibraryItemInput,
 } from "shared";
 import { assertPitchInput, validateBriefPayload } from "../../../shared/src/contract.ts";
 import { teamSizeFor } from "../data/teamSize.ts";
@@ -1076,6 +1076,36 @@ export async function publishPitch(db: Querier, p: PitchInput): Promise<void> {
       p.headerUrl ?? null,
       p.shotUrl ?? null,
     ]
+  );
+}
+
+// Publish/upsert a library item (e.g. a hosted prototype card). Keyed on media_url —
+// the same natural key the curated seed uses — so posting is idempotent: a re-post of
+// the same hosted URL refreshes the card in place. No unique index exists on media_url,
+// so this uses the seed's guarded INSERT + UPDATE pattern instead of ON CONFLICT.
+export async function publishLibraryItem(db: Querier, it: LibraryItemInput): Promise<void> {
+  const errors: string[] = [];
+  for (const f of ["kind", "title", "mediaUrl"] as const) {
+    if (!it?.[f] || typeof it[f] !== "string") errors.push(`missing required field: ${f}`);
+  }
+  if (it?.date != null && !/^\d{4}-\d{2}-\d{2}$/.test(String(it.date))) errors.push("date must be YYYY-MM-DD");
+  if (it?.tags != null && !Array.isArray(it.tags)) errors.push("tags must be an array of strings");
+  if (errors.length) throw new Error(`library item invalid: ${errors.join("; ")}`);
+
+  await db.query(
+    `INSERT INTO library_items (kind, title, summary, media_url, image_url, tags, status, created_at)
+     SELECT $1, $2, $3, $4, $5, $6::text[], $7, COALESCE($8::timestamptz, now())
+     WHERE NOT EXISTS (SELECT 1 FROM library_items WHERE media_url = $4)`,
+    [it.kind, it.title, it.summary ?? null, it.mediaUrl, it.imageUrl ?? null,
+     it.tags ?? [], it.status ?? "draft", it.date ?? null]
+  );
+  await db.query(
+    `UPDATE library_items SET
+       kind = $2, title = $3, summary = $4, image_url = $5, tags = $6::text[], status = $7,
+       created_at = COALESCE($8::timestamptz, created_at)
+     WHERE media_url = $1`,
+    [it.mediaUrl, it.kind, it.title, it.summary ?? null, it.imageUrl ?? null,
+     it.tags ?? [], it.status ?? "draft", it.date ?? null]
   );
 }
 

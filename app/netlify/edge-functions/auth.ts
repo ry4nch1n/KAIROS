@@ -14,10 +14,13 @@ export default async (req: Request, _context: Context) => {
   //    while GET /api/pitches (the private pitch data) stays behind the gate.
   //  • DELETE /api/pitches/:slug — pitch curation (kairos-pitch skill / routines), bearer-enforced
   //    in the function, same as POST; GET /api/pitches stays gated.
+  //  • POST /api/library — the prototype routine posts cards with its own bearer token
+  //    (function-enforced), while GET /api/library stays behind the gate.
   const { pathname } = new URL(req.url);
   if (pathname === "/api/contract") return;
   if (req.method === "POST" && pathname === "/api/pitches") return;
   if (req.method === "DELETE" && pathname.startsWith("/api/pitches/")) return;
+  if (req.method === "POST" && pathname === "/api/library") return;
 
   const user = Netlify.env.get("SITE_USER") || "kairos";
   const expected = "Basic " + btoa(`${user}:${password}`);

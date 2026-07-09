@@ -61,6 +61,47 @@ describe("A13 API routes", () => {
     expect(typeof proto.imageUrl).toBe("string");
     expect(proto.imageUrl).toContain("kairos-pitch-art");
   });
+
+  it("POST /api/library: 401 without token → upsert with token → idempotent on mediaUrl", async () => {
+    const item = {
+      kind: "prototype",
+      title: "Test Toy",
+      summary: "A loop feel-test.",
+      mediaUrl: "https://kairos-prototypes.netlify.app/test-toy/",
+      imageUrl: "https://kairos-pitch-art.netlify.app/test-toy/header.png",
+      tags: ["test", "browser"],
+      status: "shipped",
+      date: "2026-07-09",
+    };
+    const bad = await fetch(`${base}/api/library`, {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify(item),
+    });
+    expect(bad.status).toBe(401);
+
+    process.env.PUBLISH_TOKEN = "test-token-123";
+    const hdrs = { "content-type": "application/json", authorization: "Bearer test-token-123" };
+    const ok = await fetch(`${base}/api/library`, { method: "POST", headers: hdrs, body: JSON.stringify(item) });
+    expect(ok.status).toBe(200);
+
+    // re-post the same mediaUrl with a changed title — updates in place, no duplicate
+    const again = await fetch(`${base}/api/library`, {
+      method: "POST", headers: hdrs, body: JSON.stringify({ ...item, title: "Test Toy v2" }),
+    });
+    expect(again.status).toBe(200);
+    const rows = await (await fetch(`${base}/api/library`)).json();
+    const mine = rows.filter((it: any) => it.mediaUrl === item.mediaUrl);
+    expect(mine.length).toBe(1);
+    expect(mine[0].title).toBe("Test Toy v2");
+    expect(mine[0].date).toBe("2026-07-09");
+    expect(mine[0].tags).toEqual(["test", "browser"]);
+
+    // invalid item (missing mediaUrl) is rejected
+    const invalid = await fetch(`${base}/api/library`, {
+      method: "POST", headers: hdrs, body: JSON.stringify({ kind: "prototype", title: "No URL" }),
+    });
+    expect(invalid.status).toBe(400);
+  });
 });
 
 describe("brief publish (token-gated)", () => {
