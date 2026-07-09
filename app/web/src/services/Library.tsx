@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useDrawer, NavToggle, NavScrim, DrawerClose } from "../components/MobileNav.tsx";
 import type { LibraryItem, Pitch } from "shared";
 import { api } from "../lib/api.ts";
 
@@ -127,6 +128,7 @@ const COLLECTION_BLURB: Record<string, string> = {
 };
 
 export function Library({ hidden }: { hidden: boolean }) {
+  const drawer = useDrawer();
   const [pitches, setPitches] = useState<Pitch[]>([]);
   const [items, setItems] = useState<LibraryItem[]>([]);
   const [active, setActive] = useState<string>("all");
@@ -152,7 +154,11 @@ export function Library({ hidden }: { hidden: boolean }) {
 
   return (
     <section className="service" data-svc="library" hidden={hidden}>
-      <aside className="side">
+      <aside
+        className={"side" + (drawer.open ? " open" : "")}
+        onClick={(e) => { if ((e.target as HTMLElement).closest(".nav-item")) drawer.closeDrawer(); }}
+      >
+        <DrawerClose onClick={drawer.closeDrawer} />
         <div className="side-head">
           <b>Library</b>
           <span>idea exploration</span>
@@ -177,9 +183,11 @@ export function Library({ hidden }: { hidden: boolean }) {
             : "Synced from KAIROS · Neon"}
         </div>
       </aside>
+      <NavScrim open={drawer.open} onClose={drawer.closeDrawer} />
 
       <main className="main">
         <div className="topbar">
+          <NavToggle onClick={drawer.openDrawer} />
           <h2>
             {activeName} <small>ideas and explorations, next to the market intel that informs them</small>
           </h2>

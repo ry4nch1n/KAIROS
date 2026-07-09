@@ -13,6 +13,7 @@ export function Rail({ active, onSelect }: { active: Service; onSelect: (s: Serv
         <button
           className={"rail-btn" + (active === "radar" ? " active" : "")}
           data-label="GameRadar — Market Intel"
+          data-short="Radar"
           onClick={() => onSelect("radar")}
           aria-label="GameRadar"
         >
@@ -26,6 +27,7 @@ export function Rail({ active, onSelect }: { active: Service; onSelect: (s: Serv
         <button
           className={"rail-btn" + (active === "brief" ? " active" : "")}
           data-label="News Brief"
+          data-short="Brief"
           onClick={() => onSelect("brief")}
           aria-label="News Brief"
         >
@@ -38,6 +40,7 @@ export function Rail({ active, onSelect }: { active: Service; onSelect: (s: Serv
         <button
           className={"rail-btn" + (active === "library" ? " active" : "")}
           data-label="Library"
+          data-short="Library"
           onClick={() => onSelect("library")}
           aria-label="Library"
         >
@@ -51,6 +54,7 @@ export function Rail({ active, onSelect }: { active: Service; onSelect: (s: Serv
         <button
           className={"rail-btn" + (active === "revenue" ? " active" : "")}
           data-label="Revenue Model"
+          data-short="Revenue"
           onClick={() => onSelect("revenue")}
           aria-label="Revenue Model"
         >

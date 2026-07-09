@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useDrawer, NavToggle, NavScrim, DrawerClose } from "../components/MobileNav.tsx";
 import {
   GENRE_PRESETS,
   dailyRevenue,
@@ -18,6 +19,7 @@ const VERDICT_COPY: Record<string, { label: string; cls: string }> = {
 };
 
 export function Revenue({ hidden }: { hidden: boolean }) {
+  const drawer = useDrawer();
   const [genre, setGenre] = useState(GENRE_PRESETS[1].id); // Automation/Logistics
   const [dau, setDau] = useState(900);
   const [arpdau, setArpdau] = useState(GENRE_PRESETS[1].arpdau);
@@ -41,7 +43,11 @@ export function Revenue({ hidden }: { hidden: boolean }) {
 
   return (
     <section className="service" data-svc="revenue" hidden={hidden}>
-      <aside className="side">
+      <aside
+        className={"side" + (drawer.open ? " open" : "")}
+        onClick={(e) => { if ((e.target as HTMLElement).closest(".nav-item")) drawer.closeDrawer(); }}
+      >
+        <DrawerClose onClick={drawer.closeDrawer} />
         <div className="side-head">
           <b>Revenue Model</b>
           <span>browser income dial</span>
@@ -61,9 +67,11 @@ export function Revenue({ hidden }: { hidden: boolean }) {
           Poki payout · direct 100% / platform-sourced 50-50 · target SGD {TARGET_SGD.low / 1000}–{TARGET_SGD.high / 1000}k/mo
         </div>
       </aside>
+      <NavScrim open={drawer.open} onClose={drawer.closeDrawer} />
 
       <main className="main">
         <div className="topbar">
+          <NavToggle onClick={drawer.openDrawer} />
           <h2>
             Revenue Model <small>project browser income against the SGD 4–5k/mo goal</small>
           </h2>
