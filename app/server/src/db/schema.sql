@@ -159,3 +159,14 @@ ALTER TABLE pitches ADD COLUMN IF NOT EXISTS art_style  TEXT;
 ALTER TABLE pitches ADD COLUMN IF NOT EXISTS code_name  TEXT;   -- placeholder project name shown on the header capsule
 ALTER TABLE pitches ADD COLUMN IF NOT EXISTS header_url TEXT;   -- Steam-style header capsule image
 ALTER TABLE pitches ADD COLUMN IF NOT EXISTS shot_url   TEXT;   -- in-game screenshot image
+-- Rating rework (contract pitch v3): browser & Steam become co-equal fit axes; build_ease renames
+-- build_cost (same "higher = easier" semantics); provenance flags evidence strength. Additive +
+-- one-time guarded backfill so prod migrates in place without blanking existing cards. Old columns
+-- (d1_fit/steam_ceiling/build_cost) are kept as the backfill source, then left deprecated/unread.
+ALTER TABLE pitches ADD COLUMN IF NOT EXISTS browser_fit INT;   -- 1..3 browser-native viability (was d1_fit)
+ALTER TABLE pitches ADD COLUMN IF NOT EXISTS steam_fit   INT;   -- 1..3 paid-Steam laddering + ceiling (was steam_ceiling)
+ALTER TABLE pitches ADD COLUMN IF NOT EXISTS build_ease  INT;   -- 1..3 solo feasibility, higher = easier (renames build_cost)
+ALTER TABLE pitches ADD COLUMN IF NOT EXISTS provenance  TEXT;  -- market-backed | design-derived
+UPDATE pitches SET browser_fit = d1_fit        WHERE browser_fit IS NULL AND d1_fit        IS NOT NULL;
+UPDATE pitches SET steam_fit   = steam_ceiling WHERE steam_fit   IS NULL AND steam_ceiling IS NOT NULL;
+UPDATE pitches SET build_ease  = build_cost    WHERE build_ease  IS NULL AND build_cost    IS NOT NULL;

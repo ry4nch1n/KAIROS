@@ -183,6 +183,11 @@ button{font-family:inherit}
 .pfields .prisk .plabel{color:var(--accent);background:rgba(217,119,6,.1)}
 .pscores{display:flex;flex-wrap:wrap;gap:14px;margin-top:12px;padding-top:10px;border-top:1px solid var(--border-soft);font-family:'Fira Code';font-size:10px;color:var(--text-3);letter-spacing:.3px}
 .pscores span{display:inline-flex;align-items:center;gap:5px}
+/* Browser fit + Steam fit are shown as a co-equal pair (the "route compass"); Build ease sits apart. */
+.pfit-pair{gap:12px;padding:2px 9px;border-radius:7px;background:var(--surface-2);border:1px solid var(--border-soft)}
+.pna{font-style:normal;color:var(--text-3);opacity:.75}
+.ptag.prov-market-backed{background:rgba(5,150,105,.13);color:var(--green)}
+.ptag.prov-design-derived{background:rgba(8,145,178,.12);color:var(--cyan)}
 .pdots-row{display:inline-flex;gap:3px}
 .pdot{width:6px;height:6px;border-radius:50%;background:var(--border)}
 .pdot.on{background:var(--primary)}

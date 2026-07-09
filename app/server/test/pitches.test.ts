@@ -13,9 +13,10 @@ const base: PitchInput = {
   status: "proposed",
   badge: "recommended",
   oneLiner: "Dig-and-defend meets route-planning.",
-  d1Fit: 2,
-  steamCeiling: 3,
-  buildCost: 2,
+  browserFit: 2,
+  steamFit: 3,
+  buildEase: 2,
+  provenance: "market-backed",
   batch: "2026-07-06",
   source: "kairos-review 2026-07-06",
 };
@@ -37,7 +38,10 @@ describe("P1 pitches table + queries", () => {
     expect(p.loopFamily).toBe("extraction-lite");
     expect(p.platformLadder).toBe("browser->steam"); // defaulted
     expect(p.rank).toBe(1);
-    expect(p.d1Fit).toBe(2);
+    expect(p.browserFit).toBe(2);
+    expect(p.steamFit).toBe(3);
+    expect(p.buildEase).toBe(2);
+    expect(p.provenance).toBe("market-backed");
     expect(p.pitchDate).toBe("2026-07-06");
   });
 

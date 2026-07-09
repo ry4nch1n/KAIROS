@@ -1000,9 +1000,10 @@ function rowToPitch(r: any): Pitch {
     steamLadder: r.steam_ladder ?? null,
     evidence: r.evidence ?? null,
     risk: r.risk ?? null,
-    d1Fit: r.d1_fit === null || r.d1_fit === undefined ? null : num(r.d1_fit),
-    steamCeiling: r.steam_ceiling === null || r.steam_ceiling === undefined ? null : num(r.steam_ceiling),
-    buildCost: r.build_cost === null || r.build_cost === undefined ? null : num(r.build_cost),
+    browserFit: r.browser_fit === null || r.browser_fit === undefined ? null : num(r.browser_fit),
+    steamFit: r.steam_fit === null || r.steam_fit === undefined ? null : num(r.steam_fit),
+    buildEase: r.build_ease === null || r.build_ease === undefined ? null : num(r.build_ease),
+    provenance: r.provenance ?? null,
     pitchDate: typeof d === "string" ? d.slice(0, 10) : new Date(d).toISOString().slice(0, 10),
     batch: r.batch ?? null,
     source: r.source ?? null,
@@ -1018,8 +1019,8 @@ export async function getPitches(db: Querier): Promise<Pitch[]> {
   try {
     const rows = await db.query(
       `SELECT id, slug, rank, title, one_liner, loop_family, platform_ladder, status, badge,
-              loop_detail, browser_mvp, steam_ladder, evidence, risk, d1_fit, steam_ceiling,
-              build_cost, pitch_date, batch, source, setting, art_style, code_name, header_url, shot_url
+              loop_detail, browser_mvp, steam_ladder, evidence, risk, browser_fit, steam_fit,
+              build_ease, provenance, pitch_date, batch, source, setting, art_style, code_name, header_url, shot_url
        FROM pitches
        ORDER BY pitch_date DESC, COALESCE(rank, 999) ASC, id ASC`
     );
@@ -1034,16 +1035,16 @@ export async function publishPitch(db: Querier, p: PitchInput): Promise<void> {
   await db.query(
     `INSERT INTO pitches
        (slug, rank, title, one_liner, loop_family, platform_ladder, status, badge,
-        loop_detail, browser_mvp, steam_ladder, evidence, risk, d1_fit, steam_ceiling,
-        build_cost, pitch_date, batch, source, setting, art_style, code_name, header_url, shot_url, updated_at)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24, now())
+        loop_detail, browser_mvp, steam_ladder, evidence, risk, browser_fit, steam_fit,
+        build_ease, provenance, pitch_date, batch, source, setting, art_style, code_name, header_url, shot_url, updated_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25, now())
      ON CONFLICT (slug) DO UPDATE SET
        rank = EXCLUDED.rank, title = EXCLUDED.title, one_liner = EXCLUDED.one_liner,
        loop_family = EXCLUDED.loop_family, platform_ladder = EXCLUDED.platform_ladder,
        status = EXCLUDED.status, badge = EXCLUDED.badge, loop_detail = EXCLUDED.loop_detail,
        browser_mvp = EXCLUDED.browser_mvp, steam_ladder = EXCLUDED.steam_ladder,
-       evidence = EXCLUDED.evidence, risk = EXCLUDED.risk, d1_fit = EXCLUDED.d1_fit,
-       steam_ceiling = EXCLUDED.steam_ceiling, build_cost = EXCLUDED.build_cost,
+       evidence = EXCLUDED.evidence, risk = EXCLUDED.risk, browser_fit = EXCLUDED.browser_fit,
+       steam_fit = EXCLUDED.steam_fit, build_ease = EXCLUDED.build_ease, provenance = EXCLUDED.provenance,
        pitch_date = EXCLUDED.pitch_date, batch = EXCLUDED.batch, source = EXCLUDED.source,
        setting = EXCLUDED.setting, art_style = EXCLUDED.art_style, code_name = EXCLUDED.code_name,
        header_url = EXCLUDED.header_url, shot_url = EXCLUDED.shot_url,
@@ -1062,9 +1063,10 @@ export async function publishPitch(db: Querier, p: PitchInput): Promise<void> {
       p.steamLadder ?? null,
       p.evidence ?? null,
       p.risk ?? null,
-      p.d1Fit ?? null,
-      p.steamCeiling ?? null,
-      p.buildCost ?? null,
+      p.browserFit ?? null,
+      p.steamFit ?? null,
+      p.buildEase ?? null,
+      p.provenance ?? null,
       p.pitchDate,
       p.batch ?? null,
       p.source ?? null,

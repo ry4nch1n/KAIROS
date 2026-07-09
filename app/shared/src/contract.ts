@@ -11,9 +11,13 @@ export const CONTRACT = {
   // v3: SteamGenreEconomics gained `medianRevenuePerGame` + `meanRevenuePerGame` (#24).
   version: 3,
   pitch: {
-    // v2: added visual-card fields — setting, artStyle, codeName, headerUrl, shotUrl
-    // (all free-text, non-enum; no new validation, but the shape changed so the version bumps).
-    version: 2,
+    // v2: added visual-card fields — setting, artStyle, codeName, headerUrl, shotUrl.
+    // v3: rating rework — scoreFields d1Fit/steamCeiling/buildCost → browserFit/steamFit/buildEase.
+    //     Browser and Steam are co-equal platform-fit axes (a "route compass" that keeps the
+    //     Phase-0 strategy routes open), not a single retention proxy. Added `provenance` tag
+    //     (market-backed vs design-derived). buildEase is a rename of the old buildCost — same
+    //     semantics (higher = cheaper/easier), the old name just contradicted its "Build ease" label.
+    version: 3,
     loopFamilies: [
       "extraction-lite",
       "automation-under-pressure",
@@ -26,7 +30,8 @@ export const CONTRACT = {
     badges: ["recommended", "retention-safe", "cashflow", "cheapest-build"],
     statuses: ["proposed", "prototyping", "shelved", "shipped"],
     platformLadders: ["browser->steam", "browser-only", "steam-only"],
-    scoreFields: ["d1Fit", "steamCeiling", "buildCost"],
+    provenances: ["market-backed", "design-derived"],
+    scoreFields: ["browserFit", "steamFit", "buildEase"],
     scoreMin: 1,
     scoreMax: 3,
     required: ["slug", "title", "pitchDate"],
@@ -67,6 +72,8 @@ export function validatePitchInput(p: any): ContractValidation {
   if (p.status != null && !CONTRACT.pitch.statuses.includes(p.status)) errors.push(`unknown status "${p.status}"`);
   if (p.platformLadder != null && !CONTRACT.pitch.platformLadders.includes(p.platformLadder))
     errors.push(`unknown platformLadder "${p.platformLadder}"`);
+  if (p.provenance != null && !CONTRACT.pitch.provenances.includes(p.provenance))
+    errors.push(`unknown provenance "${p.provenance}" — expected one of ${CONTRACT.pitch.provenances.join(", ")}`);
   for (const s of CONTRACT.pitch.scoreFields) {
     const v = p[s];
     if (v != null && (!Number.isInteger(v) || v < CONTRACT.pitch.scoreMin || v > CONTRACT.pitch.scoreMax))

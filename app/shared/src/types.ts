@@ -301,9 +301,10 @@ export interface Pitch {
   steamLadder: string | null;
   evidence: string | null;
   risk: string | null;
-  d1Fit: number | null;
-  steamCeiling: number | null;
-  buildCost: number | null;
+  browserFit: number | null;   // 1..3 — browser-native viability (instant hook, portal retention, ad-monetizability)
+  steamFit: number | null;     // 1..3 — paid-Steam laddering potential + revenue ceiling vs comps
+  buildEase: number | null;    // 1..3 — solo-dev feasibility (higher = cheaper/easier)
+  provenance: string | null;   // market-backed | design-derived (how well-supported the pitch is)
   pitchDate: string; // YYYY-MM-DD
   batch: string | null;
   source: string | null;
@@ -331,9 +332,10 @@ export interface PitchInput {
   steamLadder?: string | null;
   evidence?: string | null;
   risk?: string | null;
-  d1Fit?: number | null;
-  steamCeiling?: number | null;
-  buildCost?: number | null;
+  browserFit?: number | null;
+  steamFit?: number | null;
+  buildEase?: number | null;
+  provenance?: string | null;
   batch?: string | null;
   source?: string | null;
   setting?: string | null;
