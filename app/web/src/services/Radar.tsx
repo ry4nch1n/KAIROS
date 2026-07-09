@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useDrawer, NavToggle, NavScrim, DrawerClose } from "../components/MobileNav.tsx";
 import type {
   Overview, Platform, GenreRow, DeveloperRow, NewRelease, HiddenGem,
   SteamOverview, SteamGenreEconomics, SteamGap, SteamPriceBand, SteamOwnershipRow,
@@ -402,6 +403,7 @@ function SteamView({ data, section }: { data: SteamOverview; section: SteamSecti
 
 /* ───────────── shell ───────────── */
 export function Radar({ hidden }: { hidden: boolean }) {
+  const drawer = useDrawer();
   const [platform, setPlatform] = useState<Platform>("all");
   const [view, setView] = useState<View>("overview");
   const [steamView, setSteamView] = useState<SteamSection>("overview");
@@ -450,7 +452,11 @@ export function Radar({ hidden }: { hidden: boolean }) {
 
   return (
     <section className="service" data-svc="radar" hidden={hidden}>
-      <aside className="side">
+      <aside
+        className={"side" + (drawer.open ? " open" : "")}
+        onClick={(e) => { if ((e.target as HTMLElement).closest(".nav-item")) drawer.closeDrawer(); }}
+      >
+        <DrawerClose onClick={drawer.closeDrawer} />
         <div className="side-head"><b>GameRadar</b><span>{isSteam ? "PC · Steam" : "market intel"}</span></div>
         {isSteam ? (
           <>
@@ -480,9 +486,11 @@ export function Radar({ hidden }: { hidden: boolean }) {
         )}
         <div className="side-foot"><span className="pulse"></span>Crawl OK · {isSteam ? (steam ? fmt(steam.kpi.games) : "…") : (ov ? fmt(ov.kpi.gamesTracked) : "…")} games<br />live · Neon</div>
       </aside>
+      <NavScrim open={drawer.open} onClose={drawer.closeDrawer} />
 
       <main className="main">
         <div className="topbar">
+          <NavToggle onClick={drawer.openDrawer} />
           <h2>{isSteam ? "Steam (PC) Market" : "Market Overview"} <small>{subtitle}</small></h2>
           <div className="platform-groups" role="tablist" aria-label="Platform">
             {PLATFORM_GROUPS.map((grp) => (

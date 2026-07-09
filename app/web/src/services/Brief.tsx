@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useDrawer, NavToggle, NavScrim, DrawerClose } from "../components/MobileNav.tsx";
 import type { BriefEditionMeta, BriefEdition, BriefNotable, BriefSteering } from "shared";
 import { api } from "../lib/api.ts";
 import { isSameWeek } from "../lib/week.ts";
@@ -58,6 +59,7 @@ function RichCard({ item, kind }: { item: BriefNotable; kind: "notable" | "brows
 }
 
 export function Brief({ hidden }: { hidden: boolean }) {
+  const drawer = useDrawer();
   const [list, setList] = useState<BriefEditionMeta[]>([]);
   const [sel, setSel] = useState<string | null>(null);
   const [ed, setEd] = useState<BriefEdition | null>(null);
@@ -98,7 +100,11 @@ export function Brief({ hidden }: { hidden: boolean }) {
   const p = ed?.payload;
   return (
     <section className="service" data-svc="brief" hidden={hidden}>
-      <aside className="side">
+      <aside
+        className={"side" + (drawer.open ? " open" : "")}
+        onClick={(e) => { if ((e.target as HTMLElement).closest(".edition")) drawer.closeDrawer(); }}
+      >
+        <DrawerClose onClick={drawer.closeDrawer} />
         <div className="side-head"><b>News Brief</b><span>indie + gaming</span></div>
         {thisWeek.length > 0 && <div className="nav-label">This week</div>}
         {thisWeek.map(editionRow)}
@@ -113,9 +119,11 @@ export function Brief({ hidden }: { hidden: boolean }) {
         )}
         <div className="side-foot"><span className="pulse"></span>Auto-published<br />Routine: indie-brief</div>
       </aside>
+      <NavScrim open={drawer.open} onClose={drawer.closeDrawer} />
 
       <main className="main">
         <div className="topbar">
+          <NavToggle onClick={drawer.openDrawer} />
           <h2>Indie &amp; Gaming Brief <small>{ed ? `Edition ${ed.editionDate} · ${DAYS_LONG[dow(ed.editionDate)]}` : "…"}</small></h2>
           <div className="filters">
             {ed && ed.sourceCount > 0 && (
