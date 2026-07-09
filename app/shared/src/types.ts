@@ -284,6 +284,20 @@ export interface LibraryItem {
   date: string | null;     // YYYY-MM-DD — e.g. a prototype's publish date
 }
 
+// Input for publishing/upserting a library item (token-gated POST /api/library).
+// mediaUrl is the natural upsert key — same convention the prototype seed uses —
+// so re-posting the same hosted URL updates the card instead of duplicating it.
+export interface LibraryItemInput {
+  kind: string;      // e.g. "prototype"
+  title: string;
+  mediaUrl: string;  // upsert key
+  summary?: string | null;
+  imageUrl?: string | null;
+  tags?: string[] | null;
+  status?: string | null; // defaults to "draft"
+  date?: string | null;   // YYYY-MM-DD publish date (becomes created_at)
+}
+
 // A game-concept pitch — the Library "Pitches" collection. Dated + classified so
 // batches stay grouped. Written by the weekly kairos-iterate routine (upsert on slug).
 export interface Pitch {
