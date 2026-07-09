@@ -1,0 +1,27 @@
+# Blanket auto-merge: every non-draft PR is set to merge itself once the
+# required `test` check goes green. GitHub's native auto-merge does the waiting,
+# so branch protection (required checks + up-to-date) is still fully enforced —
+# a red or stale PR will never merge. Deploys are separate (daily, see deploy.yml),
+# so an auto-merged mistake has until the next deploy to be caught/reverted.
+name: auto-merge
+
+on:
+  pull_request:
+    types: [opened, reopened, ready_for_review]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  enable-auto-merge:
+    if: github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    steps:
+      - name: Enable native auto-merge (merges when CI is green)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh pr merge --auto --merge \
+            "${{ github.event.pull_request.number }}" \
+            --repo "${{ github.repository }}" || true

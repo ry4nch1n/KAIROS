@@ -100,7 +100,7 @@ Vercel (Next.js dashboard)  ◄─── you open this in a browser, anytime
 - **Cost:** $0 to start (all free tiers); ~$0–25/mo once data/traffic grows.
 - **Survives losing any PC:** everything durable is cloud-side.
 - **Always current:** dashboard reflects the latest crawl with no manual step.
-- **One thing to deploy:** `git push` updates the site; the crawl is just another workflow in the same repo.
+- **One thing to deploy:** a daily GitHub Actions job ships `main` to Netlify if (and only if) it changed since the last deploy — the crawl is just another workflow in the same repo.
 
 ### MVP with a real database (recommended)
 The MVP uses a **managed Postgres from day one** — no SQLite-in-repo throwaway. Concrete free-tier shape on a Netlify account:
@@ -124,7 +124,7 @@ GitHub Actions (daily cron) ─► Neon Postgres (serverless, free, scales to ze
 
 | Cadence | Task | Effort |
 |---|---|---|
-| **Never (automatic)** | Daily crawl, snapshot append, view refresh, dashboard deploy-on-push | 0 |
+| **Never (automatic)** | Daily crawl, snapshot append, view refresh; PRs auto-merge on green CI; a daily job deploys `main` to Netlify only if it changed (the `live` tag marks what's in production) | 0 |
 | **When a site changes layout** | An adapter breaks → crawl logs `partial` + alerts you → fix *one* adapter file, update its test fixture | ~30 min, rare |
 | **When you improve the AI prompt** | Bump `prompt_version` → enrichment re-runs only affected games next crawl | 0 after the edit |
 | **Occasionally** | Add a new source (itch/Steam) = write one new adapter class | a few hours, optional |

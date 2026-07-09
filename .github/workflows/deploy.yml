@@ -1,0 +1,86 @@
+# Daily batched production deploy. Once a day it ships `main` to Netlify — but only
+# if `main` has moved since the last deploy, so idle days cost nothing. This batches
+# many merges into at most one build/day (Netlify credit control) and bounds how far
+# `live` can lag behind `main` to ~24h.
+#
+# The build runs here in the runner (`--build`), so it spends GitHub Actions minutes
+# (the larger budget) and NOT Netlify build minutes (the constrained one).
+#
+# Tracking: after each deploy we move the `live` git tag onto the deployed commit.
+# So `live` always marks exactly what is in production — compare it to `main` on
+# GitHub to see, at a glance, what is waiting to ship. No manual note-keeping.
+#
+# NOTE: nothing deploys until the NETLIFY_AUTH_TOKEN repo secret exists. That secret
+# is the on-switch — the first scheduled run after it is added ships current `main`.
+name: deploy
+
+on:
+  schedule:
+    - cron: "0 1 * * *" # 01:00 UTC daily = 09:00 Singapore (you're awake to catch issues)
+  workflow_dispatch: # manual "Deploy now" button in the Actions tab
+    inputs:
+      force:
+        description: "Deploy even if main is unchanged since the last deploy"
+        type: boolean
+        default: false
+
+# Never let two production deploys overlap.
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false
+
+permissions:
+  contents: write # to move the `live` tag
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0 # need full history + tags to compare against `live`
+
+      - name: Check for undeployed changes
+        id: check
+        run: |
+          HEAD=$(git rev-parse HEAD)
+          echo "head=$HEAD" >> "$GITHUB_OUTPUT"
+          if git rev-parse -q --verify "refs/tags/live^{commit}" >/dev/null 2>&1; then
+            LIVE=$(git rev-parse "refs/tags/live^{commit}")
+          else
+            LIVE="<none>"
+          fi
+          echo "Currently live : $LIVE"
+          echo "main HEAD      : $HEAD"
+          if [ "$LIVE" = "$HEAD" ] && [ "${{ github.event.inputs.force }}" != "true" ]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::No undeployed changes on main — skipping deploy."
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::main is ahead of live — deploying."
+          fi
+
+      - uses: actions/setup-node@v4
+        if: steps.check.outputs.changed == 'true'
+        with:
+          node-version: "22"
+
+      - name: Deploy to Netlify production (build in runner)
+        if: steps.check.outputs.changed == 'true'
+        env:
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+          NETLIFY_SITE_ID: 007de021-8987-4e14-a490-50b49d936a44
+          NETLIFY_TELEMETRY_DISABLED: "1"
+          CI: "1"
+        run: |
+          npx --yes netlify-cli@latest deploy --build --prod \
+            --site "$NETLIFY_SITE_ID" \
+            --message "Daily deploy of ${{ steps.check.outputs.head }}"
+
+      - name: Mark deployed commit (move `live` tag)
+        if: steps.check.outputs.changed == 'true'
+        run: |
+          git tag -f live "${{ steps.check.outputs.head }}"
+          git push -f origin refs/tags/live
+          echo "::notice::live tag now points at ${{ steps.check.outputs.head }}"
