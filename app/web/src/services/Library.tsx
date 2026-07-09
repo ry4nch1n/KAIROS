@@ -44,7 +44,24 @@ function Dots({ n, of = 3 }: { n: number | null; of?: number }) {
   );
 }
 
+// Spine fields are always shown (clamped to ~2 lines) so every card is a similar
+// height; the wordier fields + the in-game shot live behind "Read full pitch" so a
+// long pitch can't bloat the grid row. Missing spine fields keep a muted placeholder
+// so rows still line up. (Scores are unchanged here — the rating rework is Phase 2.)
 function PitchCard({ p }: { p: Pitch }) {
+  const [open, setOpen] = useState(false);
+  const spine: [string, string | null, string?][] = [
+    ["Loop", p.loopDetail],
+    ["Setting", p.setting],
+    ["Risk", p.risk, "prisk"],
+  ];
+  const detail: [string, string | null][] = [
+    ["Art style", p.artStyle],
+    ["Browser MVP", p.browserMvp],
+    ["Steam ladder", p.steamLadder],
+    ["Evidence", p.evidence],
+  ];
+  const hasDetail = detail.some(([, v]) => v) || !!p.shotUrl;
   return (
     <article className="bcard pcard">
       {p.headerUrl && (
@@ -66,19 +83,26 @@ function PitchCard({ p }: { p: Pitch }) {
       </div>
       {p.oneLiner && <p className="bblurb pone">{p.oneLiner}</p>}
       <div className="pfields">
-        {p.loopDetail && <div><span className="plabel">Loop</span>{p.loopDetail}</div>}
-        {p.setting && <div><span className="plabel">Setting</span>{p.setting}</div>}
-        {p.artStyle && <div><span className="plabel">Art style</span>{p.artStyle}</div>}
-        {p.browserMvp && <div><span className="plabel">Browser MVP</span>{p.browserMvp}</div>}
-        {p.steamLadder && <div><span className="plabel">Steam ladder</span>{p.steamLadder}</div>}
-        {p.evidence && <div><span className="plabel">Evidence</span>{p.evidence}</div>}
-        {p.risk && <div className="prisk"><span className="plabel">Risk</span>{p.risk}</div>}
+        {spine.map(([label, val, cls]) => (
+          <div key={label} className={"pfield" + (cls ? " " + cls : "")}>
+            <span className="plabel">{label}</span>
+            {val ? val : <span className="pmissing">not specified</span>}
+          </div>
+        ))}
+        {open && detail.map(([label, val]) => (val
+          ? <div key={label} className="pfield-full"><span className="plabel">{label}</span>{val}</div>
+          : null))}
       </div>
-      {p.shotUrl && (
+      {open && p.shotUrl && (
         <figure className="pshot">
           <img src={p.shotUrl} alt={(p.codeName || p.title) + " — in-game"} loading="lazy" />
           <figcaption>In-game concept</figcaption>
         </figure>
+      )}
+      {hasDetail && (
+        <button type="button" className="pexpand" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
+          {open ? "▾ Show less" : "▸ Read full pitch"}
+        </button>
       )}
       {(p.d1Fit !== null || p.steamCeiling !== null || p.buildCost !== null) && (
         <div className="pscores">
