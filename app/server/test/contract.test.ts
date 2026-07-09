@@ -13,9 +13,9 @@ const goodPitch: PitchInput = {
   badge: "recommended",
   status: "proposed",
   platformLadder: "browser->steam",
-  d1Fit: 2,
-  steamCeiling: 3,
-  buildCost: 2,
+  browserFit: 2,
+  steamFit: 3,
+  buildEase: 2,
 };
 
 describe("C1 contract shape", () => {
@@ -41,8 +41,13 @@ describe("C2 validatePitchInput", () => {
     expect(r.errors.join(" ")).toMatch(/loopFamily/);
   });
   it("rejects out-of-range scores and bad dates", () => {
-    expect(validatePitchInput({ ...goodPitch, d1Fit: 9 }).ok).toBe(false);
+    expect(validatePitchInput({ ...goodPitch, browserFit: 9 }).ok).toBe(false);
     expect(validatePitchInput({ ...goodPitch, pitchDate: "07/06/2026" }).ok).toBe(false);
+  });
+  it("rejects an unknown provenance (must bump the contract)", () => {
+    const r = validatePitchInput({ ...goodPitch, provenance: "vibes-based" });
+    expect(r.ok).toBe(false);
+    expect(r.errors.join(" ")).toMatch(/provenance/);
   });
   it("assertPitchInput throws on invalid", () => {
     expect(() => assertPitchInput({ title: "x" })).toThrow(/contract/);

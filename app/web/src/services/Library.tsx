@@ -26,6 +26,10 @@ const BADGE_LABEL: Record<string, string> = {
   "cashflow": "Cashflow",
   "cheapest-build": "Cheapest to build",
 };
+const PROV_LABEL: Record<string, string> = {
+  "market-backed": "Market-backed",
+  "design-derived": "Design-derived",
+};
 
 function fmtDate(d: string): string {
   return new Date(d + "T00:00:00Z").toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric", timeZone: "UTC" });
@@ -76,6 +80,7 @@ function PitchCard({ p }: { p: Pitch }) {
             {p.badge && <span className={"ptag badge-" + p.badge}>{BADGE_LABEL[p.badge] || p.badge}</span>}
             {p.loopFamily && <span className="ptag lf">{LOOP_LABEL[p.loopFamily] || p.loopFamily}</span>}
             <span className={"ptag st st-" + p.status}>{p.status}</span>
+            {p.provenance && <span className={"ptag prov-" + p.provenance}>{PROV_LABEL[p.provenance] || p.provenance}</span>}
           </div>
           <h3>{p.title}{p.codeName && <span className="pcode">"{p.codeName}"</span>}</h3>
           <div className="bmeta">{ladder(p.platformLadder)} · {fmtDate(p.pitchDate)}</div>
@@ -104,11 +109,13 @@ function PitchCard({ p }: { p: Pitch }) {
           {open ? "▾ Show less" : "▸ Read full pitch"}
         </button>
       )}
-      {(p.d1Fit !== null || p.steamCeiling !== null || p.buildCost !== null) && (
+      {(p.browserFit !== null || p.steamFit !== null || p.buildEase !== null) && (
         <div className="pscores">
-          <span>D1 fit <Dots n={p.d1Fit} /></span>
-          <span>Steam ceiling <Dots n={p.steamCeiling} /></span>
-          <span>Build ease <Dots n={p.buildCost} /></span>
+          <span className="pfit-pair" title="Co-equal platform-fit axes — together they map which strategy route a pitch fits">
+            <span>Browser fit {p.browserFit !== null ? <Dots n={p.browserFit} /> : <em className="pna">n/a</em>}</span>
+            <span>Steam fit {p.steamFit !== null ? <Dots n={p.steamFit} /> : <em className="pna">n/a</em>}</span>
+          </span>
+          <span>Build ease <Dots n={p.buildEase} /></span>
         </div>
       )}
     </article>
