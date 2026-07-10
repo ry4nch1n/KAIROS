@@ -196,6 +196,13 @@ button{font-family:inherit}
 .bcard-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px;align-items:start}
 /* Pitch card: compact spine + progressive disclosure (long fields behind an expander). */
 .pfields .pfield{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+/* Only truncated fields (marked is-clamped by PitchCard) get a soft tail-fade, so the
+   cut reads as "there's more" rather than an abrupt mid-word ellipsis. Fields that fit
+   in 2 lines stay solid. */
+.pfields .pfield.is-clamped{-webkit-mask-image:linear-gradient(to bottom,#000 42%,transparent);mask-image:linear-gradient(to bottom,#000 42%,transparent)}
+/* Expanded ("Read full pitch"): spine fields un-clamp so the faded tail becomes readable. */
+.pfields.open .pfield{display:block;-webkit-line-clamp:unset;overflow:visible}
+.pfields.open .pfield.is-clamped{-webkit-mask-image:none;mask-image:none}
 .pmissing{color:var(--text-3);font-style:italic}
 .pexpand{margin-top:11px;background:none;border:none;padding:6px 2px;font-family:'Fira Code';font-size:10.5px;font-weight:600;letter-spacing:.3px;color:var(--primary);cursor:pointer;align-self:flex-start}
 .pexpand:hover{color:var(--primary-deep)}

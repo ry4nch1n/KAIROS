@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useDrawer, NavToggle, NavScrim, DrawerClose } from "../components/MobileNav.tsx";
 import type { LibraryItem, Pitch } from "shared";
 import { api } from "../lib/api.ts";
@@ -54,6 +54,25 @@ function Dots({ n, of = 3 }: { n: number | null; of?: number }) {
 // so rows still line up. (Scores are unchanged here — the rating rework is Phase 2.)
 function PitchCard({ p }: { p: Pitch }) {
   const [open, setOpen] = useState(false);
+  // Spine fields clamp to 2 lines. A hard mid-word ellipsis reads as "cut off
+  // abruptly", so we soft-fade the tail instead — but only on fields that are
+  // actually truncated (mark them `is-clamped`), leaving fields that fit solid.
+  const fieldsRef = useRef<HTMLDivElement>(null);
+  const mark = () => fieldsRef.current?.querySelectorAll<HTMLElement>(".pfield").forEach((el) => {
+    el.classList.toggle("is-clamped", el.scrollHeight > el.clientHeight + 1);
+  });
+  // Re-measure after every commit: the card first mounts inside a hidden
+  // (display:none) service panel where fields measure 0×0, and only gets real
+  // dimensions when the panel is revealed — which re-renders this card, so a
+  // no-dependency layout effect catches that moment (and the open toggle).
+  useLayoutEffect(mark);
+  // A viewport resize reflows the column count and the web-font swap shifts wrap
+  // points, neither of which re-renders the card — cover both explicitly.
+  useEffect(() => {
+    window.addEventListener("resize", mark);
+    document.fonts?.ready.then(mark);
+    return () => window.removeEventListener("resize", mark);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const spine: [string, string | null, string?][] = [
     ["Loop", p.loopDetail],
     ["Setting", p.setting],
@@ -87,7 +106,7 @@ function PitchCard({ p }: { p: Pitch }) {
         </div>
       </div>
       {p.oneLiner && <p className="bblurb pone">{p.oneLiner}</p>}
-      <div className="pfields">
+      <div className={"pfields" + (open ? " open" : "")} ref={fieldsRef}>
         {spine.map(([label, val, cls]) => (
           <div key={label} className={"pfield" + (cls ? " " + cls : "")}>
             <span className="plabel">{label}</span>
