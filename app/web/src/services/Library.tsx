@@ -19,6 +19,7 @@ const LOOP_LABEL: Record<string, string> = {
   "contained-systemic": "Contained-systemic",
   "idle-tycoon": "Idle / tycoon",
   "route-planning": "Route-planning",
+  "synergy-builder": "Synergy / luck-builder",
 };
 const BADGE_LABEL: Record<string, string> = {
   "recommended": "Recommended",
