@@ -17,7 +17,9 @@ export const CONTRACT = {
     //     Phase-0 strategy routes open), not a single retention proxy. Added `provenance` tag
     //     (market-backed vs design-derived). buildEase is a rename of the old buildCost — same
     //     semantics (higher = cheaper/easier), the old name just contradicted its "Build ease" label.
-    version: 3,
+    // v4: added the `synergy-builder` loop family (spin/deck synergy-engine roguelites, the
+    //     Balatro / Luck-be-a-Landlord lineage) — a plan candidate loop the taxonomy didn't hold.
+    version: 4,
     loopFamilies: [
       "extraction-lite",
       "automation-under-pressure",
@@ -26,6 +28,7 @@ export const CONTRACT = {
       "contained-systemic",
       "idle-tycoon",
       "route-planning",
+      "synergy-builder",
     ],
     badges: ["recommended", "retention-safe", "cashflow", "cheapest-build"],
     statuses: ["proposed", "prototyping", "shelved", "shipped"],
