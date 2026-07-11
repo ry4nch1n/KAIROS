@@ -462,3 +462,17 @@ describe("B3 demand/supply quadrant (R1.2)", () => {
     expect(ov.quadrant.every((p) => p.genre === q.canonicalName(p.genre))).toBe(true);
   });
 });
+
+describe("B4 small wins — conversion signal on Steam genre economics (R4.1)", () => {
+  it("every economics row carries a conversion field (ConversionRef or null)", async () => {
+    const rows = await q.getSteamGenreEconomics(db, { cohort: "indie" });
+    // Seed is browser-only, so Steam economics may be empty — assert the shape when present.
+    for (const r of rows) {
+      expect("conversion" in r).toBe(true);
+      if (r.conversion) {
+        expect(["strong", "typical", "deliberation"]).toContain(r.conversion.signal);
+        expect(typeof r.conversion.source).toBe("string");
+      }
+    }
+  });
+});
