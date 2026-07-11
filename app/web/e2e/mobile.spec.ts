@@ -49,6 +49,14 @@ async function settle(page: Page) {
   await page.waitForTimeout(500);
 }
 
+// The two invariants, reused across service views and sub-tabs.
+async function assertFits(page: Page, scope: string, label: string) {
+  const over = await pageOverflow(page);
+  expect(over, `${label} scrolls the page horizontally by ${over}px at 375px`).toBeLessThanOrEqual(1);
+  const clipped = await clippedValues(page, scope);
+  expect(clipped, `${label} clips value(s) inside their card: ${clipped.join("; ")}`).toEqual([]);
+}
+
 test.describe("mobile — layout fits at 375px", () => {
   test.use({ viewport: { width: 375, height: 812 } });
 
@@ -61,14 +69,32 @@ test.describe("mobile — layout fits at 375px", () => {
         await expect(page.locator(`${panel(svc)} canvas`).first()).toBeVisible({ timeout: 15_000 });
       }
       await settle(page);
-
-      const over = await pageOverflow(page);
-      expect(over, `${svc} scrolls the page horizontally by ${over}px at 375px`).toBeLessThanOrEqual(1);
-
-      const clipped = await clippedValues(page, panel(svc));
-      expect(clipped, `${svc} clips value(s) inside their card: ${clipped.join("; ")}`).toEqual([]);
+      await assertFits(page, panel(svc), svc);
     });
   }
+
+  // Revenue has a Browser|Steam mode toggle; the loop above only covers the default
+  // (Browser) panel. The Steam panel reuses the same .kpi-row/.rev-panel classes, so
+  // it must clear the same bar — including Unity's extra two-input Pro-seats row.
+  test("revenue Steam sub-tab fits (incl. Unity's extra input row)", async ({ page }) => {
+    await page.goto("/");
+    await page.getByRole("button", { name: "Revenue Model", exact: true }).click();
+    await expect(page.locator(panel("revenue"))).toBeVisible();
+
+    // Browser → Steam via the mode segmented control in the topbar.
+    await page.locator(`${panel("revenue")} .seg-btn`, { hasText: "Steam" }).click();
+    await expect(page.locator(panel("revenue")).getByText("Net revenue (USD)")).toBeVisible();
+    await settle(page);
+    await assertFits(page, panel("revenue"), "revenue/steam (godot)");
+
+    // Unity adds a "Pro seats × years" row of two side-by-side inputs — a distinct
+    // overflow risk. Pick it from the sub-nav drawer and re-check.
+    await page.locator(`${panel("revenue")} .nav-toggle`).click();
+    await page.locator(`${panel("revenue")} .nav-item`, { hasText: "Unity" }).click();
+    await expect(page.locator(panel("revenue")).getByText(/Unity Pro seats/)).toBeVisible();
+    await settle(page);
+    await assertFits(page, panel("revenue"), "revenue/steam (unity)");
+  });
 
   test("a wide Radar data table scrolls in-container, not the page", async ({ page }) => {
     await page.goto("/");
