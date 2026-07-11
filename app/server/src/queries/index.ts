@@ -140,16 +140,34 @@ export function isCurationTag(name: string): boolean {
   return CURATION_TAGS.has(n) || CURATION_TAGS.has(n.replace(/\s*games?$/, "").trim());
 }
 
+// Canonical genre / tag name (#7, #15). Portals list one category under both a bare name
+// and a "… Games" variant — "Simulation" vs "Simulation Games", "Puzzle" vs "Puzzle
+// Games", "Mouse" vs "Mouse Games" — which fragments a single market into several thin,
+// duplicate gaps and recommends the same viral outliers under many labels. A trailing
+// " Game"/" Games" is catalog packaging, not a distinct category, so collapse it (and any
+// doubled internal whitespace). It is deliberately IDENTITY on already-clean names, so it
+// never alters correct data. It MUST run in SQL before GROUP BY — medians/percentiles
+// can't be merged after aggregation — which is exactly what canonSql() is for; the JS twin
+// backs display + tests, and a parity test pins the two implementations together.
+const CANON_SUFFIX = /^(.+\S)\s+games?$/i;
+export function canonicalName(name: string): string {
+  return String(name).replace(CANON_SUFFIX, "$1").replace(/\s+/g, " ").trim();
+}
+/** SQL expression form of canonicalName(col) — mirror of the JS twin (parity-tested). */
+export function canonSql(col: string): string {
+  return `trim(regexp_replace(regexp_replace(${col}, '^(.+\\S)\\s+games?$', '\\1', 'i'), '\\s+', ' ', 'g'))`;
+}
+
 interface GenreDates { dates: string[]; order: string[]; byGenre: Record<string, number[]>; daySpan: number; }
 async function genreVotesByDate(db: Querier, platform: Platform): Promise<GenreDates> {
   const rows = await db.query(
-    `SELECT s.genre AS genre, s.captured_at AS d,
+    `SELECT ${canonSql("s.genre")} AS genre, s.captured_at AS d,
             percentile_cont(0.5) WITHIN GROUP (ORDER BY s.votes) AS med
      FROM game_snapshots s
      JOIN games g ON g.id = s.game_id
      JOIN sources src ON src.id = g.source_id
      WHERE g.is_live AND s.votes IS NOT NULL AND s.genre IS NOT NULL ${pf(platform)}
-     GROUP BY s.genre, s.captured_at`
+     GROUP BY ${canonSql("s.genre")}, s.captured_at`
   );
   const times = [...new Set(rows.map((r) => new Date(r.d).getTime()))].sort((a, b) => a - b);
   const idx = new Map(times.map((t, i) => [t, i]));
@@ -169,7 +187,7 @@ async function genreVotesByDate(db: Querier, platform: Platform): Promise<GenreD
 
 async function genreCounts(db: Querier, platform: Platform): Promise<Map<string, number>> {
   const rows = await db.query(
-    `SELECT l.genre AS genre, count(*)::int AS n FROM v_latest l JOIN games g ON g.id=l.game_id JOIN sources src ON src.id=g.source_id WHERE g.is_live AND l.genre IS NOT NULL ${pf(platform)} GROUP BY l.genre`
+    `SELECT ${canonSql("l.genre")} AS genre, count(*)::int AS n FROM v_latest l JOIN games g ON g.id=l.game_id JOIN sources src ON src.id=g.source_id WHERE g.is_live AND l.genre IS NOT NULL ${pf(platform)} GROUP BY ${canonSql("l.genre")}`
   );
   return new Map(rows.map((r) => [r.genre, num(r.n)]));
 }
@@ -231,10 +249,10 @@ function bandIndex(r: number): number { return r < 3.5 ? 0 : r < 4.0 ? 1 : r < 4
 
 export async function getFeatureHeatmap(db: Querier, platform: Platform): Promise<FeatureHeatmap> {
   const rows = await db.query(
-    `SELECT l.genre AS genre, l.rating AS rating, count(*)::int AS n
+    `SELECT ${canonSql("l.genre")} AS genre, l.rating AS rating, count(*)::int AS n
      FROM v_latest l JOIN games g ON g.id = l.game_id JOIN sources src ON src.id = g.source_id
      WHERE g.is_live AND l.genre IS NOT NULL AND l.rating IS NOT NULL ${pf(platform)}
-     GROUP BY l.genre, l.rating`
+     GROUP BY ${canonSql("l.genre")}, l.rating`
   );
   const totals: Record<string, number> = {};
   for (const r of rows) totals[r.genre] = (totals[r.genre] ?? 0) + num(r.n);
@@ -248,13 +266,13 @@ export async function getFeatureHeatmap(db: Querier, platform: Platform): Promis
 
 export async function getTagFrequency(db: Querier, platform: Platform): Promise<TagFreq[]> {
   const rows = await db.query(
-    `SELECT t.name AS tag, count(DISTINCT g.id)::int AS cnt
+    `SELECT ${canonSql("t.name")} AS tag, count(DISTINCT g.id)::int AS cnt
      FROM tags t
      JOIN game_tags gt ON gt.tag_id = t.id
      JOIN games g ON g.id = gt.game_id
      JOIN sources src ON src.id = g.source_id
      WHERE g.is_live ${pf(platform)}
-     GROUP BY t.name ORDER BY cnt DESC LIMIT 12`
+     GROUP BY ${canonSql("t.name")} ORDER BY cnt DESC LIMIT 12`
   );
   return rows.map((r) => ({ tag: r.tag, count: num(r.cnt) }));
 }
@@ -280,7 +298,7 @@ export function bayesianGemScore(
 async function gemBase(db: Querier, platform: Platform) {
   return db.query(
     `WITH base AS (
-       SELECT g.id, g.title, l.genre, l.rating, l.votes,
+       SELECT g.id, g.title, ${canonSql("l.genre")} AS genre, l.rating, l.votes,
               percent_rank() OVER (ORDER BY l.rating) AS rp,
               percent_rank() OVER (ORDER BY l.votes)  AS vp
        FROM v_latest l
@@ -312,7 +330,7 @@ export async function getHiddenGems(db: Querier, platform: Platform, rows?: Reco
 export async function getMarketGaps(db: Querier, platform: Platform): Promise<MarketGap[]> {
   const [rows, gex] = await Promise.all([
     db.query(
-      `SELECT l.genre AS genre, t.name AS tag,
+      `SELECT ${canonSql("l.genre")} AS genre, ${canonSql("t.name")} AS tag,
               count(DISTINCT g.id)::int AS supply_n,
               percentile_cont(0.5) WITHIN GROUP (ORDER BY l.votes)::float AS appetite,
               percentile_cont(0.9) WITHIN GROUP (ORDER BY l.rating)::float AS quality_ceil
@@ -322,7 +340,7 @@ export async function getMarketGaps(db: Querier, platform: Platform): Promise<Ma
        JOIN game_tags gt ON gt.game_id = g.id
        JOIN tags t ON t.id = gt.tag_id
        WHERE g.is_live AND l.genre IS NOT NULL ${pf(platform)}
-       GROUP BY l.genre, t.name
+       GROUP BY ${canonSql("l.genre")}, ${canonSql("t.name")}
        HAVING count(DISTINCT g.id) >= 2`
     ),
     gapExamples(db, platform),
@@ -353,13 +371,13 @@ export async function getMarketGaps(db: Querier, platform: Platform): Promise<Ma
 
 export async function getGenres(db: Querier, platform: Platform): Promise<GenreRow[]> {
   const rows = await db.query(
-    `SELECT l.genre AS genre, count(*)::int AS games, avg(l.rating)::float AS avg_rating,
+    `SELECT ${canonSql("l.genre")} AS genre, count(*)::int AS games, avg(l.rating)::float AS avg_rating,
             percentile_cont(0.5) WITHIN GROUP (ORDER BY l.votes)::float AS med_votes,
             percentile_cont(0.9) WITHIN GROUP (ORDER BY l.votes)::float AS p90_votes,
             percentile_cont(0.9) WITHIN GROUP (ORDER BY l.rating)::float AS p90_rating
      FROM v_latest l JOIN games g ON g.id = l.game_id JOIN sources src ON src.id = g.source_id
      WHERE g.is_live AND l.genre IS NOT NULL ${pf(platform)}
-     GROUP BY l.genre ORDER BY games DESC`
+     GROUP BY ${canonSql("l.genre")} ORDER BY games DESC`
   );
   const gd = await genreVotesByDate(db, platform);
   return rows.map((r) => ({
@@ -377,7 +395,7 @@ export async function getDevelopers(db: Querier, platform: Platform): Promise<De
   const rows = await db.query(
     `SELECT g.developer AS developer, count(DISTINCT g.id)::int AS games,
             avg(l.rating)::float AS avg_rating, avg(l.votes)::float AS avg_votes,
-            mode() WITHIN GROUP (ORDER BY l.genre) AS top_genre
+            mode() WITHIN GROUP (ORDER BY ${canonSql("l.genre")}) AS top_genre
      FROM v_latest l
      JOIN games g ON g.id = l.game_id
      JOIN sources src ON src.id = g.source_id
@@ -396,7 +414,7 @@ export async function getDevelopers(db: Querier, platform: Platform): Promise<De
 
 export async function getNewReleases(db: Querier, platform: Platform): Promise<NewRelease[]> {
   const rows = await db.query(
-    `SELECT g.id AS id, g.title AS title, g.url AS url, l.genre AS genre, l.rating AS rating, l.votes AS votes
+    `SELECT g.id AS id, g.title AS title, g.url AS url, ${canonSql("l.genre")} AS genre, l.rating AS rating, l.votes AS votes
      FROM games g JOIN sources src ON src.id = g.source_id JOIN v_latest l ON l.game_id = g.id
      WHERE g.is_live ${pf(platform)} AND g.first_seen_at >= (SELECT max(first_seen_at) FROM games) - interval '14 days'
      ORDER BY g.first_seen_at DESC, l.votes DESC NULLS LAST LIMIT 60`
@@ -471,13 +489,13 @@ async function genreSupplyPressure(
   platform: Platform
 ): Promise<{ genre: string; total: number; recent: number }[]> {
   const rows = await db.query(
-    `SELECT l.genre AS genre, count(*)::int AS total,
+    `SELECT ${canonSql("l.genre")} AS genre, count(*)::int AS total,
             count(*) FILTER (
               WHERE g.first_seen_at >= (SELECT max(first_seen_at) FROM games) - interval '14 days'
             )::int AS recent
      FROM v_latest l JOIN games g ON g.id = l.game_id JOIN sources src ON src.id = g.source_id
      WHERE g.is_live AND l.genre IS NOT NULL ${pf(platform)}
-     GROUP BY l.genre HAVING count(*) >= 4`
+     GROUP BY ${canonSql("l.genre")} HAVING count(*) >= 4`
   );
   return rows.map((r) => ({ genre: r.genre, total: num(r.total), recent: num(r.recent) }));
 }
@@ -583,8 +601,8 @@ async function getKPI(db: Querier, platform: Platform, gaps: MarketGap[], deps?:
 async function genreExamples(db: Querier, platform: Platform): Promise<Map<string, string[]>> {
   const rows = await db.query(
     `SELECT genre, title FROM (
-       SELECT l.genre AS genre, g.title AS title,
-              row_number() OVER (PARTITION BY l.genre ORDER BY l.votes DESC NULLS LAST) AS rn
+       SELECT ${canonSql("l.genre")} AS genre, g.title AS title,
+              row_number() OVER (PARTITION BY ${canonSql("l.genre")} ORDER BY l.votes DESC NULLS LAST) AS rn
        FROM v_latest l JOIN games g ON g.id=l.game_id JOIN sources src ON src.id=g.source_id
        WHERE g.is_live AND l.genre IS NOT NULL ${pf(platform)}
      ) t WHERE rn <= 3 ORDER BY genre, rn`
@@ -597,8 +615,8 @@ async function genreExamples(db: Querier, platform: Platform): Promise<Map<strin
 async function gapExamples(db: Querier, platform: Platform): Promise<Map<string, string[]>> {
   const rows = await db.query(
     `SELECT genre, tag, title FROM (
-       SELECT l.genre AS genre, t.name AS tag, g.title AS title,
-              row_number() OVER (PARTITION BY l.genre, t.name ORDER BY l.votes DESC NULLS LAST) AS rn
+       SELECT ${canonSql("l.genre")} AS genre, ${canonSql("t.name")} AS tag, g.title AS title,
+              row_number() OVER (PARTITION BY ${canonSql("l.genre")}, ${canonSql("t.name")} ORDER BY l.votes DESC NULLS LAST) AS rn
        FROM v_latest l JOIN games g ON g.id=l.game_id JOIN sources src ON src.id=g.source_id
        JOIN game_tags gt ON gt.game_id=g.id JOIN tags t ON t.id=gt.tag_id
        WHERE g.is_live AND l.genre IS NOT NULL ${pf(platform)}
@@ -623,12 +641,12 @@ export async function getGenreVelocityBars(db: Querier, platform: Platform, gd?:
 export async function getGenreLandscape(db: Querier, platform: Platform): Promise<GenreLandscapePoint[]> {
   const [rows, ex] = await Promise.all([
     db.query(
-      `SELECT l.genre AS genre, count(*)::int AS supply,
+      `SELECT ${canonSql("l.genre")} AS genre, count(*)::int AS supply,
               percentile_cont(0.75) WITHIN GROUP (ORDER BY l.rating)::float AS p75,
               avg(l.rating)::float AS avgr, coalesce(sum(l.votes),0)::float AS tv
        FROM v_latest l JOIN games g ON g.id = l.game_id JOIN sources src ON src.id = g.source_id
        WHERE g.is_live AND l.genre IS NOT NULL AND l.rating IS NOT NULL ${pf(platform)}
-       GROUP BY l.genre HAVING count(*) >= 4 ORDER BY supply DESC`
+       GROUP BY ${canonSql("l.genre")} HAVING count(*) >= 4 ORDER BY supply DESC`
     ),
     genreExamples(db, platform),
   ]);
@@ -640,15 +658,15 @@ async function getTagGlossary(db: Querier, platform: Platform, tagNames: string[
   const ph = tagNames.map((_, i) => `$${i + 1}`).join(",");
   const rows = await db.query(
     `SELECT tag, title, cnt FROM (
-       SELECT t.name AS tag, gg.title AS title,
-              row_number() OVER (PARTITION BY t.name ORDER BY l.votes DESC NULLS LAST) AS rn,
-              count(*) OVER (PARTITION BY t.name) AS cnt
+       SELECT ${canonSql("t.name")} AS tag, gg.title AS title,
+              row_number() OVER (PARTITION BY ${canonSql("t.name")} ORDER BY l.votes DESC NULLS LAST) AS rn,
+              count(*) OVER (PARTITION BY ${canonSql("t.name")}) AS cnt
        FROM tags t
        JOIN game_tags gt ON gt.tag_id = t.id
        JOIN games gg ON gg.id = gt.game_id
        JOIN sources src ON src.id = gg.source_id
        JOIN v_latest l ON l.game_id = gg.id
-       WHERE gg.is_live AND t.name IN (${ph}) ${pf(platform)}
+       WHERE gg.is_live AND ${canonSql("t.name")} IN (${ph}) ${pf(platform)}
      ) x WHERE rn <= 3 ORDER BY tag, rn`,
     tagNames
   );
@@ -713,7 +731,7 @@ export async function getSteamGenreEconomics(
   const cohort = opts?.cohort ?? "indie";
   const tierFilter = cohort === "indie" ? "AND (l.scale_tier IS NULL OR l.scale_tier <> 'aaa')" : "";
   const rows = await db.query(
-    `SELECT l.genre AS genre, count(*)::int AS games,
+    `SELECT ${canonSql("l.genre")} AS genre, count(*)::int AS games,
             percentile_cont(0.5) WITHIN GROUP (ORDER BY l.price_cents)::float AS med_price,
             percentile_cont(0.5) WITHIN GROUP (ORDER BY l.rating)::float AS med_rating,
             coalesce(sum(l.owners_est), 0)::float AS total_owners,
@@ -722,7 +740,7 @@ export async function getSteamGenreEconomics(
               ORDER BY coalesce(l.owners_est, 0) * coalesce(l.price_cents, 0))::float AS med_rev_cents
      FROM v_latest l JOIN games g ON g.id = l.game_id JOIN sources src ON src.id = g.source_id
      WHERE g.is_live AND src.name = 'steam' AND l.genre IS NOT NULL ${tierFilter}
-     GROUP BY l.genre ORDER BY total_owners DESC`
+     GROUP BY ${canonSql("l.genre")} ORDER BY total_owners DESC`
   );
   // Per-game reads (#24): free/unpriced games count as $0 in the median (coalesce above)
   // rather than being skipped — a genre of mostly-free games honestly medians near $0.
@@ -800,7 +818,7 @@ async function reviewVelocities(db: Querier, ids: number[]): Promise<Map<number,
 
 export async function getSteamComparables(db: Querier, limit = 12): Promise<SteamComparable[]> {
   const rows = await db.query(
-    `SELECT g.id AS id, g.title, l.scale_tier AS tier, l.genre, l.rating, l.votes,
+    `SELECT g.id AS id, g.title, l.scale_tier AS tier, ${canonSql("l.genre")} AS genre, l.rating, l.votes,
             l.owners_est AS owners, l.price_cents AS price, g.developer, g.release_date
      FROM v_latest l JOIN games g ON g.id = l.game_id JOIN sources src ON src.id = g.source_id
      WHERE g.is_live AND src.name = 'steam' AND l.rating IS NOT NULL
@@ -861,14 +879,14 @@ export async function getSteamPricing(db: Querier): Promise<SteamPriceBand[]> {
 // Steam ownership/engagement by genre (indie cohort): market size + live CCU + playtime.
 export async function getSteamOwnership(db: Querier): Promise<SteamOwnershipRow[]> {
   const rows = await db.query(
-    `SELECT l.genre AS genre, count(*)::int AS games,
+    `SELECT ${canonSql("l.genre")} AS genre, count(*)::int AS games,
             coalesce(sum(l.owners_est), 0)::float AS total_owners,
             percentile_cont(0.5) WITHIN GROUP (ORDER BY l.owners_est)::float AS med_owners,
             coalesce(sum(l.ccu), 0)::int AS ccu,
             percentile_cont(0.5) WITHIN GROUP (ORDER BY l.median_playtime_min)::float AS med_play
      FROM v_latest l JOIN games g ON g.id = l.game_id JOIN sources src ON src.id = g.source_id
      WHERE g.is_live AND src.name = 'steam' AND l.genre IS NOT NULL AND (l.scale_tier IS NULL OR l.scale_tier <> 'aaa')
-     GROUP BY l.genre ORDER BY total_owners DESC`
+     GROUP BY ${canonSql("l.genre")} ORDER BY total_owners DESC`
   );
   return rows.map((r) => ({
     genre: r.genre, games: num(r.games), totalOwners: num(r.total_owners),
@@ -882,7 +900,7 @@ export async function getSteamDevelopers(db: Querier): Promise<SteamDeveloperRow
   const rows = await db.query(
     `SELECT g.developer AS developer, count(DISTINCT g.id)::int AS games,
             coalesce(sum(l.owners_est), 0)::float AS owners, avg(l.rating)::float AS avg_rating,
-            mode() WITHIN GROUP (ORDER BY l.genre) AS top_genre
+            mode() WITHIN GROUP (ORDER BY ${canonSql("l.genre")}) AS top_genre
      FROM v_latest l JOIN games g ON g.id = l.game_id JOIN sources src ON src.id = g.source_id
      WHERE g.is_live AND src.name = 'steam' AND g.developer IS NOT NULL AND g.developer <> ''
        AND (l.scale_tier IS NULL OR l.scale_tier <> 'aaa')
@@ -897,7 +915,7 @@ export async function getSteamDevelopers(db: Querier): Promise<SteamDeveloperRow
 // Recent Steam releases (indie cohort) by release date.
 export async function getSteamNewReleases(db: Querier): Promise<SteamNewRelease[]> {
   const rows = await db.query(
-    `SELECT g.title, l.genre, l.scale_tier AS tier, l.rating, l.owners_est AS owners, l.price_cents AS price, g.release_date
+    `SELECT g.title, ${canonSql("l.genre")} AS genre, l.scale_tier AS tier, l.rating, l.owners_est AS owners, l.price_cents AS price, g.release_date
      FROM v_latest l JOIN games g ON g.id = l.game_id JOIN sources src ON src.id = g.source_id
      WHERE g.is_live AND src.name = 'steam' AND g.release_date IS NOT NULL
        AND (l.scale_tier IS NULL OR l.scale_tier <> 'aaa')
@@ -915,12 +933,12 @@ export async function getSteamNewReleases(db: Querier): Promise<SteamNewRelease[
 async function steamGapExamples(db: Querier): Promise<Map<string, string[]>> {
   const rows = await db.query(
     `SELECT genre, tag, title FROM (
-       SELECT l.genre AS genre, t.name AS tag, g.title AS title,
-              row_number() OVER (PARTITION BY l.genre, t.name ORDER BY l.owners_est DESC NULLS LAST) AS rn
+       SELECT ${canonSql("l.genre")} AS genre, ${canonSql("t.name")} AS tag, g.title AS title,
+              row_number() OVER (PARTITION BY ${canonSql("l.genre")}, ${canonSql("t.name")} ORDER BY l.owners_est DESC NULLS LAST) AS rn
        FROM v_latest l JOIN games g ON g.id = l.game_id JOIN sources src ON src.id = g.source_id
        JOIN game_tags gt ON gt.game_id = g.id JOIN tags t ON t.id = gt.tag_id
        WHERE g.is_live AND src.name = 'steam' AND l.genre IS NOT NULL AND (l.scale_tier IS NULL OR l.scale_tier <> 'aaa')
-         AND lower(t.name) <> lower(l.genre)
+         AND lower(${canonSql("t.name")}) <> lower(${canonSql("l.genre")})
      ) x WHERE rn <= 3`
   );
   const m = new Map<string, string[]>();
@@ -932,7 +950,7 @@ async function steamGapExamples(db: Querier): Promise<Map<string, string[]>> {
 export async function getSteamOpportunity(db: Querier): Promise<SteamGap[]> {
   const [rows, ex] = await Promise.all([
     db.query(
-      `SELECT l.genre AS genre, t.name AS tag,
+      `SELECT ${canonSql("l.genre")} AS genre, ${canonSql("t.name")} AS tag,
               count(DISTINCT g.id)::int AS supply_n,
               percentile_cont(0.5) WITHIN GROUP (ORDER BY l.owners_est)::float AS demand,
               percentile_cont(0.9) WITHIN GROUP (ORDER BY l.rating)::float AS quality,
@@ -940,8 +958,8 @@ export async function getSteamOpportunity(db: Querier): Promise<SteamGap[]> {
        FROM v_latest l JOIN games g ON g.id = l.game_id JOIN sources src ON src.id = g.source_id
        JOIN game_tags gt ON gt.game_id = g.id JOIN tags t ON t.id = gt.tag_id
        WHERE g.is_live AND src.name = 'steam' AND l.genre IS NOT NULL AND (l.scale_tier IS NULL OR l.scale_tier <> 'aaa')
-         AND lower(t.name) <> lower(l.genre)
-       GROUP BY l.genre, t.name HAVING count(DISTINCT g.id) >= 2`
+         AND lower(${canonSql("t.name")}) <> lower(${canonSql("l.genre")})
+       GROUP BY ${canonSql("l.genre")}, ${canonSql("t.name")} HAVING count(DISTINCT g.id) >= 2`
     ),
     steamGapExamples(db),
   ]);
