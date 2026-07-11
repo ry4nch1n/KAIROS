@@ -343,3 +343,56 @@ describe("A12 decision layer — this week's read (evaluation Phase A1)", () => 
     expect(calm[calm.length - 1]).toContain("fair read");
   });
 });
+
+describe("B1 taxonomy hygiene — genre/tag canonicalization (#7, #15)", () => {
+  it("canonicalName collapses a trailing ' Game(s)' suffix, identity on clean names", () => {
+    expect(q.canonicalName("Simulation Games")).toBe("Simulation");
+    expect(q.canonicalName("Puzzle Games")).toBe("Puzzle");
+    expect(q.canonicalName("Mouse Games")).toBe("Mouse");
+    expect(q.canonicalName("Running Game")).toBe("Running");
+    expect(q.canonicalName("SIMULATION GAMES")).toBe("SIMULATION"); // case-insensitive suffix
+    // identity — must never alter already-clean names (the safety property)
+    for (const clean of ["Puzzle", "Simulation", ".io", "3d", "2 player", "Games", "Idle"]) {
+      expect(q.canonicalName(clean)).toBe(clean);
+    }
+    expect(q.canonicalName("Simulation   Games")).toBe("Simulation");
+    expect(q.canonicalName("  Games")).toBe("Games"); // bare "Games" preserved, not nuked
+  });
+
+  it("SQL canonSql matches the JS twin exactly (parity — no drift)", async () => {
+    const samples = ["Simulation Games", "Puzzle", ".io", "Mouse Games", "3d", "Running Game", "Card Games", "Games", "Idle"];
+    for (const s of samples) {
+      const row = await db.query(`SELECT ${q.canonSql("$1")} AS c`, [s]);
+      expect(row[0].c).toBe(q.canonicalName(s));
+    }
+  });
+
+  it("merges 'Puzzle Games' into 'Puzzle' across genres + tags (end-to-end)", async () => {
+    const src = (await db.query("SELECT id FROM sources WHERE name='poki'"))[0].id;
+    const crawl = (await db.query("SELECT id FROM crawls WHERE source_id=$1 ORDER BY id DESC LIMIT 1", [src]))[0].id;
+    const before = await q.getGenres(db, "all");
+    const puzzleBefore = before.find((r) => r.genre === "Puzzle")!;
+    expect(puzzleBefore).toBeTruthy();
+
+    const g = (await db.query(
+      `INSERT INTO games(source_id, source_game_id, url, title, first_seen_at, last_seen_at, is_live)
+       VALUES ($1,'dup-puzzle-games','http://x/dup','Dup Puzzle', now() - interval '60 days', now(), true) RETURNING id`,
+      [src]
+    ))[0].id;
+    await db.query(
+      `INSERT INTO game_snapshots(game_id, crawl_id, captured_at, rating, votes, genre)
+       VALUES ($1,$2, now(), 4.1, 500, 'Puzzle Games')`,
+      [g, crawl]
+    );
+    const t = (await db.query("INSERT INTO tags(name) VALUES ('puzzle games') RETURNING id"))[0].id;
+    await db.query("INSERT INTO game_tags(game_id, tag_id) VALUES ($1,$2)", [g, t]);
+
+    const after = await q.getGenres(db, "all");
+    expect(after.find((r) => r.genre === "Puzzle Games")).toBeUndefined();
+    const puzzleAfter = after.find((r) => r.genre === "Puzzle")!;
+    expect(puzzleAfter.games).toBe(puzzleBefore.games + 1);
+
+    const tags = await q.getTagFrequency(db, "all");
+    expect(tags.find((r) => r.tag === "puzzle games")).toBeUndefined();
+  });
+});
