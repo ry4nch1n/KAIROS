@@ -148,9 +148,6 @@ button{font-family:inherit}
 .soon{font-size:11px;font-family:'Fira Code';margin-top:10px;color:var(--text-3);background:var(--surface-2);padding:4px 10px;border-radius:20px}
 
 /* --- Library: pitch cards --- */
-.pgroup{display:flex;flex-direction:column;gap:12px}
-.pgroup+.pgroup{margin-top:8px}
-.section-title .pbatch{margin-left:auto;font-family:'Fira Code';font-size:10px;font-weight:600;color:var(--text-3);letter-spacing:.3px;text-transform:none}
 .pcard{padding:16px 18px 15px}
 .pcapsule{margin:-16px -18px 13px;line-height:0;background:#0b0f16;border-bottom:1px solid var(--border-soft)}
 .pcapsule img{width:100%;height:auto;display:block;aspect-ratio:16/9;object-fit:cover}
