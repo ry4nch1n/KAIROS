@@ -109,7 +109,9 @@ function PitchCard({ p }: { p: Pitch }) {
             {p.provenance && <span className={"ptag prov-" + p.provenance}>{PROV_LABEL[p.provenance] || p.provenance}</span>}
             {isUrl(p.source) && <a className="prov-receipt" href={p.source} target="_blank" rel="noreferrer" title="The market evidence this pitch is grounded in">receipt ↗</a>}
           </div>
-          <h3>{p.title}{p.codeName && <span className="pcode">"{p.codeName}"</span>}</h3>
+          {/* codeName is an internal art-capsule name; the card shows the title only (they now
+              agree, so the old grey echo was just confusing). codeName stays in the data for art gen. */}
+          <h3>{p.title}</h3>
           <div className="bmeta">{ladder(p.platformLadder)} · {fmtDate(p.pitchDate)}
             {(() => { const r = routeLean(p.browserFit, p.steamFit); return r ? <span className={"route-chip " + r.cls} title={r.tip}>{r.label}</span> : null; })()}
           </div>
@@ -248,7 +250,7 @@ function LeaderboardView({ pitches }: { pitches: Pitch[] }) {
         <tbody>{ranked.map((p, i) => (
           <tr key={p.slug}>
             <td className="r">{i + 1}</td>
-            <td className="gname">{p.title}{p.codeName && <span className="pcode"> "{p.codeName}"</span>}</td>
+            <td className="gname">{p.title}</td>
             <td>{p.loopFamily ? (LOOP_LABEL[p.loopFamily] || p.loopFamily) : "—"}</td>
             <td className="r">{p.browserFit !== null ? <Dots n={p.browserFit} /> : "—"}</td>
             <td className="r">{p.steamFit !== null ? <Dots n={p.steamFit} /> : "—"}</td>
