@@ -222,3 +222,22 @@ Steam wired into the live GameRadar dashboard as a fourth platform (selector All
 **Canary validated against real crawled data (local, 60 games):** `total 60 · dateFill 100% · rated 80% · indie 45 · comparables 6` → **gate passed**; golden live: **PUBG=aaa, Hades=est_indie, CS2=aaa** (backing-not-scale semantics confirmed end-to-end).
 
 **Stale entries corrected (self-annealing):** D4 (was "scale → aaa") and E1 (was "`tag=Indie`" + old seed mix) now document the as-built behavior; they previously *encoded the bugs*.
+
+---
+
+## Verification run — Phase A/B/C, the 5-factor decision layer (2026-07-11)
+
+Nine PRs (#58, #61–#66) reoriented KAIROS around the five game-selection factors. All server work is payload extensions on existing routes (route-parity untouched); each phase shipped tested + browser-verified + 375px-safe.
+
+**New / extended coverage:**
+- **Contract + pitch (C1):** `test/contract.test.ts` — pitch **v5** version bump, `contentScopes` taxonomy, the five score axes, `grayBoxDays`/`contentScope` validation. `test/pitches.test.ts` — a DB round-trip test for all seven v5 columns (`gray_box_days`/`content_scope`/`tech_risk`/`hook`/`marketability`/`founder_fit`/`why_me`).
+- **B1 canonicalization:** in `test/queries.test.ts` — `canonicalName` unit cases (suffix collapse, clean-name identity), a SQL↔JS **parity** test, and an injected-duplicate end-to-end merge ("Puzzle Games" → "Puzzle" across genres + tags).
+- **B2 supply velocity:** `classifySupply` unit cases + an end-to-end "flooded genre reads rising" + gap `supplyRising` shape.
+- **B3 quadrant:** `getOverview().quadrant` per-genre shape + canonical-genre assertion; `charts.test.ts` — `quadrantOption` point mapping, median cross, log axes.
+- **A1 decision layer:** `read` array (1–3 lines, each with a "→" implication), every insight carries an implication, `GenreRow.trajectory`; `composeBrowserRead`/`composeSteamRead` threshold units.
+- **B4 conversion:** `test/genreConversion.test.ts` — cited signal per genre, case-insensitivity, null-on-no-signal.
+- **A2/C2 web:** `steamRevenue.test.ts` scenario band; `revenue.test.ts` private-target band + persistence; `lib/routeLean.test.ts` — every route-lean case.
+
+**Automated: ~227 green** (server **170** + web **57**). Command `npm test`; `npm run build` clean. Live-verified in-browser (DOM/JS, ECharts canvas pixel-capture still times out): read strips, supply column + gap flags, quadrant chart, conversion/content/recent chips, and a v5 pitch (published through the real `publishPitch` write path) rendering scope chips + Hook/Founder dots + the route-lean chip on card and Leaderboard.
+
+**No crawl/backfill needed:** B1 is query-time; conversion data is static; the v5 `pitches` columns migrate additively via `db:migrate` (runs in `crawl.yml`). Existing pitches render null-safe until the weekly routine re-authors them with v5 fields.

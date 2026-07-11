@@ -1,10 +1,11 @@
 # KAIROS — Browser Game Market Intelligence Command Center
 
-A solo-operable command center with three services behind one shell:
+A solo-operable command center with four services behind one shell:
 
-- **GameRadar** — market-intelligence dashboard for Poki & CrazyGames (the "what to build next" engine)
-- **News Brief** — your Mon/Thu indie + gaming brief, rendered from the database
-- **Library** — showcase of prototypes / design docs / art explorations (stub for now)
+- **GameRadar** — market-intelligence dashboard for CrazyGames, Poki & Steam (the "what to build next" engine): demand-vs-supply reads, a "this week's read" answer strip, hidden gems, market gaps, and a demand/supply quadrant
+- **News Brief** — the indie + gaming brief, rendered from the database
+- **Library** — the idea-exploration collection: dated **Pitches** (contract-validated game concepts, written by the weekly routine, scored across five factors) + playable **Prototypes**, plus a candidate **Leaderboard**
+- **Revenue** — a browser/Steam revenue model (scenario bands, engine terms) with a private, per-browser monthly target
 
 > Naming note: **KAIROS** is the umbrella hub. It matches your existing local-output convention (`Documents\KAIROS\Raw\<Tool>\`).
 
@@ -36,7 +37,7 @@ app/
 │  ├─ src/db/        db.ts (PGlite|Neon switch) · schema.sql · seed.ts
 │  ├─ src/queries/   analytics queries (hidden gems, market gaps, momentum…)
 │  ├─ src/api/       handlers (reused by Express + Netlify)
-│  ├─ src/crawler/   SourceAdapter base + crazygames adapter
+│  ├─ src/crawler/   SourceAdapter base + crazygames / poki / steam adapters
 │  └─ test/          Vitest specs + fixtures
 └─ shared/     TS types shared by web + server
 ```

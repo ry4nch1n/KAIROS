@@ -134,7 +134,7 @@ CREATE TABLE IF NOT EXISTS pitches (
   rank            INT,                            -- presentation order within a batch
   title           TEXT NOT NULL,
   one_liner       TEXT,
-  loop_family     TEXT,                           -- extraction-lite | automation-under-pressure | wave-defense-prep | cozy-craft | contained-systemic | idle-tycoon
+  loop_family     TEXT,                           -- taxonomy enum — see CONTRACT.pitch.loopFamilies (contract.ts) for the authoritative, versioned list (8 as of pitch v5)
   platform_ladder TEXT DEFAULT 'browser->steam',
   status          TEXT DEFAULT 'proposed',        -- proposed | prototyping | shelved | shipped
   badge           TEXT,                           -- recommended | retention-safe | cashflow | cheapest-build | ...

@@ -136,19 +136,22 @@ Two habits keep it self-healing: **(1)** record HTML/JSON fixtures so adapter te
 
 ## Command center (KAIROS) — how the three services run together
 
-KAIROS is **one web app, one Neon DB, one Netlify deploy** — the three services differ only by route group and which tables they read.
+KAIROS is **one web app, one Neon DB, one Netlify deploy** — the four services differ only by route group and which tables they read.
 
 ```
-GitHub Actions (daily) ─► radar.*  ┐
-Mon/Thu brief routine  ─► brief_editions ├─► Neon ─► Netlify (KAIROS shell: /radar /brief /library)
-(future) you           ─► library_items ┘
+GitHub Actions (daily) ─► games/game_snapshots ┐
+brief routine (Tue/Thu)─► brief_editions        ├─► Neon ─► Netlify (KAIROS shell: Radar / Brief / Library / Revenue)
+weekly routine (Fri)   ─► pitches, library_items┘
 ```
 
 | Service | Data source | Runs / updated by |
 |---|---|---|
-| GameRadar | `radar.*` (games/snapshots) | the daily crawl cron (GitHub Actions) |
-| News Brief | `brief_editions` | your existing Mon/Thu routine + **one new write-step** |
-| Library | `library_items` | you, in V2 |
+| GameRadar | `games` / `game_snapshots` (crawl snapshots) | the daily crawl cron (GitHub Actions) |
+| News Brief | `brief_editions` + `brief_steering` | the Tue/Thu indie-brief routine (+ the DB write-step) |
+| Library | `pitches` (Pitches collection) + `library_items` (Prototypes) | the weekly **kairos-iterate** routine (Fri) via token-gated `POST /api/pitches` + `POST /api/library` (the `kairos-pitch` / `kairos-prototype` skills) |
+| Revenue | none (client-side model) | n/a — inputs are dialed in the UI; the monthly target is per-browser localStorage, never stored server-side |
+
+**Analytics layer (Phase A/B/C, 2026-07):** GameRadar's payloads are richer than raw tables — a server-computed **"this week's read"** answer strip, genre **demand + supply** trends, a **demand/supply quadrant**, market-gap **supply-rising** flags, and Steam **wishlist-conversion** signals. All are computed in `server/src/queries/index.ts` from the same snapshots (no new tables, no new routes) and read defensively by the client. The **pitch contract** (`shared/src/contract.ts`, `pitch.version 5`) is the source of truth for the Pitches collection's fields + taxonomy; the `pitches` table migrates additively via `db:migrate`.
 
 **News Brief write-step (the only change to your current routine):** after it builds an edition and writes the local HTML + Notion copy as it does today, add a final call that upserts the structured edition into `brief_editions` (and optionally the rendered HTML). Because the brief routine may run on a workstation while the crawl runs in GitHub Actions, both simply need the Neon `DATABASE_URL` — they write to the same DB independently, on their own schedules. Nothing about the existing local-HTML or Notion output changes.
 
