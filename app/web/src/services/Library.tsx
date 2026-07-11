@@ -6,10 +6,11 @@ import { api } from "../lib/api.ts";
 // Collections map to a source: "pitches" reads the pitches table; the rest read
 // library_items by kind. New collections just add a row here.
 const COLLECTIONS = [
-  { key: "all", name: "All items", icon: <><rect x="3" y="3" width="18" height="18" rx="2" /><path d="M3 9h18" /></> },
   { key: "pitch", name: "Pitches", icon: <><path d="M12 2l2.4 6.9H21l-5.3 4 2 6.6L12 15.8 6.3 19.5l2-6.6L3 8.9h6.6z" /></> },
   { key: "prototype", name: "Prototypes", icon: <><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M14 2v6h6" /></> },
 ] as const;
+
+const DEFAULT_COLLECTION = COLLECTIONS[0].key; // Pitches — the primary collection
 
 const LOOP_LABEL: Record<string, string> = {
   "extraction-lite": "Extraction-lite",
@@ -164,16 +165,6 @@ function LibCard({ it }: { it: LibraryItem }) {
   );
 }
 
-// Group pitches by date (newest first) so batches stay cleanly separated as more are added.
-function groupByDate(pitches: Pitch[]): [string, Pitch[]][] {
-  const map = new Map<string, Pitch[]>();
-  for (const p of pitches) {
-    const k = p.pitchDate;
-    (map.get(k) || map.set(k, []).get(k)!).push(p);
-  }
-  return [...map.entries()].sort((a, b) => (a[0] < b[0] ? 1 : -1));
-}
-
 const COLLECTION_BLURB: Record<string, string> = {
   prototype: "Playable builds and paper tests will collect here — each one linked back to the loop family it validates.",
 };
@@ -182,7 +173,7 @@ export function Library({ hidden }: { hidden: boolean }) {
   const drawer = useDrawer();
   const [pitches, setPitches] = useState<Pitch[]>([]);
   const [items, setItems] = useState<LibraryItem[]>([]);
-  const [active, setActive] = useState<string>("all");
+  const [active, setActive] = useState<string>(DEFAULT_COLLECTION);
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
@@ -192,14 +183,14 @@ export function Library({ hidden }: { hidden: boolean }) {
   }, []);
 
   const counts = useMemo(() => {
-    const c: Record<string, number> = { all: pitches.length + items.length, pitch: pitches.length };
+    const c: Record<string, number> = { pitch: pitches.length };
     for (const it of items) c[it.kind] = (c[it.kind] || 0) + 1;
     return c;
   }, [pitches, items]);
 
   const activeName = COLLECTIONS.find((c) => c.key === active)?.name || "";
-  const shownPitches = active === "all" || active === "pitch" ? pitches : [];
-  const shownItems = active === "all" ? items : active === "pitch" ? [] : items.filter((i) => i.kind === active);
+  const shownPitches = active === "pitch" ? pitches : [];
+  const shownItems = active === "pitch" ? [] : items.filter((i) => i.kind === active);
   const isEmpty = loaded && shownPitches.length === 0 && shownItems.length === 0;
   const totalLatest = pitches[0]?.pitchDate;
 
@@ -253,19 +244,11 @@ export function Library({ hidden }: { hidden: boolean }) {
             <EmptyState collectionKey={active} name={activeName} />
           ) : (
             <>
-              {(active === "all" || active === "pitch") && shownPitches.length > 0 &&
-                groupByDate(shownPitches).map(([date, group]) => (
-                  <div className="pgroup" key={date}>
-                    <div className="section-title">
-                      <span className="n">{group.length}</span>
-                      Game pitches · {fmtDate(date)}
-                      {group[0]?.batch && <span className="pbatch">batch {group[0].batch}</span>}
-                    </div>
-                    <div className="bcard-grid">
-                      {group.map((p) => <PitchCard key={p.slug} p={p} />)}
-                    </div>
-                  </div>
-                ))}
+              {active === "pitch" && shownPitches.length > 0 && (
+                <div className="bcard-grid">
+                  {shownPitches.map((p) => <PitchCard key={p.slug} p={p} />)}
+                </div>
+              )}
               {shownItems.length > 0 && (
                 <div className="bcard-grid">
                   {shownItems.map((it) => <LibCard key={it.id} it={it} />)}
@@ -293,7 +276,7 @@ function EmptyState({ collectionKey, name }: { collectionKey: string; name: stri
           <path d="M14 17.5h7M17.5 14v7" />
         </svg>
       </div>
-      <h3>{collectionKey === "all" ? "Your library is empty" : `No ${name.toLowerCase()} yet`}</h3>
+      <h3>No {name.toLowerCase()} yet</h3>
       <p>{blurb}</p>
       <div className="soon">Added via the weekly kairos-iterate routine → POST /api/pitches</div>
     </div>
