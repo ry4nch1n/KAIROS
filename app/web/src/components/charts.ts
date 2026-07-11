@@ -1,6 +1,6 @@
 // ECharts option builders from API shapes. Mirrors the approved light-mode mockup.
 import type { EChartsOption } from "echarts";
-import type { GenreMomentum, TagFreq, ScatterPoint, FeatureHeatmap, GenreLandscapePoint, GenreVelocityBar, ScaleTierRow } from "shared";
+import type { GenreMomentum, TagFreq, ScatterPoint, FeatureHeatmap, GenreLandscapePoint, QuadrantPoint, GenreVelocityBar, ScaleTierRow } from "shared";
 
 const AX = "#64748b", GRID = "#e6ecf5", FONT = "'Fira Code', monospace";
 const LINE_COLORS = ["#059669", "#2563eb", "#d97706", "#dc2626"];
@@ -113,6 +113,41 @@ export function landscapeOption(pts: GenreLandscapePoint[]): EChartsOption {
       itemStyle: { color: "rgba(37,99,235,.45)", borderColor: "#1e3a8a", borderWidth: 1 },
       label: { show: true, formatter: (p: any) => p.value[3], position: "right", color: AX, fontFamily: FONT, fontSize: 9 },
       labelLayout: { hideOverlap: true },
+    }],
+  };
+}
+
+// Demand vs. Supply quadrant (B3). x = supply, y = appetite, bubble = weight, colour =
+// supply momentum. A median cross splits it into four zones; top-left (low supply, high
+// appetite) is the underserved quadrant. Points coloured amber ("crowding") there are a
+// race; green ("quiet") there is the clean opening.
+const SUPPLY_COLOR: Record<string, string> = { rising: "#c2620a", steady: "#94a3b8", cooling: "#2563eb", quiet: "#059669" };
+const median = (xs: number[]): number => {
+  if (!xs.length) return 0;
+  const s = [...xs].sort((a, b) => a - b), n = s.length;
+  return n % 2 ? s[(n - 1) / 2] : (s[n / 2 - 1] + s[n / 2]) / 2;
+};
+export function quadrantOption(pts: QuadrantPoint[], opt: { yName: string; weightName: string }): EChartsOption {
+  const maxW = Math.max(1, ...pts.map((p) => p.weight));
+  const medSupply = median(pts.map((p) => p.supply));
+  const medApp = median(pts.map((p) => p.appetite));
+  const data = pts.map((p) => ({
+    value: [Math.max(p.supply, 1), Math.max(p.appetite, 1), p.weight, p.genre, p.supplyTrend],
+    symbolSize: 12 + 30 * Math.sqrt(p.weight / maxW),
+    itemStyle: { color: (SUPPLY_COLOR[p.supplyTrend] ?? "#94a3b8") + "cc", borderColor: "#fff", borderWidth: 1 },
+  }));
+  return {
+    tooltip: { ...tip, formatter: (p: any) =>
+      `<b>${p.value[3]}</b> · <span style="opacity:.7">supply ${p.value[4]}</span><br>${p.value[0]} titles · ${Number(p.value[1]).toLocaleString()} ${opt.yName}<br>${Number(p.value[2]).toLocaleString()} ${opt.weightName}` },
+    grid: { left: 64, right: 40, top: 20, bottom: 48 },
+    xAxis: { type: "log", name: "supply (titles) →", nameLocation: "middle", nameGap: 28, nameTextStyle: { color: AX, fontFamily: FONT, fontSize: 10 }, axisLine: { lineStyle: { color: GRID } }, axisLabel: { color: AX, fontFamily: FONT, fontSize: 9 }, splitLine: { lineStyle: { color: GRID } } },
+    yAxis: { type: "log", name: opt.yName + " (demand) →", nameLocation: "middle", nameGap: 48, nameRotate: 90, nameTextStyle: { color: AX, fontFamily: FONT, fontSize: 10 }, axisLine: { lineStyle: { color: GRID } }, axisLabel: { color: AX, fontFamily: FONT, fontSize: 9 }, splitLine: { lineStyle: { color: GRID } } },
+    series: [{
+      type: "scatter", data,
+      label: { show: true, formatter: (p: any) => p.value[3], position: "right", color: AX, fontFamily: FONT, fontSize: 9 },
+      labelLayout: { hideOverlap: true },
+      markLine: { silent: true, symbol: "none", lineStyle: { color: "#94a3b8", type: "dashed", opacity: 0.6 },
+        data: [{ xAxis: medSupply, label: { show: false } }, { yAxis: medApp, label: { formatter: "median demand", color: AX, fontSize: 9, position: "start" } }] },
     }],
   };
 }

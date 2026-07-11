@@ -93,6 +93,7 @@ export interface SteamOverview {
   all: SteamGenreEconomics[];   // all tiers incl. AAA (demand-context view)
   comparables: SteamComparable[];
   opportunity: SteamGap[];
+  quadrant: QuadrantPoint[];
   pricing: SteamPriceBand[];
   ownership: SteamOwnershipRow[];
   developers: SteamDeveloperRow[];
@@ -174,6 +175,18 @@ export interface Insight {
 
 export interface GenreLandscapePoint { genre: string; supply: number; p75Rating: number; avgRating: number; totalVotes: number; examples: string[]; }
 
+// One point per genre for the Demand vs. Supply quadrant (B3 / R1.2): the whitespace
+// story in a single chart. x = supply (how many titles), y = appetite (demand), bubble =
+// commercial weight, colour = supply momentum. Top-left (low supply, high appetite) is the
+// underserved quadrant; a point there coloured "quiet" is the cleanest opening.
+export interface QuadrantPoint {
+  genre: string;
+  supply: number;   // # live titles (x)
+  appetite: number; // demand — median votes (browser) / median owners (Steam) (y)
+  weight: number;   // bubble — total votes (browser) / revenue proxy $ (Steam)
+  supplyTrend: SupplyTrend;
+}
+
 export interface GenreVelocityBar { genre: string; votesPerDay: number; }
 export interface GlossaryRow { label: string; kind: "genre" | "tag"; count: number; examples: string[]; definition: string; }
 
@@ -190,6 +203,7 @@ export interface Overview {
   gaps: MarketGap[];
   insights: Insight[];
   landscape: GenreLandscapePoint[];
+  quadrant: QuadrantPoint[];
   velocityBars: GenreVelocityBar[];
   glossary: GlossaryRow[];
   platform: Platform;
