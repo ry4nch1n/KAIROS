@@ -63,6 +63,10 @@ const head = (icon: JSX.Element, title: string, sub?: string) => (
 );
 const deltaCls = (d: number) => (d > 3 ? "delta-up" : d < -3 ? "delta-dn" : "delta-fl");
 const TRAJ_LABEL: Record<string, string> = { rising: "▲ rising", plateau: "▬ plateau", decaying: "▼ decaying", new: "· new" };
+// Supply-side momentum (B2): new-entrant flow. "rising" = crowding (a warning, so it reads
+// hot/amber, opposite of demand where rising is good); "quiet" = open lane.
+const SUPPLY_LABEL: Record<string, string> = { rising: "▲ crowding", steady: "▬ steady", cooling: "▼ cooling", quiet: "· quiet" };
+const SUPPLY_TIP = "New entrants in the last ~30 days vs the prior ~30 (by first-seen / release date, anchored to the latest crawl). 'crowding' = supply arriving fast; 'quiet' = an open lane.";
 
 // "This week's read" — the answer strip (server-computed, decision-framed; the charts
 // below are the evidence). Lines carry server-trusted <b> markup, same as insights.
@@ -131,7 +135,9 @@ function GapList({ gaps }: { gaps: Overview["gaps"] }) {
       <p className="gap-legend" title={Z_TIP}>opportunity = z(appetite: median votes/title) + z(quality ceiling: P90 rating) − z(supply: games)</p>
       {gaps.map((g, i) => (
         <div className="gap" key={i}><span className="rank num">{i + 1}</span>
-          <div className="name">{g.label}<small title={Z_TIP}>opportunity {g.score.toFixed(1)}</small></div>
+          <div className="name">{g.label}<small title={Z_TIP}>opportunity {g.score.toFixed(1)}</small>
+            {g.supplyRising && <span className="supply-flag" title="This genre is accreting new entrants fast — the opening is real but closing.">supply rising</span>}
+          </div>
           <div className="gap-stats num">
             <span><b>{fmt(g.appetite)}</b> median votes/title</span>
             <span><b>{g.supplyN}</b> games</span>
@@ -148,13 +154,14 @@ function GenresView({ rows }: { rows: GenreRow[] }) {
   const max = Math.max(1, ...rows.map((r) => r.games));
   return (
     <div className="card">{head(I.genres, "Genre Explorer", `${rows.length} genres`)}
-      <table className="dtable"><thead><tr><th>Genre</th><th className="r">Games</th><th className="r">Avg rating</th><th className="r">Median votes</th><th className="r">P90 votes (top-10% bar)</th><th className="r">P90 rating</th><th className="r">Votes/day</th><th title="Later-half momentum vs earlier-half of the genre's median-vote series: rising / plateau / decaying">Trend</th></tr></thead>
+      <table className="dtable"><thead><tr><th>Genre</th><th className="r">Games</th><th className="r">Avg rating</th><th className="r">Median votes</th><th className="r">P90 votes (top-10% bar)</th><th className="r">P90 rating</th><th className="r">Votes/day</th><th title="Later-half momentum vs earlier-half of the genre's median-vote series: rising / plateau / decaying">Demand trend</th><th title={SUPPLY_TIP}>Supply</th></tr></thead>
         <tbody>{rows.map((r) => (
           <tr key={r.genre}><td className="gname">{r.genre}<span className="minibar"><i style={{ width: (r.games / max) * 100 + "%" }} /></span></td>
             <td className="r">{r.games}</td><td className="r">{r.avgRating.toFixed(2)}</td><td className="r">{fmt(r.medianVotes)}</td><td className="r">{fmt(r.p90Votes)}</td>
             <td className="r">{r.p90Rating.toFixed(2)}</td>
             <td className={"r " + deltaCls(r.votesPerDay)}>{r.votesPerDay > 0 ? "+" : ""}{fmt(r.votesPerDay)}</td>
-            <td><span className={"traj traj-" + r.trajectory}>{TRAJ_LABEL[r.trajectory] || r.trajectory}</span></td></tr>
+            <td><span className={"traj traj-" + r.trajectory}>{TRAJ_LABEL[r.trajectory] || r.trajectory}</span></td>
+            <td title={r.recentEntrants + " new in the trailing window"}><span className={"supply supply-" + r.supplyTrend}>{SUPPLY_LABEL[r.supplyTrend] || r.supplyTrend}</span></td></tr>
         ))}</tbody></table>
     </div>
   );
@@ -263,7 +270,9 @@ function OppList({ gaps }: { gaps: SteamGap[] }) {
       <p className="gap-legend" title={Z_TIP}>opportunity = z(demand: median owners) + z(quality ceiling: P90 rating) − z(supply: games) · median price is context, not scored</p>
       {gaps.map((g, i) => (
         <div className="gap" key={i}><span className="rank num">{i + 1}</span>
-          <div className="name">{g.label}<small title={Z_TIP}>opportunity {g.score.toFixed(1)}</small></div>
+          <div className="name">{g.label}<small title={Z_TIP}>opportunity {g.score.toFixed(1)}</small>
+            {g.supplyRising && <span className="supply-flag" title="This genre is accreting new releases fast — the opening is real but closing.">supply rising</span>}
+          </div>
           <div className="gap-stats num">
             <span><b>{fmtOwners(g.medianOwners)}</b> median owners</span>
             <span><b>{g.supplyN}</b> games</span>

@@ -59,6 +59,7 @@ export interface SteamGap {
   medianPriceCents: number; // monetization
   score: number;
   examples: string[];
+  supplyRising: boolean;    // genre accreting recent releases fast (R1.3 annotation)
 }
 export interface SteamPriceBand {
   band: string;             // "Free" | "<$5" | "$5–10" | "$10–20" | "$20+"
@@ -142,6 +143,10 @@ export interface MarketGap {
   qualityCeil: number;
   score: number;
   examples: string[];
+  // Recency annotation (R1.3): true when the gap's genre is accreting new entrants fast.
+  // The z-score `score` is unchanged — this flags "the door is closing" without silently
+  // re-ranking, so a high-score gap that's also crowding fast reads honestly.
+  supplyRising: boolean;
 }
 
 export interface HeatCell {
@@ -253,6 +258,14 @@ export interface BriefSteering {
   updatedAt: string | null;
 }
 
+// Supply-side momentum: is this genre being flooded with new entrants, or quiet?
+// "rising" = new titles arriving faster than the prior window (crowding); "quiet" = no
+// recent entrants. Distinct from `trajectory` (which reads demand/votes) — a genre can
+// have rising demand AND rising supply (a race) or rising demand with quiet supply (the
+// white space you want). Computed by comparing two adjacent trailing windows anchored to
+// the data's newest date, so it's clock-independent.
+export type SupplyTrend = "rising" | "steady" | "cooling" | "quiet";
+
 export interface GenreRow {
   genre: string;
   games: number;
@@ -264,6 +277,8 @@ export interface GenreRow {
   // Later-half vs earlier-half momentum of the genre's median-votes series — the delta
   // read ("is this changing?") a static level column can't give.
   trajectory: Trajectory;
+  supplyTrend: SupplyTrend;   // new-entrant momentum (crowding signal)
+  recentEntrants: number;     // titles first seen in the trailing window
 }
 export interface DeveloperRow {
   developer: string;

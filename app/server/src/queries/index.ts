@@ -3,7 +3,7 @@ import type { Querier } from "../db/db.ts";
 import type {
   Platform, Overview, OverviewKPI, GenreMomentum, TagFreq, ScatterPoint,
   HiddenGem, MarketGap, FeatureHeatmap, Insight, BriefEditionMeta, BriefEdition,
-  GenreRow, DeveloperRow, NewRelease, Trajectory, GenreLandscapePoint, GenreVelocityBar, GlossaryRow, BriefSteering,
+  GenreRow, DeveloperRow, NewRelease, Trajectory, SupplyTrend, GenreLandscapePoint, GenreVelocityBar, GlossaryRow, BriefSteering,
   ScaleTierRow, SteamGenreEconomics, SteamCohort, SteamComparable, SteamOverview,
   SteamGap, SteamPriceBand, SteamOwnershipRow, SteamDeveloperRow, SteamNewRelease,
   Pitch, PitchInput, LibraryItemInput,
@@ -221,6 +221,47 @@ export function classifyTrajectory(series: number[], daySpan: number): { votesPe
   return { votesPerDay, trajectory };
 }
 
+// ── Supply velocity (B2 / R1.1 + R1.3) ──
+// "Is this genre being flooded right now?" — the question the static supply count can't
+// answer. We compare new entrants in two adjacent trailing windows (recent vs prior),
+// anchored to the DATA's newest date rather than the wall clock so it's deterministic
+// (same anchor pattern as getNewReleases). Browser uses first_seen_at (when we first saw
+// a title); Steam uses release_date. A genre needs a real recent count to read "rising",
+// so one straggler can't cry crowding.
+const SUPPLY_MIN_RISING = 2;
+export function classifySupply(recent: number, prior: number): SupplyTrend {
+  if (recent + prior === 0) return "quiet";
+  if (recent >= SUPPLY_MIN_RISING && recent > prior * 1.5) return "rising";
+  if (recent < prior * 0.5) return "cooling";
+  return "steady";
+}
+
+interface SupplyInfo { recent: number; prior: number; trend: SupplyTrend; }
+/** Per-canonical-genre new-entrant counts over the trailing window + the prior window. */
+async function genreSupplyTrend(db: Querier, platform: Platform, windowDays = 30): Promise<Map<string, SupplyInfo>> {
+  // Steam dates releases; browser portals don't, so first_seen_at is the best entrant proxy.
+  const col = platform === "steam" ? "release_date" : "first_seen_at";
+  const w = `($1::int::text || ' days')::interval`;      // trailing window
+  const w2 = `(($1::int * 2)::text || ' days')::interval`; // window + the prior window
+  const rows = await db.query(
+    `WITH anchor AS (SELECT max(g2.${col}) AS mx FROM games g2 WHERE g2.is_live)
+     SELECT ${canonSql("l.genre")} AS genre,
+            count(*) FILTER (WHERE g.${col} > (SELECT mx FROM anchor) - ${w})::int AS recent,
+            count(*) FILTER (WHERE g.${col} <= (SELECT mx FROM anchor) - ${w}
+                              AND g.${col} >  (SELECT mx FROM anchor) - ${w2})::int AS prior
+     FROM v_latest l JOIN games g ON g.id = l.game_id JOIN sources src ON src.id = g.source_id
+     WHERE g.is_live AND l.genre IS NOT NULL AND g.${col} IS NOT NULL ${pf(platform)}
+     GROUP BY ${canonSql("l.genre")}`,
+    [windowDays]
+  );
+  const m = new Map<string, SupplyInfo>();
+  for (const r of rows) {
+    const recent = num(r.recent), prior = num(r.prior);
+    m.set(r.genre, { recent, prior, trend: classifySupply(recent, prior) });
+  }
+  return m;
+}
+
 function pf(platform: Platform): string {
   if (platform === "poki") return "AND src.name = 'poki'";
   if (platform === "crazygames") return "AND src.name = 'crazygames'";
@@ -328,6 +369,7 @@ export async function getHiddenGems(db: Querier, platform: Platform, rows?: Reco
 }
 
 export async function getMarketGaps(db: Querier, platform: Platform): Promise<MarketGap[]> {
+  const supply = await genreSupplyTrend(db, platform);
   const [rows, gex] = await Promise.all([
     db.query(
       `SELECT ${canonSql("l.genre")} AS genre, ${canonSql("t.name")} AS tag,
@@ -364,6 +406,7 @@ export async function getMarketGaps(db: Querier, platform: Platform): Promise<Ma
       qualityCeil: +num(r.quality_ceil).toFixed(2),
       score: +(zApp(num(r.appetite)) + zQual(num(r.quality_ceil)) - zSup(num(r.supply_n))).toFixed(2),
       examples: gex.get(`${r.genre} × ${r.tag}`) ?? [],
+      supplyRising: supply.get(r.genre)?.trend === "rising",
     }))
     .sort((a, b) => b.score - a.score)
     .slice(0, 6);
@@ -379,16 +422,21 @@ export async function getGenres(db: Querier, platform: Platform): Promise<GenreR
      WHERE g.is_live AND l.genre IS NOT NULL ${pf(platform)}
      GROUP BY ${canonSql("l.genre")} ORDER BY games DESC`
   );
-  const gd = await genreVotesByDate(db, platform);
-  return rows.map((r) => ({
-    genre: r.genre, games: num(r.games), avgRating: +num(r.avg_rating).toFixed(2),
-    medianVotes: Math.round(num(r.med_votes)), p90Votes: Math.round(num(r.p90_votes)),
-    p90Rating: +num(r.p90_rating).toFixed(2),
-    votesPerDay: gd.byGenre[r.genre] ? Math.round(velocity(gd.byGenre[r.genre], gd.daySpan)) : 0,
-    // Delta read: is this genre's median-vote series accelerating or fading? A level
-    // column seen ten times carries no information — its change does.
-    trajectory: gd.byGenre[r.genre] ? classifyTrajectory(gd.byGenre[r.genre], gd.daySpan).trajectory : "new",
-  }));
+  const [gd, supply] = await Promise.all([genreVotesByDate(db, platform), genreSupplyTrend(db, platform)]);
+  return rows.map((r) => {
+    const sup = supply.get(r.genre);
+    return {
+      genre: r.genre, games: num(r.games), avgRating: +num(r.avg_rating).toFixed(2),
+      medianVotes: Math.round(num(r.med_votes)), p90Votes: Math.round(num(r.p90_votes)),
+      p90Rating: +num(r.p90_rating).toFixed(2),
+      votesPerDay: gd.byGenre[r.genre] ? Math.round(velocity(gd.byGenre[r.genre], gd.daySpan)) : 0,
+      // Delta read: is this genre's median-vote series accelerating or fading? A level
+      // column seen ten times carries no information — its change does.
+      trajectory: gd.byGenre[r.genre] ? classifyTrajectory(gd.byGenre[r.genre], gd.daySpan).trajectory : "new",
+      supplyTrend: sup?.trend ?? "quiet",
+      recentEntrants: sup?.recent ?? 0,
+    };
+  });
 }
 
 export async function getDevelopers(db: Querier, platform: Platform): Promise<DeveloperRow[]> {
@@ -948,6 +996,7 @@ async function steamGapExamples(db: Querier): Promise<Map<string, string[]>> {
 
 // Steam opportunity: indie genre×tag with high demand (owners) + quality, low supply, monetizable.
 export async function getSteamOpportunity(db: Querier): Promise<SteamGap[]> {
+  const supply = await genreSupplyTrend(db, "steam");
   const [rows, ex] = await Promise.all([
     db.query(
       `SELECT ${canonSql("l.genre")} AS genre, ${canonSql("t.name")} AS tag,
@@ -977,6 +1026,7 @@ export async function getSteamOpportunity(db: Querier): Promise<SteamGap[]> {
       qualityCeil: +num(r.quality).toFixed(2), medianPriceCents: Math.round(num(r.med_price)),
       score: +(zDem(num(r.demand)) + zQual(num(r.quality)) - zSup(num(r.supply_n))).toFixed(2),
       examples: ex.get(`${r.genre} × ${r.tag}`) ?? [],
+      supplyRising: supply.get(r.genre)?.trend === "rising",
     }))
     .sort((a, b) => b.score - a.score)
     .slice(0, 8);
