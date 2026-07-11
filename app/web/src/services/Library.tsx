@@ -361,7 +361,7 @@ function EmptyState({ collectionKey, name }: { collectionKey: string; name: stri
       </div>
       <h3>No {name.toLowerCase()} yet</h3>
       <p>{blurb}</p>
-      <div className="soon">Added via the weekly kairos-iterate routine → POST /api/pitches</div>
+      <div className="soon">New pitches and prototypes are published automatically each week.</div>
     </div>
   );
 }
