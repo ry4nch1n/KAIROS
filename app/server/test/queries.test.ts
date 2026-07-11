@@ -445,3 +445,20 @@ describe("B2 supply velocity — is a genre flooding? (R1.1 + R1.3)", () => {
     for (let i = 1; i < gaps.length; i++) expect(gaps[i - 1].score).toBeGreaterThanOrEqual(gaps[i].score);
   });
 });
+
+describe("B3 demand/supply quadrant (R1.2)", () => {
+  it("overview carries one quadrant point per well-populated genre", async () => {
+    const ov = await q.getOverview(db, "all");
+    expect(ov.quadrant.length).toBeGreaterThan(0);
+    for (const p of ov.quadrant) {
+      expect(p.supply).toBeGreaterThanOrEqual(4);        // HAVING count >= 4
+      expect(p.appetite).toBeGreaterThanOrEqual(0);
+      expect(p.weight).toBeGreaterThanOrEqual(0);
+      expect(["rising", "steady", "cooling", "quiet"]).toContain(p.supplyTrend);
+    }
+  });
+  it("quadrant genres are canonical (share the B1 canonicalization)", async () => {
+    const ov = await q.getOverview(db, "all");
+    expect(ov.quadrant.every((p) => p.genre === q.canonicalName(p.genre))).toBe(true);
+  });
+});

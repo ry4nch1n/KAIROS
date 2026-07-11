@@ -411,3 +411,8 @@ a.est-chip:hover{text-decoration:underline}
 .supply-cooling{background:rgba(37,99,235,.1);color:var(--primary)}
 .supply-quiet{background:rgba(26,138,82,.12);color:#1a8a52}
 .supply-flag{margin-left:8px;font-family:'Fira Code';font-size:10px;font-weight:700;letter-spacing:.02em;color:var(--accent);background:rgba(194,98,10,.12);border:1px solid rgba(194,98,10,.3);border-radius:5px;padding:1px 6px;white-space:nowrap}
+
+/* Demand/Supply quadrant colour legend (B3) */
+.q-legend{display:flex;flex-wrap:wrap;gap:14px;margin:-2px 0 8px;font-family:'Fira Code';font-size:11px;color:var(--text-3)}
+.q-legend-item{display:inline-flex;align-items:center;gap:5px}
+.q-legend-item i{width:10px;height:10px;border-radius:50%;display:inline-block}

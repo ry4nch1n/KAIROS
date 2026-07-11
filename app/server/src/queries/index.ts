@@ -3,7 +3,7 @@ import type { Querier } from "../db/db.ts";
 import type {
   Platform, Overview, OverviewKPI, GenreMomentum, TagFreq, ScatterPoint,
   HiddenGem, MarketGap, FeatureHeatmap, Insight, BriefEditionMeta, BriefEdition,
-  GenreRow, DeveloperRow, NewRelease, Trajectory, SupplyTrend, GenreLandscapePoint, GenreVelocityBar, GlossaryRow, BriefSteering,
+  GenreRow, DeveloperRow, NewRelease, Trajectory, SupplyTrend, GenreLandscapePoint, QuadrantPoint, GenreVelocityBar, GlossaryRow, BriefSteering,
   ScaleTierRow, SteamGenreEconomics, SteamCohort, SteamComparable, SteamOverview,
   SteamGap, SteamPriceBand, SteamOwnershipRow, SteamDeveloperRow, SteamNewRelease,
   Pitch, PitchInput, LibraryItemInput,
@@ -701,6 +701,42 @@ export async function getGenreLandscape(db: Querier, platform: Platform): Promis
   return rows.map((r) => ({ genre: r.genre, supply: num(r.supply), p75Rating: +num(r.p75).toFixed(2), avgRating: +num(r.avgr).toFixed(2), totalVotes: Math.round(num(r.tv)), examples: ex.get(r.genre) ?? [] }));
 }
 
+// Demand vs. Supply quadrant (B3 / R1.2). One point per genre with enough titles to read:
+// x = supply, y = appetite (demand), bubble = commercial weight, colour = supply momentum.
+export async function getGenreQuadrant(db: Querier, platform: Platform): Promise<QuadrantPoint[]> {
+  const supply = await genreSupplyTrend(db, platform);
+  const rows = await db.query(
+    `SELECT ${canonSql("l.genre")} AS genre, count(*)::int AS supply,
+            percentile_cont(0.5) WITHIN GROUP (ORDER BY l.votes)::float AS appetite,
+            coalesce(sum(l.votes), 0)::float AS weight
+     FROM v_latest l JOIN games g ON g.id = l.game_id JOIN sources src ON src.id = g.source_id
+     WHERE g.is_live AND l.genre IS NOT NULL AND l.votes IS NOT NULL ${pf(platform)}
+     GROUP BY ${canonSql("l.genre")} HAVING count(*) >= 4`
+  );
+  return rows.map((r) => ({
+    genre: r.genre, supply: num(r.supply), appetite: Math.round(num(r.appetite)),
+    weight: Math.round(num(r.weight)), supplyTrend: supply.get(r.genre)?.trend ?? "quiet",
+  }));
+}
+
+// Steam flavor: appetite = median owners, weight = revenue proxy (Σ owners × price, $).
+export async function getSteamGenreQuadrant(db: Querier): Promise<QuadrantPoint[]> {
+  const supply = await genreSupplyTrend(db, "steam");
+  const rows = await db.query(
+    `SELECT ${canonSql("l.genre")} AS genre, count(*)::int AS supply,
+            percentile_cont(0.5) WITHIN GROUP (ORDER BY l.owners_est)::float AS appetite,
+            coalesce(sum(l.owners_est * l.price_cents), 0)::float AS weight_cents
+     FROM v_latest l JOIN games g ON g.id = l.game_id JOIN sources src ON src.id = g.source_id
+     WHERE g.is_live AND src.name = 'steam' AND l.genre IS NOT NULL AND l.owners_est IS NOT NULL
+       AND (l.scale_tier IS NULL OR l.scale_tier <> 'aaa')
+     GROUP BY ${canonSql("l.genre")} HAVING count(*) >= 2`
+  );
+  return rows.map((r) => ({
+    genre: r.genre, supply: num(r.supply), appetite: Math.round(num(r.appetite)),
+    weight: Math.round(num(r.weight_cents) / 100), supplyTrend: supply.get(r.genre)?.trend ?? "quiet",
+  }));
+}
+
 async function getTagGlossary(db: Querier, platform: Platform, tagNames: string[]): Promise<GlossaryRow[]> {
   if (!tagNames.length) return [];
   const ph = tagNames.map((_, i) => `$${i + 1}`).join(",");
@@ -729,7 +765,7 @@ async function getTagGlossary(db: Querier, platform: Platform, tagNames: string[
 }
 
 export async function getOverview(db: Querier, platform: Platform): Promise<Overview> {
-  const [gd, vol, gemRows, tags, heatmap, gaps, landscape, pressure] = await Promise.all([
+  const [gd, vol, gemRows, tags, heatmap, gaps, landscape, quadrant, pressure] = await Promise.all([
     genreVotesByDate(db, platform),
     genreCounts(db, platform),
     gemBase(db, platform),
@@ -737,6 +773,7 @@ export async function getOverview(db: Querier, platform: Platform): Promise<Over
     getFeatureHeatmap(db, platform),
     getMarketGaps(db, platform),
     getGenreLandscape(db, platform),
+    getGenreQuadrant(db, platform),
     genreSupplyPressure(db, platform),
   ]);
   const scatter = await getScatter(db, platform, gemRows);
@@ -754,7 +791,7 @@ export async function getOverview(db: Querier, platform: Platform): Promise<Over
     .map((genre) => ({ genre, v: velocity(gd.byGenre[genre], gd.daySpan), trajectory: classifyTrajectory(gd.byGenre[genre], gd.daySpan).trajectory }))
     .sort((a, b) => b.v - a.v)[0];
   const read = composeBrowserRead({ gap: gaps[0], mover, pressure });
-  return { kpi, read, momentum, tags, scatter, heatmap, gaps, insights, landscape, velocityBars, glossary, platform, subtitle: subtitleFor(platform) };
+  return { kpi, read, momentum, tags, scatter, heatmap, gaps, insights, landscape, quadrant, velocityBars, glossary, platform, subtitle: subtitleFor(platform) };
 }
 
 // ── Phase 2: Steam / PC analytics ──
@@ -1034,12 +1071,13 @@ export async function getSteamOpportunity(db: Querier): Promise<SteamGap[]> {
 
 // Composed Steam screen payload: KPIs + tier mix + cohorts + comparables + all sub-sections.
 export async function getSteamOverview(db: Querier): Promise<SteamOverview> {
-  const [tiers, indie, all, comparables, opportunity, pricing, ownership, developers, newReleases] = await Promise.all([
+  const [tiers, indie, all, comparables, opportunity, quadrant, pricing, ownership, developers, newReleases] = await Promise.all([
     getScaleTierBreakdown(db, "steam"),
     getSteamGenreEconomics(db, { cohort: "indie" }),
     getSteamGenreEconomics(db, { cohort: "all" }),
     getSteamComparables(db, 14),
     getSteamOpportunity(db),
+    getSteamGenreQuadrant(db),
     getSteamPricing(db),
     getSteamOwnership(db),
     getSteamDevelopers(db),
@@ -1063,7 +1101,7 @@ export async function getSteamOverview(db: Querier): Promise<SteamOverview> {
       indieMedianPriceCents: Math.round(num(agg.indie_med_price)),
     },
     read: composeSteamRead({ opportunity, indie }),
-    tiers, indie, all, comparables, opportunity, pricing, ownership, developers, newReleases,
+    tiers, indie, all, comparables, opportunity, quadrant, pricing, ownership, developers, newReleases,
     subtitle: "Steam (PC) · indie-addressable cohort default",
   };
 }

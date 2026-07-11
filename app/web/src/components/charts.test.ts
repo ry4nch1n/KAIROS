@@ -3,6 +3,7 @@ import {
   scatterOption,
   velocityBarOption,
   landscapeOption,
+  quadrantOption,
   heatmapOption,
   momentumOption,
   treemapOption,
@@ -12,11 +13,38 @@ import type {
   ScatterPoint,
   GenreVelocityBar,
   GenreLandscapePoint,
+  QuadrantPoint,
   FeatureHeatmap,
   GenreMomentum,
   TagFreq,
   ScaleTierRow,
 } from "shared";
+
+describe("quadrantOption", () => {
+  const pts: QuadrantPoint[] = [
+    { genre: "Puzzle", supply: 20, appetite: 1500, weight: 200000, supplyTrend: "quiet" },
+    { genre: "Casual", supply: 12, appetite: 1800, weight: 400000, supplyTrend: "rising" },
+    { genre: ".io", supply: 6, appetite: 22000, weight: 150000, supplyTrend: "cooling" },
+  ];
+  const opt = quadrantOption(pts, { yName: "median votes", weightName: "total votes" }) as any;
+
+  it("plots [supply, appetite, weight, genre, trend] per point, coloured by supply trend", () => {
+    const data = opt.series[0].data;
+    expect(data).toHaveLength(3);
+    expect(data[0].value.slice(0, 2)).toEqual([20, 1500]);
+    expect(data[1].itemStyle.color).toContain("c2620a"); // rising = amber
+    expect(data[0].itemStyle.color).toContain("059669"); // quiet = green
+  });
+  it("draws a median cross so the underserved quadrant is readable", () => {
+    const ml = opt.series[0].markLine.data;
+    expect(ml.some((d: any) => d.xAxis === 12)).toBe(true);   // median supply of [6,12,20]
+    expect(ml.some((d: any) => d.yAxis === 1800)).toBe(true); // median appetite
+  });
+  it("uses log axes (wide demand/supply ranges) without a zero-crash", () => {
+    expect(opt.xAxis.type).toBe("log");
+    expect(opt.yAxis.type).toBe("log");
+  });
+});
 
 // ---------------------------------------------------------------------------
 // 1. scatterOption — tooltip has no "game name" bug guard

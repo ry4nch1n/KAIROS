@@ -8,7 +8,7 @@ import type {
 import { api } from "../lib/api.ts";
 import type { RevenueSeed } from "../lib/steamRevenue.ts";
 import { EChart } from "../components/EChart.tsx";
-import { momentumOption, treemapOption, scatterOption, heatmapOption, landscapeOption, velocityBarOption, tierBarOption } from "../components/charts.ts";
+import { momentumOption, treemapOption, scatterOption, heatmapOption, landscapeOption, quadrantOption, velocityBarOption, tierBarOption } from "../components/charts.ts";
 import { InsightSvg, tagClass } from "../components/icons.tsx";
 
 const fmt = (n: number) => n.toLocaleString("en-US");
@@ -82,6 +82,28 @@ function ReadStrip({ lines }: { lines?: string[] }) {
   );
 }
 
+// Demand vs. Supply quadrant (B3) — the whitespace read in one chart. The colour legend
+// is inline so "amber in the top-left = a crowding race, green = a clean opening" is legible
+// without hovering.
+const SUPPLY_LEGEND: [string, string, string][] = [
+  ["quiet", "#059669", "open lane"],
+  ["cooling", "#2563eb", "cooling"],
+  ["steady", "#94a3b8", "steady"],
+  ["rising", "#c2620a", "crowding"],
+];
+function QuadrantCard({ points, yName, weightName }: { points: import("shared").QuadrantPoint[]; yName: string; weightName: string }) {
+  if (points.length < 3) return null;
+  return (
+    <div className="card hero">
+      <h3>{I.gaps}Demand vs. Supply<span className="sub">top-left = underserved (few titles, high demand) · bubble = {weightName} · colour = supply momentum</span></h3>
+      <div className="q-legend">{SUPPLY_LEGEND.map(([k, c, label]) => (
+        <span key={k} className="q-legend-item"><i style={{ background: c }} />{label}</span>
+      ))}</div>
+      <EChart option={quadrantOption(points, { yName, weightName })} style={{ minHeight: 360 }} />
+    </div>
+  );
+}
+
 /* ───────────── views ───────────── */
 function OverviewView({ ov }: { ov: Overview }) {
   return (
@@ -93,6 +115,7 @@ function OverviewView({ ov }: { ov: Overview }) {
         <div className="kpi"><div className="label">{I.trends}Rising genre</div><div className="val num" style={{ fontSize: 24, paddingTop: 4 }}>{ov.kpi.risingGenre}</div><span className="delta up num">▲ +{ov.kpi.risingVotesPerDay} votes/day</span></div>
         <div className="kpi accent"><div className="label">{I.gaps}Open market gaps</div><div className="val num">{ov.kpi.openGaps}</div><span className="delta up num">appetite &gt; supply</span></div>
       </div>
+      <QuadrantCard points={ov.quadrant} yName="median votes" weightName="total votes" />
       <div className="card hero">{head(I.genres, "Genre landscape", "supply × quality × audience — top-left = green-field")}<EChart option={landscapeOption(ov.landscape)} style={{ minHeight: 360 }} /></div>
       <div className="grid g-2">
         <div className="card">{head(I.trends, "Genre vote-velocity", "votes/day by genre — gainers vs flat/decliners")}<EChart option={velocityBarOption(ov.velocityBars)} /></div>
@@ -427,6 +450,7 @@ function SteamView({ data, section, onProject }: { data: SteamOverview; section:
       <SteamKpis data={data} />
       <div className="card hero">{head(I.overview, "Scale-tier distribution", "inferred from reviews + owners + self-published · blue = indie cohort, grey = AAA context")}
         <EChart option={tierBarOption(data.tiers)} style={{ minHeight: 240 }} /></div>
+      <QuadrantCard points={data.quadrant} yName="median owners" weightName="revenue proxy $" />
       <div className="grid g-2">
         <div className="card">{head(I.money, "Top indie genres", "by revenue proxy")}<EconTable rows={data.indie.slice(0, 6)} /></div>
         <div className="card">{head(I.gaps, "Top opportunities", "indie genre × tag")}<OppList gaps={data.opportunity.slice(0, 4)} /></div>
