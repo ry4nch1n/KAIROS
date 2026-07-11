@@ -63,6 +63,28 @@ describe("P1 pitches table + queries", () => {
     expect(p.shotUrl).toBe("https://kairos-pitch-art.netlify.app/salvage-line/shot.png");
   });
 
+  it("publishPitch round-trips the v5 scope + hook + founder-fit fields", async () => {
+    const db = await freshMemoryDb();
+    await q.publishPitch(db, {
+      ...base,
+      grayBoxDays: 10,
+      contentScope: "small",
+      techRisk: "browser WebGL memory ceiling on low-end phones",
+      hook: "Strip a derelict star-freighter before its reactor cooks you.",
+      marketability: 3,
+      founderFit: 2,
+      whyMe: "I've shipped tense resource loops before and still love the fantasy.",
+    });
+    const p = (await q.getPitches(db))[0];
+    expect(p.grayBoxDays).toBe(10);
+    expect(p.contentScope).toBe("small");
+    expect(p.techRisk).toMatch(/WebGL/);
+    expect(p.hook).toMatch(/star-freighter/);
+    expect(p.marketability).toBe(3);
+    expect(p.founderFit).toBe(2);
+    expect(p.whyMe).toMatch(/tense resource loops/);
+  });
+
   it("publishPitch upserts on slug (no duplicate rows)", async () => {
     const db = await freshMemoryDb();
     await q.publishPitch(db, base);

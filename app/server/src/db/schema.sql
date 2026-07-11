@@ -170,3 +170,15 @@ ALTER TABLE pitches ADD COLUMN IF NOT EXISTS provenance  TEXT;  -- market-backed
 UPDATE pitches SET browser_fit = d1_fit        WHERE browser_fit IS NULL AND d1_fit        IS NOT NULL;
 UPDATE pitches SET steam_fit   = steam_ceiling WHERE steam_fit   IS NULL AND steam_ceiling IS NOT NULL;
 UPDATE pitches SET build_ease  = build_cost    WHERE build_ease  IS NULL AND build_cost    IS NOT NULL;
+-- Pitch v5 (contract pitch.version 5): read a pitch through BOTH lenses of the durable
+-- methodology, not just the commercial half. Scope block (can the loop be proven fun before
+-- it eats the year?), hook (does it capsule?), founder fit (would you still care in month
+-- four?). Purely additive + null for existing cards — no backfill; the card omits an unset
+-- field and the next routine run authors v5 fields going forward.
+ALTER TABLE pitches ADD COLUMN IF NOT EXISTS gray_box_days INT;   -- days to a testable gray-box loop
+ALTER TABLE pitches ADD COLUMN IF NOT EXISTS content_scope TEXT;  -- small | medium | large (vs genre expectation)
+ALTER TABLE pitches ADD COLUMN IF NOT EXISTS tech_risk     TEXT;  -- the scariest technical unknown, one line
+ALTER TABLE pitches ADD COLUMN IF NOT EXISTS hook          TEXT;  -- capsule promise / marketing beat
+ALTER TABLE pitches ADD COLUMN IF NOT EXISTS marketability INT;   -- 1..3 first-session pull (was #26 "Grab")
+ALTER TABLE pitches ADD COLUMN IF NOT EXISTS founder_fit   INT;   -- 1..3 personal pull + edge
+ALTER TABLE pitches ADD COLUMN IF NOT EXISTS why_me        TEXT;  -- why this holds your attention / your edge

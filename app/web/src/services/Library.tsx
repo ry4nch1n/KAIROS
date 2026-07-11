@@ -82,9 +82,12 @@ function PitchCard({ p }: { p: Pitch }) {
     ["Risk", p.risk, "prisk"],
   ];
   const detail: [string, string | null][] = [
+    ["Hook", p.hook],
     ["Art style", p.artStyle],
     ["Browser MVP", p.browserMvp],
     ["Steam ladder", p.steamLadder],
+    ["Tech risk", p.techRisk],
+    ["Why me", p.whyMe],
     ["Evidence", p.evidence],
   ];
   const hasDetail = detail.some(([, v]) => v) || !!p.shotUrl;
@@ -110,6 +113,12 @@ function PitchCard({ p }: { p: Pitch }) {
         </div>
       </div>
       {p.oneLiner && <p className="bblurb pone">{p.oneLiner}</p>}
+      {(p.grayBoxDays != null || p.contentScope) && (
+        <div className="pscope">
+          {p.grayBoxDays != null && <span className="pscope-chip clock" title="Estimated days to a testable gray-box loop — the Aug kill-gate clock. A loop only provable at month six is out of scope no matter the market.">⏱ ~{p.grayBoxDays}d to a testable loop</span>}
+          {p.contentScope && <span className="pscope-chip" title="Content bill vs. what this genre's buyers expect">content: {p.contentScope}</span>}
+        </div>
+      )}
       <div className={"pfields" + (open ? " open" : "")} ref={fieldsRef}>
         {spine.map(([label, val, cls]) => (
           <div key={label} className={"pfield" + (cls ? " " + cls : "")}>
@@ -132,13 +141,19 @@ function PitchCard({ p }: { p: Pitch }) {
           {open ? "▾ Show less" : "▸ Read full pitch"}
         </button>
       )}
-      {(p.browserFit !== null || p.steamFit !== null || p.buildEase !== null) && (
+      {(p.browserFit !== null || p.steamFit !== null || p.buildEase !== null || p.marketability !== null || p.founderFit !== null) && (
         <div className="pscores">
           <span className="pfit-pair" title="Co-equal platform-fit axes — together they map which strategy route a pitch fits">
             <span>Browser fit {p.browserFit !== null ? <Dots n={p.browserFit} /> : <em className="pna">n/a</em>}</span>
             <span>Steam fit {p.steamFit !== null ? <Dots n={p.steamFit} /> : <em className="pna">n/a</em>}</span>
           </span>
           <span>Build ease <Dots n={p.buildEase} /></span>
+          {(p.marketability !== null || p.founderFit !== null) && (
+            <span className="pfit-pair pjudge" title="The two lenses the commercial scores miss — first-session hook pull, and whether you'd still care in month four">
+              <span>Hook {p.marketability !== null ? <Dots n={p.marketability} /> : <em className="pna">n/a</em>}</span>
+              <span>Founder fit {p.founderFit !== null ? <Dots n={p.founderFit} /> : <em className="pna">n/a</em>}</span>
+            </span>
+          )}
         </div>
       )}
     </article>
@@ -179,7 +194,9 @@ const COLLECTION_BLURB: Record<string, string> = {
 const STATUS_RANK: Record<string, number> = { shipped: 0, prototyping: 1, proposed: 2 };
 
 function scoreSum(p: Pitch): number {
-  return (p.browserFit ?? 0) + (p.steamFit ?? 0) + (p.buildEase ?? 0);
+  // All five 1..3 axes — a pitch strong on hook + founder-fit should edge out an equal
+  // one that's weak on the two lenses the commercial scores miss.
+  return (p.browserFit ?? 0) + (p.steamFit ?? 0) + (p.buildEase ?? 0) + (p.marketability ?? 0) + (p.founderFit ?? 0);
 }
 
 export function rankPitches(pitches: Pitch[]): Pitch[] {
@@ -219,6 +236,9 @@ function LeaderboardView({ pitches }: { pitches: Pitch[] }) {
         <th className="r" title="Browser-native viability: instant hook, portal retention, ad-monetizability">Browser</th>
         <th className="r" title="Paid-Steam laddering potential + revenue ceiling vs comps">Steam</th>
         <th className="r" title="Solo-dev feasibility — higher = cheaper/easier">Build</th>
+        <th className="r" title="First-session hook / does it capsule (the marketability lens)">Hook</th>
+        <th className="r" title="Personal pull + edge — would you still care in month four?">Founder</th>
+        <th className="r" title="Estimated days to a testable gray-box loop — the kill-gate clock">Gray-box</th>
         <th>Status</th><th>Evidence</th>
       </tr></thead>
         <tbody>{ranked.map((p, i) => (
@@ -229,6 +249,9 @@ function LeaderboardView({ pitches }: { pitches: Pitch[] }) {
             <td className="r">{p.browserFit !== null ? <Dots n={p.browserFit} /> : "—"}</td>
             <td className="r">{p.steamFit !== null ? <Dots n={p.steamFit} /> : "—"}</td>
             <td className="r">{p.buildEase !== null ? <Dots n={p.buildEase} /> : "—"}</td>
+            <td className="r">{p.marketability !== null ? <Dots n={p.marketability} /> : "—"}</td>
+            <td className="r">{p.founderFit !== null ? <Dots n={p.founderFit} /> : "—"}</td>
+            <td className="r">{p.grayBoxDays != null ? "~" + p.grayBoxDays + "d" : "—"}</td>
             <td><span className={"ptag st st-" + p.status}>{p.status}</span></td>
             <td><span className="ev-chips">{evidenceChips(p).map((c) => (
               <span key={c.label} className={"ev-chip" + (c.missing ? " ev-missing" : "")}>{c.label}</span>
