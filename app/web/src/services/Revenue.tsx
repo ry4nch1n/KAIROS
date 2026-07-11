@@ -7,8 +7,11 @@ import {
   payoutMultiplier,
   targetBandUsd,
   verdict,
-  TARGET_SGD,
+  monthsOfTarget,
+  loadTargetSgd,
+  saveTargetSgd,
   DEFAULT_SGD_PER_USD,
+  type TargetBand,
 } from "../lib/revenue.ts";
 import {
   ENGINES,
@@ -46,19 +49,23 @@ export function Revenue({ hidden, seed, onClearSeed }: { hidden: boolean; seed?:
   const [mode, setMode] = useState<Mode>("browser");
   // A comparable projected from Radar is a Steam anchor — front the Steam panel for it.
   useEffect(() => { if (seed) setMode("steam"); }, [seed]);
+  // The monthly target is personal: nothing ships in the bundle; it's set on the widget
+  // and persisted only in this browser (the real P&L targets live in Notion).
+  const [target, setTargetState] = useState<TargetBand | null>(() => loadTargetSgd());
+  const setTarget = (t: TargetBand | null) => { setTargetState(t); saveTargetSgd(t); };
   return (
     <section className="service" data-svc="revenue" hidden={hidden}>
       {mode === "browser" ? (
-        <BrowserPanel mode={mode} setMode={setMode} />
+        <BrowserPanel mode={mode} setMode={setMode} target={target} setTarget={setTarget} />
       ) : (
-        <SteamPanel mode={mode} setMode={setMode} seed={seed} onClearSeed={onClearSeed} />
+        <SteamPanel mode={mode} setMode={setMode} seed={seed} onClearSeed={onClearSeed} target={target} />
       )}
     </section>
   );
 }
 
 // ─── Browser: ad-income dial (unchanged model, now one of two sub-tabs) ──────────
-function BrowserPanel({ mode, setMode }: { mode: Mode; setMode: (m: Mode) => void }) {
+function BrowserPanel({ mode, setMode, target, setTarget }: { mode: Mode; setMode: (m: Mode) => void; target: TargetBand | null; setTarget: (t: TargetBand | null) => void }) {
   const drawer = useDrawer();
   const [genre, setGenre] = useState(GENRE_PRESETS[1].id); // Automation/Logistics
   const [dau, setDau] = useState(900);
@@ -69,16 +76,25 @@ function BrowserPanel({ mode, setMode }: { mode: Mode; setMode: (m: Mode) => voi
   const inputs = { dau, arpdau, directShare };
   const daily = dailyRevenue(inputs);
   const monthly = monthlyRevenue(inputs);
-  const band = targetBandUsd(rate);
+  const band = target ? targetBandUsd(rate, target) : null;
   const VERDICT_COPY: Record<string, { label: string; cls: string }> = {
+    "no-target": { label: "No target set", cls: "none" },
     below: { label: "Below target", cls: "below" },
-    "in-band": { label: "Hits the SGD 4–5k target", cls: "in-band" },
+    "in-band": { label: "Hits the target band", cls: "in-band" },
     above: { label: "Clears the target", cls: "above" },
   };
-  const v = VERDICT_COPY[verdict(monthly, rate)];
+  const v = VERDICT_COPY[verdict(monthly, rate, target)];
   const mult = payoutMultiplier(directShare);
   const monthlySgd = monthly * rate;
-  const pctToGoal = Math.min(999, Math.round((monthly / band.low) * 100));
+  const pctToGoal = band ? Math.min(999, Math.round((monthly / band.low) * 100)) : null;
+
+  // Target edits: the low bound drives the verdict floor; clearing low clears the band.
+  const setLow = (v: number) =>
+    v > 0 ? setTarget({ low: v, high: Math.max(v, target?.high ?? v) }) : setTarget(null);
+  const setHigh = (v: number) => {
+    if (!target) { if (v > 0) setTarget({ low: v, high: v }); return; }
+    setTarget({ low: target.low, high: Math.max(target.low, v) });
+  };
 
   const pickGenre = (id: string) => {
     setGenre(id);
@@ -105,7 +121,7 @@ function BrowserPanel({ mode, setMode }: { mode: Mode; setMode: (m: Mode) => voi
           </a>
         ))}
         <div className="side-foot">
-          Poki payout · direct 100% / platform-sourced 50-50 · target SGD {TARGET_SGD.low / 1000}–{TARGET_SGD.high / 1000}k/mo
+          Poki payout · direct 100% / platform-sourced 50-50 · target set on the widget, stored in this browser only
         </div>
       </aside>
       <NavScrim open={drawer.open} onClose={drawer.closeDrawer} />
@@ -114,7 +130,7 @@ function BrowserPanel({ mode, setMode }: { mode: Mode; setMode: (m: Mode) => voi
         <div className="topbar">
           <NavToggle onClick={drawer.openDrawer} />
           <h2>
-            Revenue Model <small>project browser income against the SGD 4–5k/mo goal</small>
+            Revenue Model <small>project browser income against your monthly target</small>
           </h2>
           <ModeSeg mode={mode} setMode={setMode} />
         </div>
@@ -127,14 +143,24 @@ function BrowserPanel({ mode, setMode }: { mode: Mode; setMode: (m: Mode) => voi
               <div className="kpi-sub">≈ SGD {Math.round(monthlySgd).toLocaleString("en-US")} · {usd(daily)}/day</div>
             </div>
             <div className="kpi">
-              <div className="label">Target band (USD)</div>
-              <div className="kpi-big">{usd(band.low)}–{usd(band.high)}</div>
-              <div className="kpi-sub">SGD {TARGET_SGD.low.toLocaleString()}–{TARGET_SGD.high.toLocaleString()} @ {rate.toFixed(2)}/USD</div>
+              <div className="label">Monthly target (SGD)</div>
+              <div className="target-edit">
+                <input type="number" min={0} placeholder="low" aria-label="Target band low (SGD/month)"
+                  value={target?.low ?? ""} onChange={(e) => setLow(+e.target.value)} />
+                <span className="target-dash">–</span>
+                <input type="number" min={0} placeholder="high" aria-label="Target band high (SGD/month)"
+                  value={target?.high ?? ""} onChange={(e) => setHigh(+e.target.value)} />
+              </div>
+              <div className="kpi-sub">
+                {band
+                  ? <>≈ {usd(band.low)}–{usd(band.high)} @ {rate.toFixed(2)}/USD · stored in this browser only</>
+                  : <>not set — kept out of the app; your P&amp;L targets live in Notion</>}
+              </div>
             </div>
             <div className="kpi">
               <div className="label">Verdict</div>
               <div className={"rev-verdict " + v.cls}>{v.label}</div>
-              <div className="kpi-sub">{pctToGoal}% of the SGD 4k floor</div>
+              <div className="kpi-sub">{pctToGoal !== null ? `${pctToGoal}% of the target floor` : "set a monthly band to get a verdict"}</div>
             </div>
           </div>
 
@@ -173,7 +199,7 @@ const ENGINE_BADGE: Record<EngineId, string> = {
   unreal: "5% >$1M",
 };
 
-function SteamPanel({ mode, setMode, seed, onClearSeed }: { mode: Mode; setMode: (m: Mode) => void; seed?: RevenueSeed | null; onClearSeed?: () => void }) {
+function SteamPanel({ mode, setMode, seed, onClearSeed, target }: { mode: Mode; setMode: (m: Mode) => void; seed?: RevenueSeed | null; onClearSeed?: () => void; target: TargetBand | null }) {
   const drawer = useDrawer();
   const [engineId, setEngineId] = useState<EngineId>("godot");
   const [wishlists, setWishlists] = useState(STEAM_DEFAULTS.wishlists);
@@ -200,6 +226,12 @@ function SteamPanel({ mode, setMode, seed, onClearSeed }: { mode: Mode; setMode:
   const anchorGross = seed && seed.owners != null && seed.priceCents != null
     ? seed.owners * (seed.priceCents / 100)
     : null;
+  // A Steam net is a lump sum, not monthly income — express it against the same target
+  // as months of the floor covered, so both panels answer the one goal coherently.
+  const months = (netSgd: number): string | null => {
+    const m = monthsOfTarget(netSgd, target);
+    return m === null ? null : "covers ~" + (m >= 10 ? Math.round(m) : +m.toFixed(1)) + " mo of target";
+  };
 
   return (
     <>
@@ -277,16 +309,19 @@ function SteamPanel({ mode, setMode, seed, onClearSeed }: { mode: Mode; setMode:
               <span className="band-label">Pessimistic · {(conversion * 0.5).toFixed(2)}×</span>
               <b className="band-net">{usd(band.pessimistic.netUsd)}</b>
               <span className="band-sub">{sgd(band.pessimistic.netSgd)}</span>
+              {months(band.pessimistic.netSgd) && <span className="band-months">{months(band.pessimistic.netSgd)}</span>}
             </div>
             <div className="band-tile band-base">
               <span className="band-label">Base · {conversion.toFixed(2)}×</span>
               <b className="band-net">{usd(band.base.netUsd)}</b>
               <span className="band-sub">{sgd(band.base.netSgd)}</span>
+              {months(band.base.netSgd) && <span className="band-months">{months(band.base.netSgd)}</span>}
             </div>
             <div className="band-tile band-opt">
               <span className="band-label">Optimistic · {(conversion * 2).toFixed(2)}×</span>
               <b className="band-net">{usd(band.optimistic.netUsd)}</b>
               <span className="band-sub">{sgd(band.optimistic.netSgd)}</span>
+              {months(band.optimistic.netSgd) && <span className="band-months">{months(band.optimistic.netSgd)}</span>}
             </div>
             <p className="band-note">
               Wishlist conversion spreads 10–20× across real launches (GameDiscoverCo 2024) — a point estimate is

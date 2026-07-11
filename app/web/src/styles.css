@@ -394,3 +394,11 @@ a.est-chip:hover{text-decoration:underline}
 .ev-chips{display:inline-flex;flex-wrap:wrap;gap:4px}
 .ev-chip{font-family:'Fira Code';font-size:10px;font-weight:600;padding:2px 7px;border-radius:999px;white-space:nowrap;background:#e7f3ec;color:#1a7f4b;border:1px solid #cbe7d6}
 .ev-chip.ev-missing{background:var(--surface-2);color:var(--text-3);border:1px dashed var(--border)}
+
+/* Adjustable private monthly target (widget-set, localStorage-only) */
+.target-edit{display:flex;align-items:center;gap:6px;margin:8px 0 5px}
+.target-edit input{flex:1;min-width:0;width:0;border:1px solid var(--border);border-radius:9px;padding:8px 10px;font-family:'Fira Code';font-size:15px;font-weight:700;color:var(--text);background:var(--surface-2)}
+.target-edit input:focus{outline:none;border-color:var(--primary)}
+.target-dash{color:var(--text-3);font-family:'Fira Code'}
+.rev-verdict.none{color:var(--text-3)}
+.band-months{font-family:'Fira Code';font-size:10.5px;font-weight:600;color:var(--primary-deep);margin-top:2px}
