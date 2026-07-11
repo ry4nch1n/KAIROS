@@ -372,6 +372,15 @@ export interface Pitch {
   steamFit: number | null;     // 1..3 — paid-Steam laddering potential + revenue ceiling vs comps
   buildEase: number | null;    // 1..3 — solo-dev feasibility (higher = cheaper/easier)
   provenance: string | null;   // market-backed | design-derived (how well-supported the pitch is)
+  // Pitch v5 — scope block (F3): can the loop be proven fun before it eats the year?
+  grayBoxDays: number | null;  // estimated days to a testable gray-box loop (the Aug kill-gate clock)
+  contentScope: string | null; // small | medium | large — content bill vs. genre expectation
+  techRisk: string | null;     // one line: the scariest technical unknown
+  // v5 — hook (F4) + founder fit (F5): the two lenses the commercial scores miss.
+  hook: string | null;         // the capsule promise / marketing beat in one line
+  marketability: number | null;// 1..3 — first-session pull / does it capsule (absorbs #26 "Grab")
+  founderFit: number | null;   // 1..3 — personal pull + edge (would you still care in month four?)
+  whyMe: string | null;        // one line: why this holds your attention / what you uniquely bring
   pitchDate: string; // YYYY-MM-DD
   batch: string | null;
   source: string | null;
@@ -403,6 +412,13 @@ export interface PitchInput {
   steamFit?: number | null;
   buildEase?: number | null;
   provenance?: string | null;
+  grayBoxDays?: number | null;
+  contentScope?: string | null;
+  techRisk?: string | null;
+  hook?: string | null;
+  marketability?: number | null;
+  founderFit?: number | null;
+  whyMe?: string | null;
   batch?: string | null;
   source?: string | null;
   setting?: string | null;

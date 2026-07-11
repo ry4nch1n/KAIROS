@@ -16,6 +16,12 @@ const goodPitch: PitchInput = {
   browserFit: 2,
   steamFit: 3,
   buildEase: 2,
+  // pitch v5 fields
+  grayBoxDays: 10,
+  contentScope: "small",
+  marketability: 3,
+  founderFit: 2,
+  hook: "Strip a derelict star-freighter before its reactor cooks you.",
 };
 
 describe("C1 contract shape", () => {
@@ -58,6 +64,33 @@ describe("C2 validatePitchInput", () => {
       expect(CONTRACT.pitch.loopFamilies).toContain(lf);
     for (const b of ["recommended", "cheapest-build", "retention-safe", "cashflow"])
       expect(CONTRACT.pitch.badges).toContain(b);
+  });
+});
+
+describe("C2b pitch v5 — scope + hook + founder-fit fields", () => {
+  it("bumped both versions and added the contentScopes taxonomy + score axes", () => {
+    expect(CONTRACT.pitch.version).toBeGreaterThanOrEqual(5);
+    expect(CONTRACT.version).toBeGreaterThanOrEqual(4);
+    expect(CONTRACT.pitch.contentScopes).toEqual(["small", "medium", "large"]);
+    expect(CONTRACT.pitch.scoreFields).toContain("marketability");
+    expect(CONTRACT.pitch.scoreFields).toContain("founderFit");
+  });
+  it("accepts a full v5 pitch (all new fields valid)", () => {
+    expect(validatePitchInput(goodPitch).ok).toBe(true);
+  });
+  it("validates the new 1..3 score axes like the platform ones", () => {
+    expect(validatePitchInput({ ...goodPitch, marketability: 0 }).ok).toBe(false);
+    expect(validatePitchInput({ ...goodPitch, founderFit: 4 }).ok).toBe(false);
+  });
+  it("rejects an unknown contentScope (must bump the contract)", () => {
+    const r = validatePitchInput({ ...goodPitch, contentScope: "epic" });
+    expect(r.ok).toBe(false);
+    expect(r.errors.join(" ")).toMatch(/contentScope/);
+  });
+  it("grayBoxDays must be a positive integer", () => {
+    expect(validatePitchInput({ ...goodPitch, grayBoxDays: 0 }).ok).toBe(false);
+    expect(validatePitchInput({ ...goodPitch, grayBoxDays: 3.5 }).ok).toBe(false);
+    expect(validatePitchInput({ ...goodPitch, grayBoxDays: null }).ok).toBe(true); // optional
   });
 });
 

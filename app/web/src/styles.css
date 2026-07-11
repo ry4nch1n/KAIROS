@@ -426,3 +426,9 @@ a.conv-chip:hover{text-decoration:underline}
 .recent-chip{margin-left:6px;font-family:'Fira Code';font-size:9px;font-weight:700;letter-spacing:.03em;color:#1a7f4b;background:#e7f3ec;border:1px solid #cbe7d6;border-radius:5px;padding:0 5px}
 .prov-receipt{margin-left:2px;font-family:'Fira Code';font-size:10px;font-weight:600;color:var(--primary);text-decoration:none;padding:1px 6px;border:1px solid var(--border);border-radius:5px}
 .prov-receipt:hover{background:rgba(37,99,235,.07);border-color:var(--primary)}
+
+/* Pitch v5 (C1) — scope chips + the second (judgment) score group */
+.pscope{display:flex;flex-wrap:wrap;gap:6px;margin:2px 0 4px}
+.pscope-chip{font-family:'Fira Code';font-size:10px;font-weight:600;padding:2px 8px;border-radius:999px;white-space:nowrap;background:var(--surface-2);color:var(--text-2);border:1px solid var(--border)}
+.pscope-chip.clock{background:rgba(37,99,235,.08);color:var(--primary-deep);border-color:var(--border)}
+.pscores .pjudge{border-left:1px solid var(--border);padding-left:10px;margin-left:2px}

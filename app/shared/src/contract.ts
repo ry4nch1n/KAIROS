@@ -9,7 +9,11 @@
 export const CONTRACT = {
   // v2: SteamComparable gained `reviewVelocity` (reviews/day, wishlist-velocity proxy — #11).
   // v3: SteamGenreEconomics gained `medianRevenuePerGame` + `meanRevenuePerGame` (#24).
-  version: 3,
+  // v4: pitch v5 read-through — see pitch.version below (scope/hook/founder-fit fields +
+  //     the `contentScopes` taxonomy). Also covers the Phase-B analytics payload extensions
+  //     (genre supplyTrend, gap supplyRising, Overview/SteamOverview quadrant, economics
+  //     conversion) — all additive, read defensively by the client.
+  version: 4,
   pitch: {
     // v2: added visual-card fields — setting, artStyle, codeName, headerUrl, shotUrl.
     // v3: rating rework — scoreFields d1Fit/steamCeiling/buildCost → browserFit/steamFit/buildEase.
@@ -19,7 +23,14 @@ export const CONTRACT = {
     //     semantics (higher = cheaper/easier), the old name just contradicted its "Build ease" label.
     // v4: added the `synergy-builder` loop family (spin/deck synergy-engine roguelites, the
     //     Balatro / Luck-be-a-Landlord lineage) — a plan candidate loop the taxonomy didn't hold.
-    version: 4,
+    // v5: read through BOTH lenses of the durable methodology, not just the commercial half.
+    //     Scope block — `grayBoxDays` (days to a testable gray-box loop, the Aug kill-gate
+    //     clock), `contentScope` (S/M/L vs genre expectation), `techRisk`. Hook — `hook`
+    //     (the capsule promise / marketing beat) + `marketability` score (absorbs the residue
+    //     of #26's "Grab": first-session pull, distinct from platform fit). Founder fit —
+    //     `founderFit` score + `whyMe` (why this holds YOUR attention for months; a
+    //     market-perfect concept with no personal pull dies in month four).
+    version: 5,
     loopFamilies: [
       "extraction-lite",
       "automation-under-pressure",
@@ -34,7 +45,10 @@ export const CONTRACT = {
     statuses: ["proposed", "prototyping", "shelved", "shipped"],
     platformLadders: ["browser->steam", "browser-only", "steam-only"],
     provenances: ["market-backed", "design-derived"],
-    scoreFields: ["browserFit", "steamFit", "buildEase"],
+    contentScopes: ["small", "medium", "large"], // content bill vs. what the genre's buyers expect
+    // The 1..3 score axes. browserFit/steamFit/buildEase = the platform-fit compass;
+    // marketability = first-session hook / capsule pull; founderFit = personal pull + edge.
+    scoreFields: ["browserFit", "steamFit", "buildEase", "marketability", "founderFit"],
     scoreMin: 1,
     scoreMax: 3,
     required: ["slug", "title", "pitchDate"],
@@ -77,6 +91,10 @@ export function validatePitchInput(p: any): ContractValidation {
     errors.push(`unknown platformLadder "${p.platformLadder}"`);
   if (p.provenance != null && !CONTRACT.pitch.provenances.includes(p.provenance))
     errors.push(`unknown provenance "${p.provenance}" — expected one of ${CONTRACT.pitch.provenances.join(", ")}`);
+  if (p.contentScope != null && !CONTRACT.pitch.contentScopes.includes(p.contentScope))
+    errors.push(`unknown contentScope "${p.contentScope}" — expected one of ${CONTRACT.pitch.contentScopes.join(", ")}`);
+  if (p.grayBoxDays != null && (!Number.isInteger(p.grayBoxDays) || p.grayBoxDays < 1))
+    errors.push("grayBoxDays must be a positive integer (days to a testable gray-box loop)");
   for (const s of CONTRACT.pitch.scoreFields) {
     const v = p[s];
     if (v != null && (!Number.isInteger(v) || v < CONTRACT.pitch.scoreMin || v > CONTRACT.pitch.scoreMax))
