@@ -335,6 +335,9 @@ button{font-family:inherit}
 .rev-panel{background:#fff;border:1px solid var(--border-soft);border-radius:var(--radius);padding:20px 22px;box-shadow:var(--shadow);display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:16px 24px;max-width:760px}
 .rev-field{display:flex;flex-direction:column;gap:6px;font-size:12px;font-weight:600;color:var(--text-2);min-width:0}
 .rev-field input{max-width:100%}
+/* two side-by-side inputs (Unity seats × years) must share the field and shrink on a phone */
+.rev-dual{display:flex;gap:8px}
+.rev-dual input{flex:1;min-width:0}
 .rev-field input[type=number]{border:1px solid var(--border);border-radius:9px;padding:9px 11px;font-family:'Fira Code';font-size:14px;color:var(--text);background:var(--surface-2)}
 .rev-field input[type=number]:focus{outline:none;border-color:var(--primary)}
 .rev-field input[type=range]{accent-color:var(--primary);margin-top:8px}

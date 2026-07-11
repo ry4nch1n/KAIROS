@@ -268,7 +268,7 @@ function SteamPanel({ mode, setMode }: { mode: Mode; setMode: (m: Mode) => void 
             {engineId === "unity" && (
               <label className="rev-field">
                 <span>Unity Pro seats × years — {seats} × {licenseYears}</span>
-                <div style={{ display: "flex", gap: 8 }}>
+                <div className="rev-dual">
                   <input type="number" min={1} value={seats} onChange={(e) => setSeats(Math.max(1, +e.target.value))} />
                   <input type="number" min={1} value={licenseYears} onChange={(e) => setLicenseYears(Math.max(1, +e.target.value))} />
                 </div>
