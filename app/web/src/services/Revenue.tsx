@@ -154,7 +154,7 @@ function BrowserPanel({ mode, setMode, target, setTarget }: { mode: Mode; setMod
               <div className="kpi-sub">
                 {band
                   ? <>≈ {usd(band.low)}–{usd(band.high)} @ {rate.toFixed(2)}/USD · stored in this browser only</>
-                  : <>not set — kept out of the app; your P&amp;L targets live in Notion</>}
+                  : <>not set — enter a monthly income band to judge projections against</>}
               </div>
             </div>
             <div className="kpi">

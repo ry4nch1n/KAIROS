@@ -114,10 +114,10 @@ export function Brief({ hidden }: { hidden: boolean }) {
           <div className="steer">
             <div className="nav-label">Steering this brief</div>
             <ul className="steer-list">{steering.flags.map((f, i) => <li key={i}>{f}</li>)}</ul>
-            <div className="steer-note">curated on Notion · synced each run</div>
+            <div className="steer-note">standing interests · refreshed each edition</div>
           </div>
         )}
-        <div className="side-foot"><span className="pulse"></span>Auto-published<br />Routine: indie-brief</div>
+        <div className="side-foot"><span className="pulse"></span>Auto-published<br />twice weekly</div>
       </aside>
       <NavScrim open={drawer.open} onClose={drawer.closeDrawer} />
 
@@ -137,7 +137,7 @@ export function Brief({ hidden }: { hidden: boolean }) {
             <div className="empty">
               <div className="big-ic"><svg viewBox="0 0 24 24"><path d="M4 5h13v14a1 1 0 0 1-1 1H6a2 2 0 0 1-2-2z" /><path d="M17 8h3v10a2 2 0 0 1-2 2" /><path d="M7 9h7M7 13h7M7 17h4" /></svg></div>
               <h3>No brief editions yet</h3>
-              <p>Editions appear here automatically once your indie-brief routine publishes them to the database.</p>
+              <p>Editions appear here automatically as they're published.</p>
             </div>
           ) : !p ? (
             <div className="card"><div className="skeleton" style={{ height: 200 }} /></div>
@@ -217,7 +217,7 @@ export function Brief({ hidden }: { hidden: boolean }) {
               )}
 
               {p.reference_shelf && <div className="foot-note">📚 {p.reference_shelf}</div>}
-              <div className="foot-note">KAIROS · News Brief · from brief_editions (published by the indie-brief routine)</div>
+              <div className="foot-note">KAIROS · News Brief · auto-published editions</div>
             </>
           )}
         </div>
