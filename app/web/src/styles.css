@@ -402,3 +402,12 @@ a.est-chip:hover{text-decoration:underline}
 .target-dash{color:var(--text-3);font-family:'Fira Code'}
 .rev-verdict.none{color:var(--text-3)}
 .band-months{font-family:'Fira Code';font-size:10.5px;font-weight:600;color:var(--primary-deep);margin-top:2px}
+
+/* Supply-side momentum (B2) — crowding reads hot/amber (rising supply is a warning,
+   opposite of demand where rising is good). */
+.supply{font-family:'Fira Code';font-size:11px;font-weight:600;padding:2px 7px;border-radius:6px;white-space:nowrap}
+.supply-rising{background:rgba(194,98,10,.14);color:var(--accent)}
+.supply-steady{background:var(--surface-2);color:var(--text-3)}
+.supply-cooling{background:rgba(37,99,235,.1);color:var(--primary)}
+.supply-quiet{background:rgba(26,138,82,.12);color:#1a8a52}
+.supply-flag{margin-left:8px;font-family:'Fira Code';font-size:10px;font-weight:700;letter-spacing:.02em;color:var(--accent);background:rgba(194,98,10,.12);border:1px solid rgba(194,98,10,.3);border-radius:5px;padding:1px 6px;white-space:nowrap}

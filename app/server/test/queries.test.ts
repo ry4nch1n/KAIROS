@@ -396,3 +396,52 @@ describe("B1 taxonomy hygiene — genre/tag canonicalization (#7, #15)", () => {
     expect(tags.find((r) => r.tag === "puzzle games")).toBeUndefined();
   });
 });
+
+describe("B2 supply velocity — is a genre flooding? (R1.1 + R1.3)", () => {
+  it("classifySupply needs a real recent count to read 'rising' — one straggler can't cry crowding", () => {
+    expect(q.classifySupply(0, 0)).toBe("quiet");
+    expect(q.classifySupply(1, 0)).toBe("steady");   // below the min-rising floor
+    expect(q.classifySupply(3, 0)).toBe("rising");    // real burst, nothing prior
+    expect(q.classifySupply(6, 2)).toBe("rising");    // 6 > 2×1.5
+    expect(q.classifySupply(1, 5)).toBe("cooling");   // supply drying up
+    expect(q.classifySupply(4, 4)).toBe("steady");
+  });
+
+  it("every genre row carries a supply trend + recent-entrant count", async () => {
+    const rows = await q.getGenres(db, "all");
+    expect(rows.length).toBeGreaterThan(0);
+    for (const r of rows) {
+      expect(["rising", "steady", "cooling", "quiet"]).toContain(r.supplyTrend);
+      expect(r.recentEntrants).toBeGreaterThanOrEqual(0);
+    }
+  });
+
+  it("a genre flooded with brand-new entrants reads 'rising'", async () => {
+    const src = (await db.query("SELECT id FROM sources WHERE name='crazygames'"))[0].id;
+    const crawl = (await db.query("SELECT id FROM crawls WHERE source_id=$1 ORDER BY id DESC LIMIT 1", [src]))[0].id;
+    for (let i = 0; i < 4; i++) {
+      const g = (await db.query(
+        `INSERT INTO games(source_id, source_game_id, url, title, first_seen_at, last_seen_at, is_live)
+         VALUES ($1,$2,$3,$4, now(), now(), true) RETURNING id`,
+        [src, `flood-${i}`, `http://x/flood${i}`, `Flood ${i}`]
+      ))[0].id;
+      await db.query(
+        `INSERT INTO game_snapshots(game_id, crawl_id, captured_at, rating, votes, genre) VALUES ($1,$2, now(), 4.0, 300, 'Floodtest')`,
+        [g, crawl]
+      );
+    }
+    const rows = await q.getGenres(db, "all");
+    const flood = rows.find((r) => r.genre === "Floodtest")!;
+    expect(flood).toBeTruthy();
+    expect(flood.supplyTrend).toBe("rising");
+    expect(flood.recentEntrants).toBeGreaterThanOrEqual(4);
+  });
+
+  it("market gaps carry a supplyRising flag (annotation, not a score change)", async () => {
+    const gaps = await q.getMarketGaps(db, "all");
+    expect(gaps.length).toBeGreaterThan(0);
+    for (const g of gaps) expect(typeof g.supplyRising).toBe("boolean");
+    // score still sorted descending — the flag didn't reorder anything
+    for (let i = 1; i < gaps.length; i++) expect(gaps[i - 1].score).toBeGreaterThanOrEqual(gaps[i].score);
+  });
+});
