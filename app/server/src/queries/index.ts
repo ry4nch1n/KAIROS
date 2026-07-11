@@ -367,6 +367,9 @@ export async function getGenres(db: Querier, platform: Platform): Promise<GenreR
     medianVotes: Math.round(num(r.med_votes)), p90Votes: Math.round(num(r.p90_votes)),
     p90Rating: +num(r.p90_rating).toFixed(2),
     votesPerDay: gd.byGenre[r.genre] ? Math.round(velocity(gd.byGenre[r.genre], gd.daySpan)) : 0,
+    // Delta read: is this genre's median-vote series accelerating or fading? A level
+    // column seen ten times carries no information — its change does.
+    trajectory: gd.byGenre[r.genre] ? classifyTrajectory(gd.byGenre[r.genre], gd.daySpan).trajectory : "new",
   }));
 }
 
@@ -428,26 +431,121 @@ export async function getInsights(db: Querier, platform: Platform, deps?: { gd?:
   const gd = deps?.gd ?? await genreVotesByDate(db, platform);
   const vels = gd.order.map((genre) => ({ genre, v: velocity(gd.byGenre[genre], gd.daySpan) }));
   const out: Insight[] = [];
+  // Every insight carries an implication — the decision clause. An observation without
+  // "so what" is chart furniture; the read is what the user came for.
   // (1) Rising genre by votes/day
   if (vels.length) {
     const top = vels.reduce((best, cur) => (cur.v > best.v ? cur : best), vels[0]);
-    out.push({ kind: "up", tag: "RISING", meta: `+${Math.round(top.v)} votes/day`, text: `<b>${top.genre}</b> is gaining the most votes/day across the window.` });
+    out.push({ kind: "up", tag: "RISING", meta: `+${Math.round(top.v)} votes/day`, text: `<b>${top.genre}</b> is gaining the most votes/day across the window.`,
+      implication: `demand is shifting toward ${top.genre} — weight new loop tests accordingly` });
   }
   // (2) Top opportunity gap
   const gaps = deps?.gaps ?? await getMarketGaps(db, platform);
   if (gaps.length)
-    out.push({ kind: "gap", tag: "OPPORTUNITY", meta: `${gaps[0].supplyN} games · ${gaps[0].appetite} median votes`, text: `<b>${gaps[0].label}</b> shows high demand with thin supply.` });
+    out.push({ kind: "gap", tag: "OPPORTUNITY", meta: `${gaps[0].supplyN} games · ${gaps[0].appetite} median votes`, text: `<b>${gaps[0].label}</b> shows high demand with thin supply.`,
+      implication: "underserved — a fast browser loop test here meets demand with little competition" });
   // (3) Hidden-gems count
   const gems = deps?.gems ?? await getHiddenGems(db, platform);
   if (gems.length)
-    out.push({ kind: "gem", tag: "HIDDEN GEMS", meta: `${gems.length} found`, text: `<b>${gems.length} hidden gems</b> rank in the top 25% on rating with low vote volume.` });
+    out.push({ kind: "gem", tag: "HIDDEN GEMS", meta: `${gems.length} found`, text: `<b>${gems.length} hidden gems</b> rank in the top 25% on rating with low vote volume.`,
+      implication: "quality alone didn't get these discovered — study what they share before betting on \"good gets found\"" });
   // (4) Optional highest-quality genre by P75 rating
   const landscape = deps?.landscape ?? await getGenreLandscape(db, platform);
   if (landscape.length) {
     const best = landscape.reduce((b, c) => (c.p75Rating > b.p75Rating ? c : b), landscape[0]);
-    out.push({ kind: "up", tag: "TOP QUALITY", meta: `P75 rating ${best.p75Rating.toFixed(2)}`, text: `<b>${best.genre}</b> has the highest P75 rating across all genres.` });
+    out.push({ kind: "up", tag: "TOP QUALITY", meta: `P75 rating ${best.p75Rating.toFixed(2)}`, text: `<b>${best.genre}</b> has the highest P75 rating across all genres.`,
+      implication: `players reward polish in ${best.genre} — the quality bar to clear is high` });
   }
   return out;
+}
+
+// ── "This week's read" — the decision layer (§9 Phase A of the 5-factor evaluation) ──
+// Up to 3 computed, decision-framed sentences shown above the charts. Each line ends
+// with a "→ implication" clause so the strip answers "so what?", not just "what".
+// SQL computes the numbers; only the phrasing is templated (same anti-hallucination
+// stance as getInsights).
+
+/** Share of a genre's live catalog that arrived in the last 14 days — supply pressure. */
+async function genreSupplyPressure(
+  db: Querier,
+  platform: Platform
+): Promise<{ genre: string; total: number; recent: number }[]> {
+  const rows = await db.query(
+    `SELECT l.genre AS genre, count(*)::int AS total,
+            count(*) FILTER (
+              WHERE g.first_seen_at >= (SELECT max(first_seen_at) FROM games) - interval '14 days'
+            )::int AS recent
+     FROM v_latest l JOIN games g ON g.id = l.game_id JOIN sources src ON src.id = g.source_id
+     WHERE g.is_live AND l.genre IS NOT NULL ${pf(platform)}
+     GROUP BY l.genre HAVING count(*) >= 4`
+  );
+  return rows.map((r) => ({ genre: r.genre, total: num(r.total), recent: num(r.recent) }));
+}
+
+// Crowding thresholds: a warning needs both a real share (≥15% of the catalog is new)
+// and a real count (≥3 titles) so tiny genres don't cry wolf off one release.
+const PRESSURE_MIN_SHARE = 0.15;
+const PRESSURE_MIN_RECENT = 3;
+
+/** Pure composition — exported for tests. May contain <b>; rendered like insights. */
+export function composeBrowserRead(args: {
+  gap?: MarketGap;
+  mover?: { genre: string; v: number; trajectory: Trajectory };
+  pressure: { genre: string; total: number; recent: number }[];
+}): string[] {
+  const lines: string[] = [];
+  if (args.gap) {
+    lines.push(
+      `<b>${args.gap.label}</b> is the top gap — ${args.gap.appetite.toLocaleString("en-US")} median votes across only ${args.gap.supplyN} games. → Underserved: the strongest candidate for a quick browser loop test.`
+    );
+  }
+  if (args.mover && args.mover.v > 0) {
+    const tone = args.mover.trajectory === "rising" ? "and accelerating"
+      : args.mover.trajectory === "decaying" ? "but slowing" : "holding steady";
+    lines.push(
+      `<b>${args.mover.genre}</b> is the biggest mover at +${Math.round(args.mover.v)} votes/day ${tone}. → Demand is shifting toward it — weight new pitches accordingly.`
+    );
+  }
+  const crowding = args.pressure
+    .filter((p) => p.recent >= PRESSURE_MIN_RECENT && p.recent / p.total >= PRESSURE_MIN_SHARE)
+    .sort((a, b) => b.recent / b.total - a.recent / a.total)[0];
+  lines.push(
+    crowding
+      ? `Supply warning: <b>${crowding.genre}</b> added ${crowding.recent} titles in 14 days (${Math.round((crowding.recent / crowding.total) * 100)}% of its catalog). → Crowding fast — a new entry needs a sharp differentiator.`
+      : `No genre shows unusual supply pressure this window. → No crowding warning — pick on demand, not scarcity.`
+  );
+  return lines;
+}
+
+/** Pure composition — exported for tests. Steam flavor of the read. */
+export function composeSteamRead(args: {
+  opportunity: SteamGap[];
+  indie: SteamGenreEconomics[];
+}): string[] {
+  const lines: string[] = [];
+  const usdK = (d: number) => (d >= 1e6 ? "$" + (d / 1e6).toFixed(1) + "M" : "$" + Math.round(d / 1e3) + "K");
+  const top = args.opportunity[0];
+  if (top) {
+    lines.push(
+      `<b>${top.label}</b> is the top Steam opportunity — ${top.medianOwners.toLocaleString("en-US")} median owners across ${top.supplyN} games at $${(top.medianPriceCents / 100).toFixed(2)} median. → Premium-shaped demand: a Route 1 (demo-funnel) candidate.`
+    );
+  }
+  const econ = args.indie.filter((r) => r.games >= 3 && r.medianRevenuePerGame > 0);
+  const best = [...econ].sort((a, b) => b.medianRevenuePerGame - a.medianRevenuePerGame)[0];
+  if (best) {
+    lines.push(
+      `A typical <b>${best.genre}</b> indie shows the strongest per-game revenue proxy (median ${usdK(best.medianRevenuePerGame)}). → Benchmark against the median, not category totals.`
+    );
+  }
+  const topHeavy = [...econ]
+    .filter((r) => r.medianRevenuePerGame > 0 && r.meanRevenuePerGame / r.medianRevenuePerGame >= 3)
+    .sort((a, b) => b.meanRevenuePerGame / b.medianRevenuePerGame - a.meanRevenuePerGame / a.medianRevenuePerGame)[0];
+  lines.push(
+    topHeavy
+      ? `<b>${topHeavy.genre}</b> is top-heavy: mean rev/game ${usdK(topHeavy.meanRevenuePerGame)} vs median ${usdK(topHeavy.medianRevenuePerGame)}. → A few hits hold the pool — don't read the mean as your expected outcome.`
+      : `No genre shows extreme hit-concentration in the indie cohort this window. → Medians here are a fair read of the typical outcome.`
+  );
+  return lines;
 }
 
 async function getKPI(db: Querier, platform: Platform, gaps: MarketGap[], deps?: { gd?: GenreDates; vol?: Map<string, number> }): Promise<OverviewKPI> {
@@ -565,7 +663,7 @@ async function getTagGlossary(db: Querier, platform: Platform, tagNames: string[
 }
 
 export async function getOverview(db: Querier, platform: Platform): Promise<Overview> {
-  const [gd, vol, gemRows, tags, heatmap, gaps, landscape] = await Promise.all([
+  const [gd, vol, gemRows, tags, heatmap, gaps, landscape, pressure] = await Promise.all([
     genreVotesByDate(db, platform),
     genreCounts(db, platform),
     gemBase(db, platform),
@@ -573,6 +671,7 @@ export async function getOverview(db: Querier, platform: Platform): Promise<Over
     getFeatureHeatmap(db, platform),
     getMarketGaps(db, platform),
     getGenreLandscape(db, platform),
+    genreSupplyPressure(db, platform),
   ]);
   const scatter = await getScatter(db, platform, gemRows);
   const gems = await getHiddenGems(db, platform, gemRows);
@@ -582,7 +681,14 @@ export async function getOverview(db: Querier, platform: Platform): Promise<Over
   const kpi = await getKPI(db, platform, gaps, { gd, vol });
   const tagNames = [...new Set([...gaps.map((g) => g.tag), ...tags.map((t) => t.tag)])];
   const glossary: GlossaryRow[] = await getTagGlossary(db, platform, tagNames);
-  return { kpi, momentum, tags, scatter, heatmap, gaps, insights, landscape, velocityBars, glossary, platform, subtitle: subtitleFor(platform) };
+  // Biggest mover for the read: highest-velocity genre with enough volume to matter.
+  const MIN_VOL = 4;
+  const mover = gd.order
+    .filter((genre) => (vol.get(genre) ?? 0) >= MIN_VOL)
+    .map((genre) => ({ genre, v: velocity(gd.byGenre[genre], gd.daySpan), trajectory: classifyTrajectory(gd.byGenre[genre], gd.daySpan).trajectory }))
+    .sort((a, b) => b.v - a.v)[0];
+  const read = composeBrowserRead({ gap: gaps[0], mover, pressure });
+  return { kpi, read, momentum, tags, scatter, heatmap, gaps, insights, landscape, velocityBars, glossary, platform, subtitle: subtitleFor(platform) };
 }
 
 // ── Phase 2: Steam / PC analytics ──
@@ -888,6 +994,7 @@ export async function getSteamOverview(db: Querier): Promise<SteamOverview> {
       ratedPct: num(agg.n) ? Math.round((num(agg.r) / num(agg.n)) * 100) : 0,
       indieMedianPriceCents: Math.round(num(agg.indie_med_price)),
     },
+    read: composeSteamRead({ opportunity, indie }),
     tiers, indie, all, comparables, opportunity, pricing, ownership, developers, newReleases,
     subtitle: "Steam (PC) · indie-addressable cohort default",
   };

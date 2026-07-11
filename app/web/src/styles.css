@@ -355,3 +355,42 @@ a.est-chip:hover{text-decoration:underline}
 .est-chip.team-mid{background:#fdf1e5;color:#b4531a;border-color:#f0dcc8}
 .est-chip.team-large{background:#f6e9e6;color:#a23b2d;border-color:#ecd3cd}
 .est-chip.est-unknown{background:var(--surface-2);color:var(--text-3)}
+
+/* ── Decision layer (5-factor evaluation, Phase A) ── */
+/* "This week's read" — the answer strip above the charts (A1) */
+.read-strip{border-left:3px solid var(--accent-soft);padding:14px 18px}
+.read-title{font-family:'Fira Code';font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);margin-bottom:6px}
+.read-line{font-size:13.5px;line-height:1.55;color:var(--text);margin:5px 0}
+.read-line b{color:var(--primary-deep)}
+
+/* Insight implication clause — the "so what" under each observation (A1) */
+.insight .body .implication{font-size:12.5px;line-height:1.4;color:var(--accent);margin-top:2px;font-style:italic}
+
+/* "→ project" button on comparables rows (A3) */
+.project-btn{font-family:'Fira Code';font-size:10.5px;font-weight:600;color:var(--primary);background:rgba(37,99,235,.07);border:1px solid var(--border);border-radius:6px;padding:3px 8px;cursor:pointer;white-space:nowrap;transition:background .12s,border-color .12s}
+.project-btn:hover{background:rgba(37,99,235,.14);border-color:var(--primary)}
+
+/* Comparable anchor strip on the Steam revenue panel (A3) */
+.anchor-strip{display:flex;align-items:flex-start;gap:10px;background:rgba(37,99,235,.06);border:1px solid var(--border);border-left:3px solid var(--primary);border-radius:var(--radius);padding:12px 16px;margin-bottom:14px}
+.anchor-body{font-size:13px;line-height:1.5;color:var(--text);min-width:0}
+.anchor-body b{color:var(--primary-deep)}
+.anchor-note{display:block;font-family:'Fira Code';font-size:10.5px;color:var(--text-3);margin-top:3px}
+.anchor-clear{margin-left:auto;flex-shrink:0;border:none;background:none;color:var(--text-3);font-size:16px;line-height:1;cursor:pointer;padding:2px 6px;border-radius:6px}
+.anchor-clear:hover{background:var(--surface-2);color:var(--text)}
+
+/* Conversion scenario band — pessimistic / base / optimistic (A2) */
+.rev-band{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,170px),1fr));gap:12px;max-width:760px;margin-bottom:16px}
+.band-tile{background:#fff;border:1px solid var(--border-soft);border-radius:var(--radius);padding:12px 14px;box-shadow:var(--shadow);display:flex;flex-direction:column;gap:2px}
+.band-tile.band-pess{border-top:3px solid var(--accent)}
+.band-tile.band-base{border-top:3px solid var(--primary)}
+.band-tile.band-opt{border-top:3px solid #1a8a52}
+.band-label{font-family:'Fira Code';font-size:10.5px;font-weight:600;letter-spacing:.03em;color:var(--text-3);text-transform:uppercase}
+.band-net{font-family:'Fira Code';font-size:20px;font-weight:700;color:var(--text)}
+.band-sub{font-family:'Fira Code';font-size:11px;color:var(--text-3)}
+.band-note{grid-column:1 / -1;font-size:11.5px;line-height:1.5;color:var(--text-3);margin:0}
+.band-note b{color:var(--accent)}
+
+/* Leaderboard evidence chips (A4) */
+.ev-chips{display:inline-flex;flex-wrap:wrap;gap:4px}
+.ev-chip{font-family:'Fira Code';font-size:10px;font-weight:600;padding:2px 7px;border-radius:999px;white-space:nowrap;background:#e7f3ec;color:#1a7f4b;border:1px solid #cbe7d6}
+.ev-chip.ev-missing{background:var(--surface-2);color:var(--text-3);border:1px dashed var(--border)}

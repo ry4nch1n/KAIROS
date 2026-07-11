@@ -119,6 +119,40 @@ export function steamProjection(i: SteamInputs): SteamProjection {
   };
 }
 
+// ── Scenario band (evaluation Phase A2) ──
+// Wishlist→sale conversion is a wide-variance heuristic, not a forecast: GameDiscoverCo's
+// 2024 poll puts the median ≈0.17× for >10k-wishlist launches, with real outcomes spreading
+// from ~10% of the median to ~10× it. A single projection is false precision — the band
+// brackets the chosen base conversion with a pessimistic half and an optimistic double,
+// a deliberately conservative slice of that published spread. Plan against the low end.
+export const BAND_FACTORS = { pessimistic: 0.5, base: 1, optimistic: 2 } as const;
+
+export interface ScenarioBand {
+  pessimistic: SteamProjection;
+  base: SteamProjection;
+  optimistic: SteamProjection;
+}
+
+export function scenarioBand(i: SteamInputs): ScenarioBand {
+  const at = (f: number) => steamProjection({ ...i, conversion: i.conversion * f });
+  return {
+    pessimistic: at(BAND_FACTORS.pessimistic),
+    base: at(BAND_FACTORS.base),
+    optimistic: at(BAND_FACTORS.optimistic),
+  };
+}
+
+// A comparable handed over from Radar as a projection anchor (evaluation Phase A3):
+// its real price prefills the calculator and its outcome (owners × price) renders beside
+// the projection — an anchor, not a forecast. Client-side shape only, not an API type.
+export interface RevenueSeed {
+  title: string;
+  priceCents: number | null;
+  owners: number | null; // SteamSpy bucket midpoint
+  votes: number | null; // total reviews
+  reviewVelocity: number | null; // reviews/day, trailing 30d
+}
+
 // Sensible defaults, anchored to the Studio P&L (US$9.99 list, 0.10× conversion, Steam 30%).
 // Refund rate ~7% is a common indie figure (Steam's ~2-hour/14-day policy). All editable.
 export const STEAM_DEFAULTS: Omit<SteamInputs, "engineId"> = {

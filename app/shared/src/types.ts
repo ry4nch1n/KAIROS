@@ -85,6 +85,8 @@ export interface SteamNewRelease {
 
 export interface SteamOverview {
   kpi: { games: number; indie: number; aaa: number; ratedPct: number; indieMedianPriceCents: number };
+  // "This week's read" — see Overview.read; Steam flavor (opportunity, per-game economics, top-heavy warning).
+  read: string[];
   tiers: ScaleTierRow[];
   indie: SteamGenreEconomics[]; // indie-addressable cohort (default benchmark)
   all: SteamGenreEconomics[];   // all tiers incl. AAA (demand-context view)
@@ -159,6 +161,10 @@ export interface Insight {
   tag: string; // e.g. "OPPORTUNITY"
   meta: string; // e.g. "demand p88 · supply p07"
   text: string; // may contain <b> emphasis
+  // The decision clause: what this observation implies for the plan ("favors a browser
+  // loop test", "crowding fast — avoid"). Plain text, rendered after an arrow. An insight
+  // that ends at observation isn't a takeaway — every insight should carry one.
+  implication?: string;
 }
 
 export interface GenreLandscapePoint { genre: string; supply: number; p75Rating: number; avgRating: number; totalVotes: number; examples: string[]; }
@@ -168,6 +174,10 @@ export interface GlossaryRow { label: string; kind: "genre" | "tag"; count: numb
 
 export interface Overview {
   kpi: OverviewKPI;
+  // "This week's read" — up to 3 computed, decision-framed sentences (may contain <b>):
+  // top gap with its route framing, biggest mover, and a saturation warning. The answer
+  // strip; the charts below are the evidence.
+  read: string[];
   momentum: GenreMomentum;
   tags: TagFreq[];
   scatter: ScatterPoint[];
@@ -251,6 +261,9 @@ export interface GenreRow {
   p90Votes: number;
   p90Rating: number;
   votesPerDay: number;
+  // Later-half vs earlier-half momentum of the genre's median-votes series — the delta
+  // read ("is this changing?") a static level column can't give.
+  trajectory: Trajectory;
 }
 export interface DeveloperRow {
   developer: string;
