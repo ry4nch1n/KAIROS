@@ -10,6 +10,16 @@ export type Platform = "all" | "poki" | "crazygames" | "steam";
 // ── Phase 2: Steam / PC analytics ──
 export interface ScaleTierRow { tier: string; games: number; }
 export type SteamCohort = "indie" | "all";
+// Wishlist→sale conversion signal (R4.1). Directional, cited — not a per-genre table Steam
+// publishes. Attached to a genre when there's a clear signal; null otherwise (no claim).
+export type ConversionSignal = "strong" | "typical" | "deliberation";
+export interface ConversionRef {
+  signal: ConversionSignal;
+  note: string;
+  source: string;
+  asOf: string;
+}
+
 export interface SteamGenreEconomics {
   genre: string;
   games: number;
@@ -21,6 +31,7 @@ export interface SteamGenreEconomics {
   // splitting $8.5B is a worse solo-dev bet than 8 splitting $136M.
   medianRevenuePerGame: number; // dollars; the "typical outcome", resists mega-hit skew
   meanRevenuePerGame: number;   // dollars; mean ≫ median = category is top-heavy
+  conversion: ConversionRef | null; // wishlist→sale directional signal, or null
 }
 
 // Curated, researched team-size estimate (see server data/teamSize.ts). solo=1–2, small=3–10,

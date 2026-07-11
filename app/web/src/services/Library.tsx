@@ -39,6 +39,7 @@ function fmtDate(d: string): string {
 function ladder(p: string | null): string {
   return (p || "browser->steam").replace("->", " → ");
 }
+const isUrl = (s: string | null): s is string => !!s && /^https?:\/\//i.test(s.trim());
 function Dots({ n, of = 3 }: { n: number | null; of?: number }) {
   if (n === null) return null;
   return (
@@ -102,6 +103,7 @@ function PitchCard({ p }: { p: Pitch }) {
             {p.loopFamily && <span className="ptag lf">{LOOP_LABEL[p.loopFamily] || p.loopFamily}</span>}
             <span className={"ptag st st-" + p.status}>{p.status}</span>
             {p.provenance && <span className={"ptag prov-" + p.provenance}>{PROV_LABEL[p.provenance] || p.provenance}</span>}
+            {isUrl(p.source) && <a className="prov-receipt" href={p.source} target="_blank" rel="noreferrer" title="The market evidence this pitch is grounded in">receipt ↗</a>}
           </div>
           <h3>{p.title}{p.codeName && <span className="pcode">"{p.codeName}"</span>}</h3>
           <div className="bmeta">{ladder(p.platformLadder)} · {fmtDate(p.pitchDate)}</div>

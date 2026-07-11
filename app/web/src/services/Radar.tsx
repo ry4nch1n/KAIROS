@@ -272,11 +272,17 @@ const MED_REV_TIP = "Median revenue proxy per game — the typical outcome for o
 const MEAN_REV_TIP = "Mean revenue proxy per game (total ÷ games). Mean far above median = top-heavy category where a few hits hold most of the pool.";
 const TOTAL_REV_TIP = "Total revenue proxy = Σ owners × current price across the genre (directional, not a P&L). Measures category size, not per-game opportunity.";
 
+const CONV_LABEL: Record<string, string> = { strong: "converts well", typical: "typical", deliberation: "high-deliberation" };
+function ConvChip({ c }: { c: SteamGenreEconomics["conversion"] }) {
+  if (!c) return null;
+  return <a className={"conv-chip conv-" + c.signal} href={c.source} target="_blank" rel="noreferrer" title={`${c.note} (as of ${c.asOf} · click for source)`}>{CONV_LABEL[c.signal] || c.signal}</a>;
+}
+
 function EconTable({ rows }: { rows: SteamGenreEconomics[] }) {
   return (
     <table className="dtable"><thead><tr><th>Genre</th><th className="r">Games</th><th className="r">Median price</th><th className="r">Median rating</th><th className="r" title={OWNERS_TIP}>Total owners</th><th className="r" title={MED_REV_TIP}>Median rev/game</th><th className="r" title={MEAN_REV_TIP}>Mean rev/game</th><th className="r" title={TOTAL_REV_TIP}>Total rev proxy</th></tr></thead>
       <tbody>{rows.map((r) => (
-        <tr key={r.genre}><td className="gname">{r.genre}</td>
+        <tr key={r.genre}><td className="gname">{r.genre}<ConvChip c={r.conversion} /></td>
           <td className="r">{r.games}</td><td className="r">{money(r.medianPriceCents)}</td>
           <td className="r">{rate(r.medianRating)}</td><td className="r">{fmtOwners(r.totalOwners)}</td>
           <td className="r" style={{ fontWeight: 600 }}>{proxy(r.medianRevenuePerGame)}</td>
@@ -318,9 +324,10 @@ function PricingTable({ rows }: { rows: SteamPriceBand[] }) {
   );
 }
 
+const CONTENT_TIP = "Median playtime, reframed as a content-scope proxy: buyers of this genre expect roughly this much game — your content bill. A genre players sink 20h into is a very different solo scope than a 2h one.";
 function OwnershipTable({ rows }: { rows: SteamOwnershipRow[] }) {
   return (
-    <table className="dtable"><thead><tr><th>Genre</th><th className="r">Games</th><th className="r" title={OWNERS_TIP}>Total owners</th><th className="r">Median owners</th><th className="r">Live CCU</th><th className="r">Median playtime</th></tr></thead>
+    <table className="dtable"><thead><tr><th>Genre</th><th className="r">Games</th><th className="r" title={OWNERS_TIP}>Total owners</th><th className="r">Median owners</th><th className="r">Live CCU</th><th className="r" title={CONTENT_TIP}>Content expectation</th></tr></thead>
       <tbody>{rows.map((r) => (
         <tr key={r.genre}><td className="gname">{r.genre}</td><td className="r">{r.games}</td><td className="r">{fmtOwners(r.totalOwners)}</td><td className="r">{fmtOwners(r.medianOwners)}</td><td className="r">{fmt(r.ccu)}</td><td className="r">{playH(r.medianPlaytimeMin)}</td></tr>
       ))}</tbody></table>
@@ -350,6 +357,15 @@ const TEAM_META: Record<string, { label: string; cls: string }> = {
   mid: { label: "Mid", cls: "team-mid" }, large: { label: "Large", cls: "team-large" },
 };
 const isSoloReachable = (c: SteamComparable) => c.teamSize != null && (c.teamSize.bucket === "solo" || c.teamSize.bucket === "small");
+// A release within ~90 days is a fresh comparable — paired with the Solo-reachable cohort
+// toggle, this surfaces recent solo/small wins (#9) inside the table that already exists,
+// instead of a separate near-empty shelf.
+const RECENT_DAYS = 90;
+const isRecentRelease = (iso: string | null): boolean => {
+  if (!iso) return false;
+  const days = (Date.now() - new Date(iso + "T00:00:00Z").getTime()) / 86400000;
+  return days >= 0 && days <= RECENT_DAYS;
+};
 const TEAM_TIP = "Team size is not in any Steam/3rd-party API — these are researched estimates (bucket by the team that shipped the studio's breakout). Click for the source.";
 const VELOCITY_TIP = "Reviews gained per day over the trailing 30-day snapshot window — the public leading-indicator proxy for wishlist velocity (wishlist counts aren't acquirable). Total reviews/owners lag a launch by months; this doesn't. — = not enough snapshot history yet.";
 
@@ -368,7 +384,7 @@ function ComparablesTable({ rows, onProject }: { rows: SteamComparable[]; onProj
             <td>{ts && meta
               ? <a className={"est-chip " + meta.cls} href={ts.source} target="_blank" rel="noreferrer" title={`${ts.headcount} · ${ts.confidence} confidence · estimated`}>{meta.label} · est.</a>
               : <span className="est-chip est-unknown" title="Team size not researched yet">—</span>}</td>
-            <td>{c.genre}</td><td className="r">{c.releaseDate ? c.releaseDate.slice(0, 4) : "—"}</td>
+            <td>{c.genre}</td><td className="r">{c.releaseDate ? c.releaseDate.slice(0, 4) : "—"}{isRecentRelease(c.releaseDate) && <span className="recent-chip" title={"Released within the last " + RECENT_DAYS + " days"}>new</span>}</td>
             <td className="r">{rate(c.rating)}</td><td className="r">{c.votes == null ? "—" : fmt(c.votes)}</td>
             <td className="r">{c.reviewVelocity == null ? "—" : fmt(c.reviewVelocity)}</td>
             <td className="r">{fmtOwners(c.owners)}</td><td className="r">{money(c.priceCents)}</td>

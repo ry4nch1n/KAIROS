@@ -10,6 +10,7 @@ import type {
 } from "shared";
 import { assertPitchInput, validateBriefPayload } from "../../../shared/src/contract.ts";
 import { teamSizeFor } from "../data/teamSize.ts";
+import { conversionFor } from "../data/genreConversion.ts";
 
 const fmtDate = (d: any) => new Date(d).toISOString().slice(5, 10); // "MM-DD"
 
@@ -838,6 +839,7 @@ export async function getSteamGenreEconomics(
     revenueProxy: Math.round(num(r.rev_cents) / 100),
     medianRevenuePerGame: Math.round(num(r.med_rev_cents) / 100),
     meanRevenuePerGame: num(r.games) ? Math.round(num(r.rev_cents) / 100 / num(r.games)) : 0,
+    conversion: conversionFor(r.genre),
   }));
 }
 
