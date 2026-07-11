@@ -148,16 +148,18 @@ function PitchCard({ p }: { p: Pitch }) {
       )}
       {(p.browserFit !== null || p.steamFit !== null || p.buildEase !== null || p.marketability !== null || p.founderFit !== null) && (
         <div className="pscores">
-          <span className="pfit-pair" title="Co-equal platform-fit axes — together they map which strategy route a pitch fits">
-            <span>Browser fit {p.browserFit !== null ? <Dots n={p.browserFit} /> : <em className="pna">n/a</em>}</span>
-            <span>Steam fit {p.steamFit !== null ? <Dots n={p.steamFit} /> : <em className="pna">n/a</em>}</span>
-          </span>
-          <span>Build ease <Dots n={p.buildEase} /></span>
+          <div className="pscore-row" title="Platform-fit compass + solo feasibility — where a pitch fits and how cheaply it builds">
+            <span className="pscore-tag">Fit</span>
+            <span className="pscore"><span className="pscore-l">Browser</span>{p.browserFit !== null ? <Dots n={p.browserFit} /> : <em className="pna">n/a</em>}</span>
+            <span className="pscore"><span className="pscore-l">Steam</span>{p.steamFit !== null ? <Dots n={p.steamFit} /> : <em className="pna">n/a</em>}</span>
+            <span className="pscore"><span className="pscore-l">Build</span>{p.buildEase !== null ? <Dots n={p.buildEase} /> : <em className="pna">n/a</em>}</span>
+          </div>
           {(p.marketability !== null || p.founderFit !== null) && (
-            <span className="pfit-pair pjudge" title="The two lenses the commercial scores miss — first-session hook pull, and whether you'd still care in month four">
-              <span>Hook {p.marketability !== null ? <Dots n={p.marketability} /> : <em className="pna">n/a</em>}</span>
-              <span>Founder fit {p.founderFit !== null ? <Dots n={p.founderFit} /> : <em className="pna">n/a</em>}</span>
-            </span>
+            <div className="pscore-row" title="The two lenses the commercial scores miss — first-session hook pull, and whether you'd still care in month four">
+              <span className="pscore-tag">Pull</span>
+              <span className="pscore"><span className="pscore-l">Hook</span>{p.marketability !== null ? <Dots n={p.marketability} /> : <em className="pna">n/a</em>}</span>
+              <span className="pscore"><span className="pscore-l">Founder</span>{p.founderFit !== null ? <Dots n={p.founderFit} /> : <em className="pna">n/a</em>}</span>
+            </div>
           )}
         </div>
       )}

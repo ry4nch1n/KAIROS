@@ -178,10 +178,13 @@ button{font-family:inherit}
 .pfields>div{font-size:12.3px;color:var(--text-2);line-height:1.45}
 .plabel{display:inline-block;font-family:'Fira Code';font-size:9.5px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--primary);background:rgba(37,99,235,.08);padding:1px 6px;border-radius:4px;margin-right:7px;vertical-align:1px}
 .pfields .prisk .plabel{color:var(--accent);background:rgba(217,119,6,.1)}
-.pscores{display:flex;flex-wrap:wrap;gap:14px;margin-top:12px;padding-top:10px;border-top:1px solid var(--border-soft);font-family:'Fira Code';font-size:10px;color:var(--text-3);letter-spacing:.3px}
-.pscores span{display:inline-flex;align-items:center;gap:5px}
-/* Browser fit + Steam fit are shown as a co-equal pair (the "route compass"); Build ease sits apart. */
-.pfit-pair{gap:12px;padding:2px 9px;border-radius:7px;background:var(--surface-2);border:1px solid var(--border-soft)}
+/* Two tidy, aligned rows: platform-fit + build (Fit) above the two pull lenses (Pull).
+   A fixed-width tag anchors both rows to the same left edge; no pills, so nothing offsets. */
+.pscores{margin-top:12px;padding-top:10px;border-top:1px solid var(--border-soft);display:flex;flex-direction:column;gap:8px;font-family:'Fira Code';font-size:10px;color:var(--text-3);letter-spacing:.3px}
+.pscore-row{display:flex;flex-wrap:wrap;align-items:center;gap:5px 16px}
+.pscore-tag{flex:0 0 auto;width:30px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-3);opacity:.5;font-size:9px}
+.pscore{display:inline-flex;align-items:center;gap:6px}
+.pscore-l{color:var(--text-2)}
 .pna{font-style:normal;color:var(--text-3);opacity:.75}
 .ptag.prov-market-backed{background:rgba(5,150,105,.13);color:var(--green)}
 .ptag.prov-design-derived{background:rgba(8,145,178,.12);color:var(--cyan)}
@@ -431,7 +434,6 @@ a.conv-chip:hover{text-decoration:underline}
 .pscope{display:flex;flex-wrap:wrap;gap:6px;margin:2px 0 4px}
 .pscope-chip{font-family:'Fira Code';font-size:10px;font-weight:600;padding:2px 8px;border-radius:999px;white-space:nowrap;background:var(--surface-2);color:var(--text-2);border:1px solid var(--border)}
 .pscope-chip.clock{background:rgba(37,99,235,.08);color:var(--primary-deep);border-color:var(--border)}
-.pscores .pjudge{border-left:1px solid var(--border);padding-left:10px;margin-left:2px}
 
 /* Route Lens (C2) — route-lean chip from a pitch's platform-fit compass */
 .route-chip{margin-left:8px;font-family:'Fira Code';font-size:10px;font-weight:600;letter-spacing:.02em;padding:1px 7px;border-radius:5px;white-space:nowrap;vertical-align:middle}
