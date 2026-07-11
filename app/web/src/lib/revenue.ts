@@ -49,22 +49,63 @@ export const GENRE_PRESETS: GenrePreset[] = [
   { id: "hyper", label: "Hypercasual", arpdau: 0.06 },
 ];
 
-// Income goal from the brief: SGD 4–5k/mo. The model works in USD (that's the currency
-// of ARPDAU market data), so convert the band. Rate is editable in the UI.
-export const TARGET_SGD = { low: 4000, high: 5000 };
-export const DEFAULT_SGD_PER_USD = 1.35;
-
-export function targetBandUsd(sgdPerUsd: number = DEFAULT_SGD_PER_USD): { low: number; high: number } {
-  const rate = sgdPerUsd > 0 ? sgdPerUsd : DEFAULT_SGD_PER_USD;
-  return { low: TARGET_SGD.low / rate, high: TARGET_SGD.high / rate };
+// ── Monthly target (user-set, private) ──
+// The income goal is personal — the real P&L targets live in Notion, and KAIROS may be
+// shown to people outside the team — so NO target ships in the bundle. The band is set
+// on the widget and persisted per-browser in localStorage; until then it's null and the
+// verdict honestly reads "no target set". The model works in USD (the currency of
+// ARPDAU market data), so the SGD band converts at the editable FX rate.
+export interface TargetBand {
+  low: number; // SGD/month — the floor the verdict is judged against
+  high: number; // SGD/month — top of the band
 }
 
-export type TargetVerdict = "below" | "in-band" | "above";
+export const DEFAULT_SGD_PER_USD = 1.35;
 
-/** Where a projected monthly USD figure lands versus the SGD target band. */
-export function verdict(monthlyUsd: number, sgdPerUsd: number = DEFAULT_SGD_PER_USD): TargetVerdict {
-  const band = targetBandUsd(sgdPerUsd);
+const TARGET_KEY = "kairos.targetSgd";
+
+/** Read the locally-stored target band; null when unset, malformed, or storage-less. */
+export function loadTargetSgd(): TargetBand | null {
+  try {
+    const raw = globalThis.localStorage?.getItem(TARGET_KEY);
+    if (!raw) return null;
+    const t = JSON.parse(raw);
+    if (typeof t?.low !== "number" || !(t.low > 0)) return null;
+    const high = typeof t.high === "number" && t.high >= t.low ? t.high : t.low;
+    return { low: t.low, high };
+  } catch {
+    return null;
+  }
+}
+
+/** Persist (or clear, with null) the target band in this browser only. */
+export function saveTargetSgd(t: TargetBand | null): void {
+  try {
+    if (!t) globalThis.localStorage?.removeItem(TARGET_KEY);
+    else globalThis.localStorage?.setItem(TARGET_KEY, JSON.stringify(t));
+  } catch {
+    // storage unavailable — the target just won't survive a reload
+  }
+}
+
+export function targetBandUsd(sgdPerUsd: number, target: TargetBand): { low: number; high: number } {
+  const rate = sgdPerUsd > 0 ? sgdPerUsd : DEFAULT_SGD_PER_USD;
+  return { low: target.low / rate, high: target.high / rate };
+}
+
+export type TargetVerdict = "no-target" | "below" | "in-band" | "above";
+
+/** Where a projected monthly USD figure lands versus the user's SGD target band. */
+export function verdict(monthlyUsd: number, sgdPerUsd: number, target: TargetBand | null): TargetVerdict {
+  if (!target) return "no-target";
+  const band = targetBandUsd(sgdPerUsd, target);
   if (monthlyUsd < band.low) return "below";
   if (monthlyUsd > band.high) return "above";
   return "in-band";
+}
+
+/** How many months of the target floor a lump sum (e.g. a Steam net projection) covers. */
+export function monthsOfTarget(netSgd: number, target: TargetBand | null): number | null {
+  if (!target || !(target.low > 0)) return null;
+  return Math.max(0, netSgd) / target.low;
 }
