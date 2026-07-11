@@ -432,3 +432,9 @@ a.conv-chip:hover{text-decoration:underline}
 .pscope-chip{font-family:'Fira Code';font-size:10px;font-weight:600;padding:2px 8px;border-radius:999px;white-space:nowrap;background:var(--surface-2);color:var(--text-2);border:1px solid var(--border)}
 .pscope-chip.clock{background:rgba(37,99,235,.08);color:var(--primary-deep);border-color:var(--border)}
 .pscores .pjudge{border-left:1px solid var(--border);padding-left:10px;margin-left:2px}
+
+/* Route Lens (C2) — route-lean chip from a pitch's platform-fit compass */
+.route-chip{margin-left:8px;font-family:'Fira Code';font-size:10px;font-weight:600;letter-spacing:.02em;padding:1px 7px;border-radius:5px;white-space:nowrap;vertical-align:middle}
+.route-1{background:rgba(37,99,235,.12);color:var(--primary-deep);border:1px solid rgba(37,99,235,.28)}
+.route-23{background:#e7f3ec;color:#1a7f4b;border:1px solid #cbe7d6}
+.route-both{background:#fdf1e5;color:#b4531a;border:1px solid #f0dcc8}

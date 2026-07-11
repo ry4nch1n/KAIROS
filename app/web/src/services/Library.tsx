@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useDrawer, NavToggle, NavScrim, DrawerClose } from "../components/MobileNav.tsx";
 import type { LibraryItem, Pitch } from "shared";
 import { api } from "../lib/api.ts";
+import { routeLean } from "../lib/routeLean.ts";
 
 // Collections map to a source: "pitches" reads the pitches table; the rest read
 // library_items by kind. New collections just add a row here.
@@ -109,7 +110,9 @@ function PitchCard({ p }: { p: Pitch }) {
             {isUrl(p.source) && <a className="prov-receipt" href={p.source} target="_blank" rel="noreferrer" title="The market evidence this pitch is grounded in">receipt ↗</a>}
           </div>
           <h3>{p.title}{p.codeName && <span className="pcode">"{p.codeName}"</span>}</h3>
-          <div className="bmeta">{ladder(p.platformLadder)} · {fmtDate(p.pitchDate)}</div>
+          <div className="bmeta">{ladder(p.platformLadder)} · {fmtDate(p.pitchDate)}
+            {(() => { const r = routeLean(p.browserFit, p.steamFit); return r ? <span className={"route-chip " + r.cls} title={r.tip}>{r.label}</span> : null; })()}
+          </div>
         </div>
       </div>
       {p.oneLiner && <p className="bblurb pone">{p.oneLiner}</p>}
@@ -239,6 +242,7 @@ function LeaderboardView({ pitches }: { pitches: Pitch[] }) {
         <th className="r" title="First-session hook / does it capsule (the marketability lens)">Hook</th>
         <th className="r" title="Personal pull + edge — would you still care in month four?">Founder</th>
         <th className="r" title="Estimated days to a testable gray-box loop — the kill-gate clock">Gray-box</th>
+        <th title="Route compass from the two platform-fit scores: browser-heavy → Routes 2/3, Steam-heavy → Route 1, both strong → optionality">Route</th>
         <th>Status</th><th>Evidence</th>
       </tr></thead>
         <tbody>{ranked.map((p, i) => (
@@ -252,6 +256,7 @@ function LeaderboardView({ pitches }: { pitches: Pitch[] }) {
             <td className="r">{p.marketability !== null ? <Dots n={p.marketability} /> : "—"}</td>
             <td className="r">{p.founderFit !== null ? <Dots n={p.founderFit} /> : "—"}</td>
             <td className="r">{p.grayBoxDays != null ? "~" + p.grayBoxDays + "d" : "—"}</td>
+            <td>{(() => { const r = routeLean(p.browserFit, p.steamFit); return r ? <span className={"route-chip " + r.cls} title={r.tip}>{r.label}</span> : "—"; })()}</td>
             <td><span className={"ptag st st-" + p.status}>{p.status}</span></td>
             <td><span className="ev-chips">{evidenceChips(p).map((c) => (
               <span key={c.label} className={"ev-chip" + (c.missing ? " ev-missing" : "")}>{c.label}</span>
