@@ -516,3 +516,21 @@ Extends KAIROS beyond browser portals into PC-indie market intel, scoped to a **
 
 ### Phase 2 UI (added 2026-06-30)
 Steam is a fourth platform in the GameRadar selector. Selecting it renders a dedicated **SteamView** (asymmetric — browser charts don't apply): KPIs (games / indie cohort / AAA context / rated %), a scale-tier distribution bar (`tierBarOption`, indie blue / AAA grey), a genre-economics table with an **indie ↔ all-tiers** cohort toggle (owners × price revenue proxy), and an indie **comparables** table. Served by `GET /api/steam` → `getSteamOverview()` (Express dev + Netlify function). Bridge (browser→Steam) and a Comparables deep-dive remain the next UI stage.
+
+---
+
+## Phase A/B/C — the 5-factor decision layer (added 2026-07-11)
+
+A three-phase pass that reoriented KAIROS around the five factors that pick a shippable game — **(1) demand vs. recent supply, (2) platform-split revenue → route lean, (3) scope + loop-testability, (4) marketability/hook, (5) design value / founder pull**. All server work is **payload extensions on the existing `/api/overview` + `/api/steam` routes** (no new routes → route-parity untouched) plus contract/UI changes. Source of truth for the shapes: `shared/src/types.ts` + `shared/src/contract.ts`; all analytics live in `server/src/queries/index.ts`.
+
+**Phase A — the decision layer ("so what?" per tab).** Every service now opens with an answer, not just data. `Overview.read` / `SteamOverview.read` are 1–3 server-computed, decision-framed sentences (top gap with its route framing, biggest mover, supply-pressure warning); `Insight.implication` adds a "→ so what" clause to each AI insight; `GenreRow.trajectory` is a demand delta. Revenue gained a P25/median/P75 scenario band; Comparables → Revenue "project" prefill; Library a candidate **Leaderboard** ranked by evidence state.
+
+**Phase B — demand/supply truthing.**
+- **B1 taxonomy canonicalization (the gate).** `canonicalName()` / `canonSql(col)` collapse a trailing `" Game(s)"` at every genre + tag `GROUP BY` (in SQL, before aggregation — medians can't merge after), so "Puzzle" / "Puzzle Games" are one row. Identity on clean names; JS/SQL parity-tested. Resolves #7/#15.
+- **B2 supply velocity.** `classifySupply` + `genreSupplyTrend` (new-entrant momentum over trailing windows anchored to the data's max date). Adds `GenreRow.supplyTrend`/`recentEntrants` and a `supplyRising` flag on `MarketGap`/`SteamGap` (the z-score is unchanged — the flag annotates "the door is closing").
+- **B3 demand/supply quadrant.** `getGenreQuadrant` / `getSteamGenreQuadrant` → `Overview.quadrant` / `SteamOverview.quadrant` (`QuadrantPoint`: supply × appetite, bubble = weight, colour = supply momentum). `quadrantOption` chart.
+- **B4 small wins.** `SteamGenreEconomics.conversion` from the new **`server/src/data/genreConversion.ts`** (cited, dated wishlist→sale signal per genre); median-playtime reframed as a content-expectation proxy; pitch provenance receipt; recent-release chip.
+
+**Phase C — the pitch, read through both lenses.**
+- **C1 pitch v5** (`contract.pitch.version` 4→5, top-level 3→4). Adds the scope block (`grayBoxDays` — days to a testable gray-box loop, `contentScope` via the new `contentScopes` taxonomy, `techRisk`), the hook lens (`hook` + `marketability` score — absorbs #26's "Grab"), and the founder-fit lens (`founderFit` score + `whyMe`). `scoreFields` is now the five 1..3 axes. Additive `pitches` columns (null-safe, no backfill); the `/kairos-pitch` skill authors them.
+- **C2 route lens.** `web/src/lib/routeLean.ts` turns a pitch's `browserFit` vs `steamFit` into a route-lean chip (browser-heavy → Routes 2/3, Steam-heavy → Route 1, both strong → optionality). The market-level cross-platform version is deferred to backlog (#67, blocked on the loop-family map #12 — genre alone joins the two surfaces too thinly).
