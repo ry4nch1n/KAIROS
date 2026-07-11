@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useDrawer, NavToggle, NavScrim, DrawerClose } from "../components/MobileNav.tsx";
 import {
   GENRE_PRESETS,
@@ -14,13 +14,17 @@ import {
   ENGINES,
   engine as getEngine,
   steamProjection,
+  scenarioBand,
   STEAM_DEFAULTS,
   type EngineId,
+  type RevenueSeed,
 } from "../lib/steamRevenue.ts";
 
 const usd = (n: number) => "$" + Math.round(n).toLocaleString("en-US");
 const sgd = (n: number) => "SGD " + Math.round(n).toLocaleString("en-US");
 const pct = (n: number) => Math.round(n * 100) + "%";
+const fmtOwners = (n: number | null) =>
+  n == null ? "—" : n >= 1e6 ? (n / 1e6).toFixed(2) + "M" : n >= 1e3 ? Math.round(n / 1e3) + "K" : String(n);
 
 type Mode = "browser" | "steam";
 
@@ -38,14 +42,16 @@ function ModeSeg({ mode, setMode }: { mode: Mode; setMode: (m: Mode) => void }) 
   );
 }
 
-export function Revenue({ hidden }: { hidden: boolean }) {
+export function Revenue({ hidden, seed, onClearSeed }: { hidden: boolean; seed?: RevenueSeed | null; onClearSeed?: () => void }) {
   const [mode, setMode] = useState<Mode>("browser");
+  // A comparable projected from Radar is a Steam anchor — front the Steam panel for it.
+  useEffect(() => { if (seed) setMode("steam"); }, [seed]);
   return (
     <section className="service" data-svc="revenue" hidden={hidden}>
       {mode === "browser" ? (
         <BrowserPanel mode={mode} setMode={setMode} />
       ) : (
-        <SteamPanel mode={mode} setMode={setMode} />
+        <SteamPanel mode={mode} setMode={setMode} seed={seed} onClearSeed={onClearSeed} />
       )}
     </section>
   );
@@ -167,7 +173,7 @@ const ENGINE_BADGE: Record<EngineId, string> = {
   unreal: "5% >$1M",
 };
 
-function SteamPanel({ mode, setMode }: { mode: Mode; setMode: (m: Mode) => void }) {
+function SteamPanel({ mode, setMode, seed, onClearSeed }: { mode: Mode; setMode: (m: Mode) => void; seed?: RevenueSeed | null; onClearSeed?: () => void }) {
   const drawer = useDrawer();
   const [engineId, setEngineId] = useState<EngineId>("godot");
   const [wishlists, setWishlists] = useState(STEAM_DEFAULTS.wishlists);
@@ -179,11 +185,21 @@ function SteamPanel({ mode, setMode }: { mode: Mode; setMode: (m: Mode) => void 
   const [licenseYears, setLicenseYears] = useState(STEAM_DEFAULTS.licenseYears);
   const [sgdPerUsd, setSgdPerUsd] = useState(STEAM_DEFAULTS.sgdPerUsd);
 
+  // Anchor prefill (A3): the comparable's real list price replaces the default dial.
+  // Only price — wishlists stay yours to reason about; the anchor strip shows the
+  // comparable's actual outcome for calibration instead of inventing a wishlist count.
+  useEffect(() => {
+    if (seed?.priceCents != null && seed.priceCents > 0) setPriceUsd(+(seed.priceCents / 100).toFixed(2));
+  }, [seed]);
+
+  const inputs = { wishlists, conversion, priceUsd, refundRate, storeCut, engineId, seats, licenseYears, sgdPerUsd };
   const eng = getEngine(engineId);
-  const p = steamProjection({
-    wishlists, conversion, priceUsd, refundRate, storeCut, engineId, seats, licenseYears, sgdPerUsd,
-  });
+  const p = steamProjection(inputs);
+  const band = scenarioBand(inputs);
   const units = Math.round(p.units);
+  const anchorGross = seed && seed.owners != null && seed.priceCents != null
+    ? seed.owners * (seed.priceCents / 100)
+    : null;
 
   return (
     <>
@@ -219,6 +235,18 @@ function SteamPanel({ mode, setMode }: { mode: Mode; setMode: (m: Mode) => void 
         </div>
 
         <div className="content">
+          {seed && (
+            <div className="anchor-strip">
+              <div className="anchor-body">
+                <b>Anchored to {seed.title}</b> — {fmtOwners(seed.owners)} owners × ${seed.priceCents != null ? (seed.priceCents / 100).toFixed(2) : "—"}
+                {anchorGross != null && <> ≈ <b>{usd(anchorGross)}</b> lifetime gross proxy</>}
+                {seed.votes != null && <> · {seed.votes.toLocaleString("en-US")} reviews</>}
+                {seed.reviewVelocity != null && <> · +{seed.reviewVelocity}/day</>}
+                <span className="anchor-note">price prefilled from this comparable · owners are SteamSpy bucket midpoints — an anchor for calibration, not a forecast</span>
+              </div>
+              {onClearSeed && <button type="button" className="anchor-clear" onClick={onClearSeed} aria-label="Clear anchor">×</button>}
+            </div>
+          )}
           <div className="kpi-row">
             <div className="kpi">
               <div className="label">Net revenue (USD)</div>
@@ -242,6 +270,28 @@ function SteamPanel({ mode, setMode }: { mode: Mode; setMode: (m: Mode) => void 
                 {p.engineCost === 0 && "no royalty or seat fee at this scale"}
               </div>
             </div>
+          </div>
+
+          <div className="rev-band" role="group" aria-label="Conversion scenario band">
+            <div className="band-tile band-pess">
+              <span className="band-label">Pessimistic · {(conversion * 0.5).toFixed(2)}×</span>
+              <b className="band-net">{usd(band.pessimistic.netUsd)}</b>
+              <span className="band-sub">{sgd(band.pessimistic.netSgd)}</span>
+            </div>
+            <div className="band-tile band-base">
+              <span className="band-label">Base · {conversion.toFixed(2)}×</span>
+              <b className="band-net">{usd(band.base.netUsd)}</b>
+              <span className="band-sub">{sgd(band.base.netSgd)}</span>
+            </div>
+            <div className="band-tile band-opt">
+              <span className="band-label">Optimistic · {(conversion * 2).toFixed(2)}×</span>
+              <b className="band-net">{usd(band.optimistic.netUsd)}</b>
+              <span className="band-sub">{sgd(band.optimistic.netSgd)}</span>
+            </div>
+            <p className="band-note">
+              Wishlist conversion spreads 10–20× across real launches (GameDiscoverCo 2024) — a point estimate is
+              fiction. This band halves and doubles your base conversion; <b>plan against the pessimistic column</b>.
+            </p>
           </div>
 
           <div className="rev-panel">

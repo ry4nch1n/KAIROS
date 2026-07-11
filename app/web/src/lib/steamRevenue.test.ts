@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { steamProjection, engine, ENGINES, type SteamInputs } from "./steamRevenue.ts";
+import { steamProjection, scenarioBand, engine, ENGINES, type SteamInputs } from "./steamRevenue.ts";
 
 const base: SteamInputs = {
   wishlists: 10_000,
@@ -90,5 +90,27 @@ describe("engine registry", () => {
   it("engine() falls back to Godot on an unknown id", () => {
     // @ts-expect-error — deliberately bad id
     expect(engine("cryengine").id).toBe("godot");
+  });
+});
+
+describe("scenarioBand — the conversion spread is the message (evaluation Phase A2)", () => {
+  it("brackets the base conversion with a pessimistic half and an optimistic double", () => {
+    const b = scenarioBand(base);
+    expect(b.base.units).toBeCloseTo(1000, 6);
+    expect(b.pessimistic.units).toBeCloseTo(500, 6);
+    expect(b.optimistic.units).toBeCloseTo(2000, 6);
+    expect(b.pessimistic.netUsd).toBeLessThan(b.base.netUsd);
+    expect(b.optimistic.netUsd).toBeGreaterThan(b.base.netUsd);
+  });
+
+  it("optimistic scenario clamps conversion at 1.0 — can't outsell the wishlist count", () => {
+    const b = scenarioBand({ ...base, conversion: 0.8 });
+    expect(b.optimistic.units).toBeCloseTo(10_000, 6); // 1.6× clamped to 1.0
+  });
+
+  it("keeps engine terms per scenario — a big optimistic gross can cross a threshold the base doesn't", () => {
+    const b = scenarioBand({ ...base, wishlists: 1_500_000, refundRate: 0, engineId: "unreal" });
+    expect(b.base.engineRoyalty).toBeGreaterThan(0); // ~$1.5M gross
+    expect(b.pessimistic.engineRoyalty).toBe(0); // ~$750K gross, under the $1M line
   });
 });

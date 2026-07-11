@@ -297,3 +297,49 @@ describe("D-teamsize getSteamComparables attaches team-size estimates (#9)", () 
     expect(solo.every((c) => c.teamSize!.bucket === "solo" || c.teamSize!.bucket === "small")).toBe(true);
   });
 });
+
+describe("A12 decision layer — this week's read (evaluation Phase A1)", () => {
+  it("overview carries 1–3 decision-framed lines, each with an implication clause", async () => {
+    const ov = await q.getOverview(db, "all");
+    expect(ov.read.length).toBeGreaterThanOrEqual(1);
+    expect(ov.read.length).toBeLessThanOrEqual(3);
+    for (const line of ov.read) expect(line).toContain("→"); // observation → implication
+  });
+
+  it("every insight carries an implication (the decision clause)", async () => {
+    const ov = await q.getOverview(db, "all");
+    expect(ov.insights.length).toBeGreaterThan(0);
+    for (const ins of ov.insights) {
+      expect(typeof ins.implication).toBe("string");
+      expect((ins.implication ?? "").length).toBeGreaterThan(0);
+    }
+  });
+
+  it("genre rows carry a trajectory delta read", async () => {
+    const rows = await q.getGenres(db, "all");
+    expect(rows.length).toBeGreaterThan(0);
+    for (const r of rows) expect(["rising", "plateau", "decaying", "new"]).toContain(r.trajectory);
+  });
+
+  it("crowding warning needs both share (≥15%) and count (≥3) — one release can't cry wolf", () => {
+    const quiet = q.composeBrowserRead({ pressure: [{ genre: "Puzzle", total: 40, recent: 2 }] });
+    expect(quiet[quiet.length - 1]).toContain("No crowding warning");
+    const loud = q.composeBrowserRead({ pressure: [{ genre: "Puzzle", total: 20, recent: 5 }] });
+    expect(loud[loud.length - 1]).toContain("Puzzle");
+    expect(loud[loud.length - 1]).toContain("Crowding fast");
+  });
+
+  it("steam read flags top-heavy genres by mean ≫ median, never sells the mean as typical", () => {
+    const econ = (over: Partial<import("shared").SteamGenreEconomics>) => ({
+      genre: "Roguelike", games: 10, medianPriceCents: 999, medianRating: 4,
+      totalOwners: 1_000_000, revenueProxy: 9_000_000,
+      medianRevenuePerGame: 100_000, meanRevenuePerGame: 900_000, ...over,
+    });
+    const lines = q.composeSteamRead({ opportunity: [], indie: [econ({})] });
+    const warn = lines[lines.length - 1];
+    expect(warn).toContain("Roguelike");
+    expect(warn).toContain("top-heavy");
+    const calm = q.composeSteamRead({ opportunity: [], indie: [econ({ meanRevenuePerGame: 150_000 })] });
+    expect(calm[calm.length - 1]).toContain("fair read");
+  });
+});

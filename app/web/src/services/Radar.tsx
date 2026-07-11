@@ -6,6 +6,7 @@ import type {
   SteamDeveloperRow, SteamNewRelease, SteamComparable,
 } from "shared";
 import { api } from "../lib/api.ts";
+import type { RevenueSeed } from "../lib/steamRevenue.ts";
 import { EChart } from "../components/EChart.tsx";
 import { momentumOption, treemapOption, scatterOption, heatmapOption, landscapeOption, velocityBarOption, tierBarOption } from "../components/charts.ts";
 import { InsightSvg, tagClass } from "../components/icons.tsx";
@@ -61,11 +62,27 @@ const head = (icon: JSX.Element, title: string, sub?: string) => (
   <h3>{icon}{title}{sub && <span className="sub">{sub}</span>}</h3>
 );
 const deltaCls = (d: number) => (d > 3 ? "delta-up" : d < -3 ? "delta-dn" : "delta-fl");
+const TRAJ_LABEL: Record<string, string> = { rising: "▲ rising", plateau: "▬ plateau", decaying: "▼ decaying", new: "· new" };
+
+// "This week's read" — the answer strip (server-computed, decision-framed; the charts
+// below are the evidence). Lines carry server-trusted <b> markup, same as insights.
+function ReadStrip({ lines }: { lines?: string[] }) {
+  if (!lines?.length) return null;
+  return (
+    <div className="card read-strip">
+      <div className="read-title">This week's read</div>
+      {lines.map((l, i) => (
+        <p className="read-line" key={i} dangerouslySetInnerHTML={{ __html: l }} />
+      ))}
+    </div>
+  );
+}
 
 /* ───────────── views ───────────── */
 function OverviewView({ ov }: { ov: Overview }) {
   return (
     <>
+      <ReadStrip lines={ov.read} />
       <div className="kpis">
         <div className="kpi"><div className="label">{I.overview}Games tracked</div><div className="val num">{fmt(ov.kpi.gamesTracked)}</div><span className="delta up num">▲ {ov.kpi.newGames} new (14d)</span></div>
         <div className="kpi"><div className="label">★ Avg rating</div><div className="val num">{ov.kpi.avgRating.toFixed(2)}</div><span className="delta flat num">P90 {ov.kpi.avgRatingP90.toFixed(2)} · point-in-time</span></div>
@@ -78,7 +95,9 @@ function OverviewView({ ov }: { ov: Overview }) {
         <div className="card">{head(I.gems, "AI Insights", "auto-generated")}
           <div className="insights">{ov.insights.map((ins, i) => (
             <div className="insight" key={i}><div className={"ic " + ins.kind}><InsightSvg kind={ins.kind} /></div>
-              <div className="body"><p dangerouslySetInnerHTML={{ __html: ins.text }} /><div className="meta"><span className={"tag-op " + tagClass(ins.kind)}>{ins.tag}</span><span>{ins.meta}</span></div></div></div>
+              <div className="body"><p dangerouslySetInnerHTML={{ __html: ins.text }} />
+                {ins.implication && <p className="implication">→ {ins.implication}</p>}
+                <div className="meta"><span className={"tag-op " + tagClass(ins.kind)}>{ins.tag}</span><span>{ins.meta}</span></div></div></div>
           ))}</div>
         </div>
       </div>
@@ -129,12 +148,13 @@ function GenresView({ rows }: { rows: GenreRow[] }) {
   const max = Math.max(1, ...rows.map((r) => r.games));
   return (
     <div className="card">{head(I.genres, "Genre Explorer", `${rows.length} genres`)}
-      <table className="dtable"><thead><tr><th>Genre</th><th className="r">Games</th><th className="r">Avg rating</th><th className="r">Median votes</th><th className="r">P90 votes (top-10% bar)</th><th className="r">P90 rating</th><th className="r">Votes/day</th></tr></thead>
+      <table className="dtable"><thead><tr><th>Genre</th><th className="r">Games</th><th className="r">Avg rating</th><th className="r">Median votes</th><th className="r">P90 votes (top-10% bar)</th><th className="r">P90 rating</th><th className="r">Votes/day</th><th title="Later-half momentum vs earlier-half of the genre's median-vote series: rising / plateau / decaying">Trend</th></tr></thead>
         <tbody>{rows.map((r) => (
           <tr key={r.genre}><td className="gname">{r.genre}<span className="minibar"><i style={{ width: (r.games / max) * 100 + "%" }} /></span></td>
             <td className="r">{r.games}</td><td className="r">{r.avgRating.toFixed(2)}</td><td className="r">{fmt(r.medianVotes)}</td><td className="r">{fmt(r.p90Votes)}</td>
             <td className="r">{r.p90Rating.toFixed(2)}</td>
-            <td className={"r " + deltaCls(r.votesPerDay)}>{r.votesPerDay > 0 ? "+" : ""}{fmt(r.votesPerDay)}</td></tr>
+            <td className={"r " + deltaCls(r.votesPerDay)}>{r.votesPerDay > 0 ? "+" : ""}{fmt(r.votesPerDay)}</td>
+            <td><span className={"traj traj-" + r.trajectory}>{TRAJ_LABEL[r.trajectory] || r.trajectory}</span></td></tr>
         ))}</tbody></table>
     </div>
   );
@@ -201,7 +221,6 @@ function GemsView({ ov, rows }: { ov: Overview; rows: HiddenGem[] | null }) {
   );
 }
 
-const TRAJ_LABEL: Record<string, string> = { rising: "▲ rising", plateau: "▬ plateau", decaying: "▼ decaying", new: "· new" };
 function NewReleasesView({ rows }: { rows: NewRelease[] }) {
   return (
     <div className="card">{head(I.releases, "New Releases", `${rows.length} new in last 14 days · age-adjusted momentum`)}
@@ -302,9 +321,11 @@ const isSoloReachable = (c: SteamComparable) => c.teamSize != null && (c.teamSiz
 const TEAM_TIP = "Team size is not in any Steam/3rd-party API — these are researched estimates (bucket by the team that shipped the studio's breakout). Click for the source.";
 const VELOCITY_TIP = "Reviews gained per day over the trailing 30-day snapshot window — the public leading-indicator proxy for wishlist velocity (wishlist counts aren't acquirable). Total reviews/owners lag a launch by months; this doesn't. — = not enough snapshot history yet.";
 
-function ComparablesTable({ rows }: { rows: SteamComparable[] }) {
+const PROJECT_TIP = "Load this game into the Revenue model as an anchor — its price prefills the calculator and its real outcome (owners × price) shows beside your projection.";
+
+function ComparablesTable({ rows, onProject }: { rows: SteamComparable[]; onProject?: (seed: RevenueSeed) => void }) {
   return (
-    <table className="dtable"><thead><tr><th>Game</th><th>Tier</th><th title={TEAM_TIP}>Team (est.)</th><th>Genre</th><th className="r">Released</th><th className="r">Rating</th><th className="r">Reviews</th><th className="r" title={VELOCITY_TIP}>Rev./day</th><th className="r" title={OWNERS_TIP}>Owners</th><th className="r">Price</th><th>Developer</th></tr></thead>
+    <table className="dtable"><thead><tr><th>Game</th><th>Tier</th><th title={TEAM_TIP}>Team (est.)</th><th>Genre</th><th className="r">Released</th><th className="r">Rating</th><th className="r">Reviews</th><th className="r" title={VELOCITY_TIP}>Rev./day</th><th className="r" title={OWNERS_TIP}>Owners</th><th className="r">Price</th><th>Developer</th>{onProject && <th title={PROJECT_TIP}></th>}</tr></thead>
       <tbody>{rows.map((c, i) => {
         const tm = TIER_META[c.tier] ?? { label: c.tier, cls: "t-hobby" };
         const ts = c.teamSize;
@@ -319,13 +340,16 @@ function ComparablesTable({ rows }: { rows: SteamComparable[] }) {
             <td className="r">{rate(c.rating)}</td><td className="r">{c.votes == null ? "—" : fmt(c.votes)}</td>
             <td className="r">{c.reviewVelocity == null ? "—" : fmt(c.reviewVelocity)}</td>
             <td className="r">{fmtOwners(c.owners)}</td><td className="r">{money(c.priceCents)}</td>
-            <td style={{ color: "var(--ink-3, #6b7280)" }}>{c.developer ?? "—"}</td></tr>
+            <td style={{ color: "var(--ink-3, #6b7280)" }}>{c.developer ?? "—"}</td>
+            {onProject && <td className="r"><button type="button" className="project-btn" title={PROJECT_TIP}
+              onClick={() => onProject({ title: c.title, priceCents: c.priceCents, owners: c.owners, votes: c.votes, reviewVelocity: c.reviewVelocity })}>
+              → project</button></td>}</tr>
         );
       })}</tbody></table>
   );
 }
 
-function ComparablesCard({ rows }: { rows: SteamComparable[] }) {
+function ComparablesCard({ rows, onProject }: { rows: SteamComparable[]; onProject?: (seed: RevenueSeed) => void }) {
   const [cohort, setCohort] = useState<"all" | "solo">("all");
   const shown = cohort === "solo" ? rows.filter(isSoloReachable) : rows;
   const soloN = rows.filter(isSoloReachable).length;
@@ -338,7 +362,7 @@ function ComparablesCard({ rows }: { rows: SteamComparable[] }) {
         </span>
       </h3>
       {cohort === "solo" && <p className="view-head">Studios a <b>1–2 or 3–10 person</b> team could realistically match, by researched team-size estimate. Untagged studios are hidden rather than assumed solo.</p>}
-      {shown.length ? <ComparablesTable rows={shown} /> : <p className="view-head">No solo-reachable comparables tagged in the current set yet.</p>}
+      {shown.length ? <ComparablesTable rows={shown} onProject={onProject} /> : <p className="view-head">No solo-reachable comparables tagged in the current set yet.</p>}
     </div>
   );
 }
@@ -370,7 +394,7 @@ function GenreEconCard({ data }: { data: SteamOverview }) {
   );
 }
 
-function SteamView({ data, section }: { data: SteamOverview; section: SteamSection }) {
+function SteamView({ data, section, onProject }: { data: SteamOverview; section: SteamSection; onProject?: (seed: RevenueSeed) => void }) {
   if (section === "economics") return <GenreEconCard data={data} />;
   if (section === "pricing")
     return <div className="card">{head(I.money, "Pricing & monetization", "indie cohort — what each price band is worth (owners × price)")}<PricingTable rows={data.pricing} /></div>;
@@ -384,12 +408,13 @@ function SteamView({ data, section }: { data: SteamOverview; section: SteamSecti
       </>
     );
   if (section === "comparables")
-    return <ComparablesCard rows={data.comparables} />;
+    return <ComparablesCard rows={data.comparables} onProject={onProject} />;
   if (section === "opportunity")
     return <div className="card">{head(I.gaps, "Opportunity — what to build next", "indie genre × tag: high demand, low supply, monetizable")}<OppList gaps={data.opportunity} /></div>;
   // overview (default) — KPIs + tier distribution + highlights
   return (
     <>
+      <ReadStrip lines={data.read} />
       <SteamKpis data={data} />
       <div className="card hero">{head(I.overview, "Scale-tier distribution", "inferred from reviews + owners + self-published · blue = indie cohort, grey = AAA context")}
         <EChart option={tierBarOption(data.tiers)} style={{ minHeight: 240 }} /></div>
@@ -402,7 +427,7 @@ function SteamView({ data, section }: { data: SteamOverview; section: SteamSecti
 }
 
 /* ───────────── shell ───────────── */
-export function Radar({ hidden }: { hidden: boolean }) {
+export function Radar({ hidden, onProject }: { hidden: boolean; onProject?: (seed: RevenueSeed) => void }) {
   const drawer = useDrawer();
   const [platform, setPlatform] = useState<Platform>("all");
   const [view, setView] = useState<View>("overview");
@@ -511,7 +536,7 @@ export function Radar({ hidden }: { hidden: boolean }) {
         <div className="content">
           {err && <div className="card" style={{ color: "var(--red)" }}>Failed to load: {err}</div>}
           {isSteam ? (
-            steam ? <SteamView data={steam} section={steamView} /> : <Skel />
+            steam ? <SteamView data={steam} section={steamView} onProject={onProject} /> : <Skel />
           ) : (
             <>
               {view === "overview" && (ov ? <OverviewView ov={ov} /> : <Skel />)}

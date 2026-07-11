@@ -169,6 +169,74 @@ const COLLECTION_BLURB: Record<string, string> = {
   prototype: "Playable builds and paper tests will collect here — each one linked back to the loop family it validates.",
 };
 
+// ── Leaderboard (evaluation Phase A4) ──
+// The gallery answers "what pitches exist"; the leaderboard answers "which candidate is
+// currently winning, and what evidence would change that" — score dots side by side,
+// sorted by evidence state (tested beats untested paper strength), with explicit
+// missing-evidence chips so the next action is legible per row.
+const STATUS_RANK: Record<string, number> = { shipped: 0, prototyping: 1, proposed: 2 };
+
+function scoreSum(p: Pitch): number {
+  return (p.browserFit ?? 0) + (p.steamFit ?? 0) + (p.buildEase ?? 0);
+}
+
+export function rankPitches(pitches: Pitch[]): Pitch[] {
+  return pitches
+    .filter((p) => p.status !== "shelved")
+    .sort((a, b) => {
+      const s = (STATUS_RANK[a.status] ?? 9) - (STATUS_RANK[b.status] ?? 9);
+      if (s !== 0) return s;
+      const sc = scoreSum(b) - scoreSum(a);
+      if (sc !== 0) return sc;
+      return b.pitchDate.localeCompare(a.pitchDate);
+    });
+}
+
+function evidenceChips(p: Pitch): { label: string; missing: boolean }[] {
+  const chips: { label: string; missing: boolean }[] = [];
+  if (p.status === "proposed") chips.push({ label: "unprototyped", missing: true });
+  else if (p.status === "prototyping") chips.push({ label: "in gray-box", missing: false });
+  else chips.push({ label: p.status, missing: false });
+  chips.push(p.evidence ? { label: "evidence noted", missing: false } : { label: "no evidence", missing: true });
+  chips.push(p.source ? { label: "source linked", missing: false } : { label: "no source", missing: true });
+  return chips;
+}
+
+function LeaderboardView({ pitches }: { pitches: Pitch[] }) {
+  const ranked = rankPitches(pitches);
+  if (!ranked.length) return <div className="empty"><h3>No active pitches to rank yet</h3></div>;
+  return (
+    <div className="card">
+      <h3>Candidate leaderboard<span className="sub">non-shelved pitches — evidence state first, paper scores second</span></h3>
+      <p className="view-head">
+        A tested loop outranks a stronger-looking untested one. The chips say what's missing —
+        that's the next action for the row, not a demerit.
+      </p>
+      <table className="dtable"><thead><tr>
+        <th>#</th><th>Pitch</th><th>Loop</th>
+        <th className="r" title="Browser-native viability: instant hook, portal retention, ad-monetizability">Browser</th>
+        <th className="r" title="Paid-Steam laddering potential + revenue ceiling vs comps">Steam</th>
+        <th className="r" title="Solo-dev feasibility — higher = cheaper/easier">Build</th>
+        <th>Status</th><th>Evidence</th>
+      </tr></thead>
+        <tbody>{ranked.map((p, i) => (
+          <tr key={p.slug}>
+            <td className="r">{i + 1}</td>
+            <td className="gname">{p.title}{p.codeName && <span className="pcode"> "{p.codeName}"</span>}</td>
+            <td>{p.loopFamily ? (LOOP_LABEL[p.loopFamily] || p.loopFamily) : "—"}</td>
+            <td className="r">{p.browserFit !== null ? <Dots n={p.browserFit} /> : "—"}</td>
+            <td className="r">{p.steamFit !== null ? <Dots n={p.steamFit} /> : "—"}</td>
+            <td className="r">{p.buildEase !== null ? <Dots n={p.buildEase} /> : "—"}</td>
+            <td><span className={"ptag st st-" + p.status}>{p.status}</span></td>
+            <td><span className="ev-chips">{evidenceChips(p).map((c) => (
+              <span key={c.label} className={"ev-chip" + (c.missing ? " ev-missing" : "")}>{c.label}</span>
+            ))}</span></td>
+          </tr>
+        ))}</tbody></table>
+    </div>
+  );
+}
+
 export function Library({ hidden }: { hidden: boolean }) {
   const drawer = useDrawer();
   const [pitches, setPitches] = useState<Pitch[]>([]);
@@ -188,11 +256,13 @@ export function Library({ hidden }: { hidden: boolean }) {
     return c;
   }, [pitches, items]);
 
-  const activeName = COLLECTIONS.find((c) => c.key === active)?.name || "";
+  const isLeaderboard = active === "leaderboard";
+  const activeName = isLeaderboard ? "Leaderboard" : COLLECTIONS.find((c) => c.key === active)?.name || "";
   const shownPitches = active === "pitch" ? pitches : [];
-  const shownItems = active === "pitch" ? [] : items.filter((i) => i.kind === active);
-  const isEmpty = loaded && shownPitches.length === 0 && shownItems.length === 0;
+  const shownItems = active === "pitch" || isLeaderboard ? [] : items.filter((i) => i.kind === active);
+  const isEmpty = loaded && !isLeaderboard && shownPitches.length === 0 && shownItems.length === 0;
   const totalLatest = pitches[0]?.pitchDate;
+  const activePitchCount = pitches.filter((p) => p.status !== "shelved").length;
 
   return (
     <section className="service" data-svc="library" hidden={hidden}>
@@ -219,6 +289,17 @@ export function Library({ hidden }: { hidden: boolean }) {
             </span>
           </a>
         ))}
+        <div className="nav-label">Views</div>
+        <a
+          className={"nav-item" + (isLeaderboard ? " active" : "")}
+          onClick={() => setActive("leaderboard")}
+        >
+          <svg viewBox="0 0 24 24"><path d="M4 20V10M12 20V4M20 20v-7" /></svg>
+          Leaderboard
+          <span className="badge" style={{ background: activePitchCount ? "var(--accent-soft)" : "var(--text-3)" }}>
+            {activePitchCount}
+          </span>
+        </a>
         <div className="side-foot">
           {pitches.length > 0
             ? `${pitches.length} pitch${pitches.length === 1 ? "" : "es"} · latest ${totalLatest ? fmtDate(totalLatest) : "—"}`
@@ -231,7 +312,7 @@ export function Library({ hidden }: { hidden: boolean }) {
         <div className="topbar">
           <NavToggle onClick={drawer.openDrawer} />
           <h2>
-            {activeName} <small>ideas and explorations, next to the market intel that informs them</small>
+            {activeName} <small>{isLeaderboard ? "which candidate is winning — and what evidence would change that" : "ideas and explorations, next to the market intel that informs them"}</small>
           </h2>
         </div>
 
@@ -240,6 +321,8 @@ export function Library({ hidden }: { hidden: boolean }) {
             <div className="bcard-grid">
               {[0, 1, 2].map((i) => <div className="bcard skeleton" key={i} style={{ height: 220 }} />)}
             </div>
+          ) : isLeaderboard ? (
+            <LeaderboardView pitches={pitches} />
           ) : isEmpty ? (
             <EmptyState collectionKey={active} name={activeName} />
           ) : (
