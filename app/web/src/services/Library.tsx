@@ -198,10 +198,15 @@ const COLLECTION_BLURB: Record<string, string> = {
 // missing-evidence chips so the next action is legible per row.
 const STATUS_RANK: Record<string, number> = { shipped: 0, prototyping: 1, proposed: 2 };
 
-function scoreSum(p: Pitch): number {
-  // All five 1..3 axes — a pitch strong on hook + founder-fit should edge out an equal
-  // one that's weak on the two lenses the commercial scores miss.
-  return (p.browserFit ?? 0) + (p.steamFit ?? 0) + (p.buildEase ?? 0) + (p.marketability ?? 0) + (p.founderFit ?? 0);
+function scoreMean(p: Pitch): number {
+  // Average of the PRESENT 1..3 axes — an axis scored n/a (e.g. a Steam-only pitch with no
+  // browser fit) means "doesn't apply", not "zero", so it must be excluded rather than
+  // dragging the rank down. A pitch strong on hook + founder-fit still edges out an equal
+  // one that's weak on the two lenses the commercial scores miss; a missing axis just isn't
+  // counted against it.
+  const vals = [p.browserFit, p.steamFit, p.buildEase, p.marketability, p.founderFit]
+    .filter((v): v is number => v !== null);
+  return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
 }
 
 export function rankPitches(pitches: Pitch[]): Pitch[] {
@@ -210,7 +215,7 @@ export function rankPitches(pitches: Pitch[]): Pitch[] {
     .sort((a, b) => {
       const s = (STATUS_RANK[a.status] ?? 9) - (STATUS_RANK[b.status] ?? 9);
       if (s !== 0) return s;
-      const sc = scoreSum(b) - scoreSum(a);
+      const sc = scoreMean(b) - scoreMean(a);
       if (sc !== 0) return sc;
       return b.pitchDate.localeCompare(a.pitchDate);
     });

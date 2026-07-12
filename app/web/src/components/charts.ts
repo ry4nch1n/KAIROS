@@ -144,10 +144,16 @@ export function quadrantOption(pts: QuadrantPoint[], opt: { yName: string; weigh
     yAxis: { type: "log", name: opt.yName + " (demand) →", nameLocation: "middle", nameGap: 48, nameRotate: 90, nameTextStyle: { color: AX, fontFamily: FONT, fontSize: 10 }, axisLine: { lineStyle: { color: GRID } }, axisLabel: { color: AX, fontFamily: FONT, fontSize: 9 }, splitLine: { lineStyle: { color: GRID } } },
     series: [{
       type: "scatter", data,
-      label: { show: true, formatter: (p: any) => p.value[3], position: "right", color: AX, fontFamily: FONT, fontSize: 9 },
-      labelLayout: { hideOverlap: true },
+      // Owners are SteamSpy bucket midpoints, so many genres land on the SAME y (identical
+      // buckets) and their labels collide on one line. A white label chip keeps each legible,
+      // shiftY nudges colliders apart vertically, and hideOverlap drops any that still touch.
+      label: { show: true, formatter: (p: any) => p.value[3], position: "right", color: AX, fontFamily: FONT, fontSize: 9,
+        backgroundColor: "rgba(255,255,255,.82)", padding: [1, 3], borderRadius: 2 },
+      labelLayout: { hideOverlap: true, moveOverlap: "shiftY" },
+      // median-demand label sits at the line's top-right (insideEndTop), clear of the y-axis
+      // tick numbers it used to overprint at the bottom-left.
       markLine: { silent: true, symbol: "none", lineStyle: { color: "#94a3b8", type: "dashed", opacity: 0.6 },
-        data: [{ xAxis: medSupply, label: { show: false } }, { yAxis: medApp, label: { formatter: "median demand", color: AX, fontSize: 9, position: "start" } }] },
+        data: [{ xAxis: medSupply, label: { show: false } }, { yAxis: medApp, label: { formatter: "median demand", color: AX, fontSize: 9, position: "insideEndTop" } }] },
     }],
   };
 }
