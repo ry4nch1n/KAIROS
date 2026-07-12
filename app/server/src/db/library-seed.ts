@@ -15,6 +15,17 @@ const PROTO = "https://kairos-prototypes.netlify.app";
 export const LIBRARY_PROTOTYPES = [
   {
     kind: "prototype",
+    title: "Hearthspeak — Loop Toy",
+    summary:
+      "The pitch's kill-gate toy: 10 magic words, one glyph-lit room. Compose sentences (Element + Shape + Behaviour + Modifier), bind them to spellbook pages, cast at props — every pairwise combo hand-authored. Tests whether combining two known words produces a grin, and whether prepare-then-cast feels thoughtful. Browser-playable.",
+    mediaUrl: `${PROTO}/hearthspeak-20260711/`,
+    imageUrl: `${ART}/hearthspeak-20260711/header.png`,
+    tags: ["Hearthspeak", "extraction-lite", "browser"],
+    status: "validated",
+    date: "2026-07-12",
+  },
+  {
+    kind: "prototype",
     title: "Ferrywick — Loop Toy",
     summary:
       "Tests the route-planning core: lay ferry lines to keep every village connected on a limited budget, then re-thread when the rising tide floods your low channels. Does drawing-and-re-routing-under-pressure feel good? Browser-playable.",

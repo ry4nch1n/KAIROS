@@ -166,6 +166,9 @@ button{font-family:inherit}
 .ptag.st-prototyping{background:rgba(5,150,105,.13);color:var(--green)}
 .ptag.st-shelved{background:var(--surface-2);color:var(--text-3)}
 .ptag.st-shipped{background:rgba(124,58,237,.13);color:var(--violet)}
+/* validated: a prototype whose loop proved out in testing — the lead candidate. A verdict
+   above "prototyping" (still iterating) but short of "shipped" (done). Cyan reads as spotlight. */
+.ptag.st-validated{background:rgba(8,145,178,.14);color:#0891b2;font-weight:600}
 .ptag.badge-recommended{background:var(--primary);color:#fff}
 .ptag.badge-retention-safe{background:rgba(37,99,235,.12);color:var(--primary-deep);box-shadow:inset 0 0 0 1px rgba(37,99,235,.4)}
 .ptag.badge-cashflow{background:rgba(5,150,105,.13);color:var(--green)}
