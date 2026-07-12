@@ -31,16 +31,23 @@ const fmtOwners = (n: number | null) =>
 
 type Mode = "browser" | "steam";
 
-/** Browser | Steam sub-selection, shown in each panel's topbar. */
+/** Browser | Steam platform switch — mirrors GameRadar's top-of-panel platform selector
+ *  (labeled group + coloured dots) so the two dashboards read the same, instead of a bare
+ *  seg tucked in the far corner. */
 function ModeSeg({ mode, setMode }: { mode: Mode; setMode: (m: Mode) => void }) {
   return (
-    <div className="seg" style={{ marginLeft: "auto" }}>
-      <button className={"seg-btn" + (mode === "browser" ? " active" : "")} onClick={() => setMode("browser")}>
-        Browser
-      </button>
-      <button className={"seg-btn" + (mode === "steam" ? " active" : "")} onClick={() => setMode("steam")}>
-        Steam
-      </button>
+    <div className="platform-groups" role="tablist" aria-label="Platform">
+      <div className="seg-group">
+        <span className="seg-group-label">Platform</span>
+        <div className="seg">
+          <button className={"seg-btn" + (mode === "browser" ? " active" : "")} role="tab" aria-selected={mode === "browser"} onClick={() => setMode("browser")}>
+            <span className="dot all"></span>Browser
+          </button>
+          <button className={"seg-btn" + (mode === "steam" ? " active" : "")} role="tab" aria-selected={mode === "steam"} onClick={() => setMode("steam")}>
+            <span className="dot steam"></span>Steam
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -252,6 +259,7 @@ function SteamPanel({ mode, setMode, seed, onClearSeed, target }: { mode: Mode; 
           </a>
         ))}
         <div className="side-foot">
+          Pick the engine <b>you'll ship on</b> — this models your build, not any comparable's.
           Godot free · Unreal 5% of gross &gt; $1M · Unity Pro seat &gt; $200k (fixed cost, not a split)
         </div>
       </aside>
@@ -274,7 +282,7 @@ function SteamPanel({ mode, setMode, seed, onClearSeed, target }: { mode: Mode; 
                 {anchorGross != null && <> ≈ <b>{usd(anchorGross)}</b> lifetime gross proxy</>}
                 {seed.votes != null && <> · {seed.votes.toLocaleString("en-US")} reviews</>}
                 {seed.reviewVelocity != null && <> · +{seed.reviewVelocity}/day</>}
-                <span className="anchor-note">price prefilled from this comparable · owners are SteamSpy bucket midpoints — an anchor for calibration, not a forecast</span>
+                <span className="anchor-note">price prefilled from this comparable · owners are SteamSpy bucket midpoints — an anchor for calibration, not a forecast · engine &amp; wishlists model <b>your</b> build, not {seed.title}'s</span>
               </div>
               {onClearSeed && <button type="button" className="anchor-clear" onClick={onClearSeed} aria-label="Clear anchor">×</button>}
             </div>
@@ -300,6 +308,7 @@ function SteamPanel({ mode, setMode, seed, onClearSeed, target }: { mode: Mode; 
                 {p.engineRoyalty > 0 && p.engineLicense > 0 && " · "}
                 {p.engineLicense > 0 && "Pro seats " + usd(p.engineLicense)}
                 {p.engineCost === 0 && "no royalty or seat fee at this scale"}
+                <span className="kpi-note"> · assumes you ship on {eng.label} — your build, not the comparable's</span>
               </div>
             </div>
           </div>
