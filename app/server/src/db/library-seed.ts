@@ -21,7 +21,7 @@ export const LIBRARY_PROTOTYPES = [
     mediaUrl: `${PROTO}/ferrywick-20260711/`,
     imageUrl: `${ART}/ferrywick-20260711/header.png`,
     tags: ["Ferrywick", "route-planning", "browser"],
-    status: "shipped",
+    status: "shelved",
     date: "2026-07-11",
   },
   {
@@ -32,7 +32,7 @@ export const LIBRARY_PROTOTYPES = [
     mediaUrl: `${PROTO}/overflow-20260710/`,
     imageUrl: `${ART}/overflow-20260710/header.png`,
     tags: ["Overflow", "automation-under-pressure", "browser"],
-    status: "shipped",
+    status: "shelved",
     date: "2026-07-10",
   },
   {
@@ -43,7 +43,7 @@ export const LIBRARY_PROTOTYPES = [
     mediaUrl: "https://solar-forge-globe-toy.netlify.app",
     imageUrl: `${ART}/solar-forge-20260706/header.png`,
     tags: ["Solar Forge", "logistics", "browser"],
-    status: "shipped",
+    status: "prototyping",
     date: "2026-07-08",
   },
 ] as const;
