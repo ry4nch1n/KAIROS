@@ -192,6 +192,8 @@ function GenresView({ rows }: { rows: GenreRow[] }) {
 
 function TagsView({ ov }: { ov: Overview }) {
   const max = Math.max(1, ...ov.tags.map((t) => t.count));
+  const settings = ov.settings ?? [];
+  const setMax = Math.max(1, ...settings.map((s) => s.count));
   return (
     <div className="grid g-2b">
       <div className="card">{head(I.tags, "Tag treemap", "by game count")}<EChart option={treemapOption(ov.tags)} style={{ minHeight: 360 }} /></div>
@@ -199,6 +201,18 @@ function TagsView({ ov }: { ov: Overview }) {
         <table className="dtable"><thead><tr><th>Tag</th><th className="r">Games</th></tr></thead>
           <tbody>{ov.tags.map((t) => (<tr key={t.tag}><td className="gname">{t.tag}<span className="minibar"><i style={{ width: (t.count / max) * 100 + "%" }} /></span></td><td className="r">{fmt(t.count)}</td></tr>))}</tbody></table>
       </div>
+      {settings.length > 0 && (
+        <div className="card">{head(I.tags, "Setting mix", "setting/theme is an axis orthogonal to genre — where the market's white space often hides")}
+          <table className="dtable"><thead><tr><th>Setting</th><th>Examples</th><th className="r">Games</th></tr></thead>
+            <tbody>{settings.map((s) => (
+              <tr key={s.setting}>
+                <td className="gname">{s.setting}<span className="minibar"><i style={{ width: (s.count / setMax) * 100 + "%" }} /></span></td>
+                <td style={{ color: "var(--ink-3, #6b7280)" }}>{s.examples.join(" · ") || "—"}</td>
+                <td className="r">{fmt(s.count)}</td>
+              </tr>
+            ))}</tbody></table>
+        </div>
+      )}
     </div>
   );
 }

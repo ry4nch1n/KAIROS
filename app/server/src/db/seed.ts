@@ -72,6 +72,11 @@ const GENRE_TAGS: Record<string, string[]> = {
   Strategy: ["strategy", "tower-defense"],
 };
 const CROSS_TAGS = ["physics", "pixel", "3d", "retro", "arcade", "mobile", "short-session", "merge"];
+// Setting/theme tags (#25) — one per game via a deterministic rotation, so the Setting Mix
+// facet has evenly-spread sample coverage in local dev + tests (these map into the controlled
+// setting vocabulary in contract.taxonomy.settings). Kept out of the random CROSS_TAGS pool so
+// the seed stays deterministic and existing genre×tag gaps are undisturbed.
+const SETTING_TAGS_SEED = ["sci-fi", "fantasy", "space", "medieval", "cyberpunk", "post-apocalyptic", "horror", "historical"];
 const DEVELOPERS = [
   "Nova Forge", "Pixel Cabin", "Loop Labs", "Mad Otter", "Solo Star", "Bitwave",
   "Hexa Games", "Cozy Knoll", "Drift Co", "Volt Studio", "Tiny Titan", "Glasshouse",
@@ -177,6 +182,7 @@ export async function seed(db: Querier): Promise<void> {
       const tagNames = new Set<string>(GENRE_TAGS[genre] ?? [genre.toLowerCase()]);
       const crossCount = 1 + Math.floor(rng() * 2);
       for (let c = 0; c < crossCount; c++) tagNames.add(pick(CROSS_TAGS));
+      tagNames.add(SETTING_TAGS_SEED[idx % SETTING_TAGS_SEED.length]); // setting/theme facet (#25)
       for (const tn of tagNames) {
         const tid = await ensureTag(tn);
         await db.query("INSERT INTO game_tags(game_id, tag_id) VALUES ($1,$2) ON CONFLICT DO NOTHING", [

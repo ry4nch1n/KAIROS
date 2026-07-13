@@ -66,6 +66,26 @@ describe("A5 tag frequency", () => {
   });
 });
 
+describe("A5b setting/theme facet (#25)", () => {
+  it("derives settings from tags, sorted desc, only vocabulary values, with examples", async () => {
+    const { CONTRACT } = await import("shared");
+    const vocab = new Set<string>(CONTRACT.taxonomy.settings as readonly string[]);
+    const s = await q.getSettingFacets(db, "all");
+    expect(s.length).toBeGreaterThan(0);
+    for (let i = 1; i < s.length; i++) expect(s[i - 1].count).toBeGreaterThanOrEqual(s[i].count);
+    for (const row of s) {
+      expect(vocab.has(row.setting)).toBe(true); // never an unmapped/guessed setting
+      expect(row.count).toBeGreaterThan(0);
+      expect(row.examples.length).toBeGreaterThan(0);
+      expect(row.examples.length).toBeLessThanOrEqual(3);
+    }
+    // orthogonal axis: per-platform totals never exceed the "all" (browser) total
+    const poki = await q.getSettingFacets(db, "poki");
+    const sum = (rows: typeof s) => rows.reduce((a, r) => a + r.count, 0);
+    expect(sum(poki)).toBeLessThanOrEqual(sum(s));
+  });
+});
+
 describe("A6 hidden gems (percentile)", () => {
   it("is a selective minority, not ~half the catalogue", async () => {
     const all = (await db.query("SELECT count(*)::int n FROM v_latest"))[0].n;
