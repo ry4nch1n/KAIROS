@@ -3,12 +3,51 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { crazygames } from "../src/crawler/crazygames.ts";
 import { loadGames } from "../src/crawler/load.ts";
+import { politeFetch } from "../src/crawler/base.ts";
 import { freshMemoryDb } from "../src/db/db.ts";
 
 const fixture = readFileSync(
   fileURLToPath(new URL("./fixtures/crazygames_game.html", import.meta.url)),
   "utf8"
 );
+
+describe("A10b politeFetch timeout (#31)", () => {
+  it("aborts a hung request and surfaces a timeout error", async () => {
+    const orig = globalThis.fetch;
+    // A fetch that never resolves on its own — only settles when the abort signal fires.
+    globalThis.fetch = ((_url: any, opts: any) =>
+      new Promise((_resolve, reject) => {
+        opts.signal.addEventListener("abort", () =>
+          reject(Object.assign(new Error("aborted"), { name: "AbortError" }))
+        );
+      })) as any;
+    try {
+      await expect(politeFetch("http://example.test/hang", 20)).rejects.toThrow(/timeout after 20ms/);
+    } finally {
+      globalThis.fetch = orig;
+    }
+  });
+
+  it("returns the body on a fast response without tripping the timeout", async () => {
+    const orig = globalThis.fetch;
+    globalThis.fetch = (async () => ({ ok: true, text: async () => "hello" })) as any;
+    try {
+      expect(await politeFetch("http://example.test/ok", 500)).toBe("hello");
+    } finally {
+      globalThis.fetch = orig;
+    }
+  });
+
+  it("still throws the HTTP status error for a non-ok response (timeout is additive)", async () => {
+    const orig = globalThis.fetch;
+    globalThis.fetch = (async () => ({ ok: false, status: 503, text: async () => "" })) as any;
+    try {
+      await expect(politeFetch("http://example.test/down", 500)).rejects.toThrow(/-> 503/);
+    } finally {
+      globalThis.fetch = orig;
+    }
+  });
+});
 
 describe("A11 crazygames parse", () => {
   it("maps __NEXT_DATA__ game to RawGame", () => {

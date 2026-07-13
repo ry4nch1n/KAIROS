@@ -38,10 +38,29 @@ export interface SourceAdapter {
 const UA =
   "KAIROS-GameRadar/0.1 (+market-intel; contact: solo-dev) Mozilla/5.0 (compatible)";
 
-export async function politeFetch(url: string): Promise<string> {
-  const res = await fetch(url, { headers: { "User-Agent": UA } });
-  if (!res.ok) throw new Error(`fetch ${url} -> ${res.status}`);
-  return res.text();
+// Per-request timeout (#31). Every crawler request routes through politeFetch, so bounding
+// it here bounds them all — including the three sequential Steam endpoints in fetchSteamGame
+// (SteamSpy, the most rate-limit-prone, is already caught per-endpoint and continues with
+// partial fields; appdetails/reviews propagate to the steamCrawl loop's catch, which logs +
+// moves to the next game). A single hung upstream can no longer stall a record indefinitely
+// and blow the crawl's Actions-minute budget — it fails fast and the run proceeds.
+const DEFAULT_TIMEOUT_MS = 8000;
+
+export async function politeFetch(url: string, timeoutMs = DEFAULT_TIMEOUT_MS): Promise<string> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, { headers: { "User-Agent": UA }, signal: ctrl.signal });
+    if (!res.ok) throw new Error(`fetch ${url} -> ${res.status}`);
+    return await res.text(); // awaited inside the try so a hung body read is bounded too
+  } catch (e: any) {
+    // The AbortController fires on timeout; surface it as a clear, greppable timeout error
+    // (callers treat it like any other fetch failure — the partial-failure paths already exist).
+    if (e?.name === "AbortError") throw new Error(`fetch ${url} -> timeout after ${timeoutMs}ms`);
+    throw e;
+  } finally {
+    clearTimeout(timer); // never leave a dangling timer holding the event loop open
+  }
 }
 
 export const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
