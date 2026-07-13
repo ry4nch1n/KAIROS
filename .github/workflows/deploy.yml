@@ -16,7 +16,12 @@ name: deploy
 
 on:
   schedule:
-    - cron: "0 1 * * *" # 01:00 UTC daily = 09:00 Singapore (you're awake to catch issues)
+    # 01:00 UTC = 09:00 Singapore (you're awake to catch issues). Every day EXCEPT Monday
+    # (day-of-week 1): on Mondays the kairos-feedback-implementation routine implements the
+    # week's feedback and performs that day's deploy itself, so the scheduled deploy stands
+    # down to avoid shipping main ahead of the routine. `workflow_dispatch` still works any
+    # day, so the Monday routine (and a manual "Deploy now") can deploy whenever needed.
+    - cron: "0 1 * * 0,2-6" # Sun + Tue–Sat (skips Mon)
   workflow_dispatch: # manual "Deploy now" button in the Actions tab
     inputs:
       force:
