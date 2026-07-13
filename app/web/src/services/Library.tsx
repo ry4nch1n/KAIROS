@@ -3,6 +3,7 @@ import { useDrawer, NavToggle, NavScrim, DrawerClose } from "../components/Mobil
 import type { LibraryItem, Pitch } from "shared";
 import { api } from "../lib/api.ts";
 import { routeLean } from "../lib/routeLean.ts";
+import { loopFamilyCoverage } from "../lib/loopFamily.ts";
 
 // Collections map to a source: "pitches" reads the pitches table; the rest read
 // library_items by kind. New collections just add a row here.
@@ -274,6 +275,46 @@ function LeaderboardView({ pitches }: { pitches: Pitch[] }) {
   );
 }
 
+// Loop-family coverage (#71): the SUPPLY half of the demand-by-family read the weekly routine
+// hand-builds — how many pitches the Library has bet on per loop family, and which families
+// have zero coverage (the openings). The demand columns (per-family brief signals) are the
+// design-heavy residual on #12: brief items don't yet carry a loopFamily field. `LOOP_LABEL`
+// is the family universe, so an un-bet family still shows as a row rather than vanishing.
+function FamilyCoverageView({ pitches }: { pitches: Pitch[] }) {
+  const rows = loopFamilyCoverage(pitches, Object.keys(LOOP_LABEL));
+  const maxActive = Math.max(1, ...rows.map((r) => r.active));
+  return (
+    <div className="card">
+      <h3>Loop-family coverage<span className="sub">how many pitches the Library has bet on per loop family — the supply side of the Phase-0 read</span></h3>
+      <p className="view-head">
+        A family with rising market demand and <b>zero live coverage</b> is the opening worth a new
+        pitch. Demand signal per family (from the brief) is coming next — this is the coverage side.
+      </p>
+      <table className="dtable"><thead><tr>
+        <th>Loop family</th>
+        <th className="r" title="Non-shelved pitches — the live bets">Live</th>
+        <th className="r" title="All pitches ever tagged to this family">Total</th>
+        <th>Status</th>
+        <th>Pitches</th>
+      </tr></thead>
+        <tbody>{rows.map((r) => (
+          <tr key={r.family} className={r.active === 0 ? "lf-empty" : ""}>
+            <td className="gname">{LOOP_LABEL[r.family] || r.family}
+              <span className="minibar"><i style={{ width: (r.active / maxActive) * 100 + "%" }} /></span></td>
+            <td className="r">{r.active || <span title="no live pitch yet — an opening">0</span>}</td>
+            <td className="r">{r.total}</td>
+            <td>{Object.keys(r.byStatus).length
+              ? Object.entries(r.byStatus).map(([st, n]) => (
+                  <span key={st} className={"ptag st st-" + st}>{st} {n}</span>
+                ))
+              : <span style={{ color: "var(--text-3, #9ca3af)" }}>—</span>}</td>
+            <td style={{ color: "var(--ink-3, #6b7280)" }}>{r.titles.join(" · ") || "—"}</td>
+          </tr>
+        ))}</tbody></table>
+    </div>
+  );
+}
+
 export function Library({ hidden }: { hidden: boolean }) {
   const drawer = useDrawer();
   const [pitches, setPitches] = useState<Pitch[]>([]);
@@ -294,10 +335,11 @@ export function Library({ hidden }: { hidden: boolean }) {
   }, [pitches, items]);
 
   const isLeaderboard = active === "leaderboard";
-  const activeName = isLeaderboard ? "Leaderboard" : COLLECTIONS.find((c) => c.key === active)?.name || "";
+  const isFamilies = active === "families";
+  const activeName = isLeaderboard ? "Leaderboard" : isFamilies ? "Loop-family coverage" : COLLECTIONS.find((c) => c.key === active)?.name || "";
   const shownPitches = active === "pitch" ? pitches : [];
-  const shownItems = active === "pitch" || isLeaderboard ? [] : items.filter((i) => i.kind === active);
-  const isEmpty = loaded && !isLeaderboard && shownPitches.length === 0 && shownItems.length === 0;
+  const shownItems = active === "pitch" || isLeaderboard || isFamilies ? [] : items.filter((i) => i.kind === active);
+  const isEmpty = loaded && !isLeaderboard && !isFamilies && shownPitches.length === 0 && shownItems.length === 0;
   const totalLatest = pitches[0]?.pitchDate;
   const activePitchCount = pitches.filter((p) => p.status !== "shelved").length;
 
@@ -337,6 +379,13 @@ export function Library({ hidden }: { hidden: boolean }) {
             {activePitchCount}
           </span>
         </a>
+        <a
+          className={"nav-item" + (isFamilies ? " active" : "")}
+          onClick={() => setActive("families")}
+        >
+          <svg viewBox="0 0 24 24"><path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z" /></svg>
+          Family coverage
+        </a>
         <div className="side-foot">
           {pitches.length > 0
             ? `${pitches.length} pitch${pitches.length === 1 ? "" : "es"} · latest ${totalLatest ? fmtDate(totalLatest) : "—"}`
@@ -349,7 +398,7 @@ export function Library({ hidden }: { hidden: boolean }) {
         <div className="topbar">
           <NavToggle onClick={drawer.openDrawer} />
           <h2>
-            {activeName} <small>{isLeaderboard ? "which candidate is winning — and what evidence would change that" : "ideas and explorations, next to the market intel that informs them"}</small>
+            {activeName} <small>{isLeaderboard ? "which candidate is winning — and what evidence would change that" : isFamilies ? "which loop families the Library has bet on — and which openings it hasn't" : "ideas and explorations, next to the market intel that informs them"}</small>
           </h2>
         </div>
 
@@ -360,6 +409,8 @@ export function Library({ hidden }: { hidden: boolean }) {
             </div>
           ) : isLeaderboard ? (
             <LeaderboardView pitches={pitches} />
+          ) : isFamilies ? (
+            <FamilyCoverageView pitches={pitches} />
           ) : isEmpty ? (
             <EmptyState collectionKey={active} name={activeName} />
           ) : (
