@@ -197,7 +197,10 @@ const COLLECTION_BLURB: Record<string, string> = {
 // currently winning, and what evidence would change that" — score dots side by side,
 // sorted by evidence state (tested beats untested paper strength), with explicit
 // missing-evidence chips so the next action is legible per row.
-const STATUS_RANK: Record<string, number> = { shipped: 0, prototyping: 1, proposed: 2 };
+// Evidence-state order for the leaderboard: a play-tested lead candidate (`validated`) outranks
+// one still in gray-box (`prototyping`), which outranks paper-only (`proposed`). `shelved` never
+// reaches here — rankPitches filters it out.
+const STATUS_RANK: Record<string, number> = { shipped: 0, validated: 1, prototyping: 2, proposed: 3 };
 
 function scoreMean(p: Pitch): number {
   // Average of the PRESENT 1..3 axes — an axis scored n/a (e.g. a Steam-only pitch with no

@@ -106,6 +106,22 @@ describe("C2c setting/theme taxonomy (#25)", () => {
   });
 });
 
+describe("C2d pitch v6 — `validated` status", () => {
+  it("bumped both versions and added `validated` to the status vocabulary", () => {
+    expect(CONTRACT.pitch.version).toBeGreaterThanOrEqual(6);
+    expect(CONTRACT.version).toBeGreaterThanOrEqual(6);
+    expect(CONTRACT.pitch.statuses).toContain("validated");
+  });
+  it("accepts a pitch with the validated status (the play-test lead-candidate verdict)", () => {
+    expect(validatePitchInput({ ...goodPitch, status: "validated" }).ok).toBe(true);
+  });
+  it("still rejects an unknown status (must bump the contract)", () => {
+    const r = validatePitchInput({ ...goodPitch, status: "greenlit" });
+    expect(r.ok).toBe(false);
+    expect(r.errors.join(" ")).toMatch(/status/);
+  });
+});
+
 describe("C3 validateBriefPayload is advisory, never hard-fails a real payload", () => {
   it("passes a complete payload with no warnings", () => {
     const payload: Record<string, unknown> = {};
