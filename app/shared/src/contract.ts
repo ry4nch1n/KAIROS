@@ -16,7 +16,9 @@ export const CONTRACT = {
   // v5: Overview gained a `settings` facet — a small controlled setting/theme vocabulary
   //     (fantasy, sci-fi, historical, …) derived from existing tags, orthogonal to genre
   //     (#25 first slice). See taxonomy.settings below; additive, read defensively.
-  version: 5,
+  // v6: pitch v6 read-through — see pitch.version below (`validated` pitch status, the
+  //     play-tested lead-candidate verdict the leaderboard ranks above `prototyping`).
+  version: 6,
   pitch: {
     // v2: added visual-card fields — setting, artStyle, codeName, headerUrl, shotUrl.
     // v3: rating rework — scoreFields d1Fit/steamCeiling/buildCost → browserFit/steamFit/buildEase.
@@ -33,7 +35,10 @@ export const CONTRACT = {
     //     of #26's "Grab": first-session pull, distinct from platform fit). Founder fit —
     //     `founderFit` score + `whyMe` (why this holds YOUR attention for months; a
     //     market-perfect concept with no personal pull dies in month four).
-    version: 5,
+    // v6: added the `validated` status — a play-test verdict above `prototyping` (loop proved
+    //     out, this is the lead candidate) but short of `shipped`. The leaderboard ranks it
+    //     above prototyping; the prototype card already styles it (cyan chip). Additive.
+    version: 6,
     loopFamilies: [
       "extraction-lite",
       "automation-under-pressure",
@@ -45,7 +50,7 @@ export const CONTRACT = {
       "synergy-builder",
     ],
     badges: ["recommended", "retention-safe", "cashflow", "cheapest-build"],
-    statuses: ["proposed", "prototyping", "shelved", "shipped"],
+    statuses: ["proposed", "prototyping", "validated", "shelved", "shipped"],
     platformLadders: ["browser->steam", "browser-only", "steam-only"],
     provenances: ["market-backed", "design-derived"],
     contentScopes: ["small", "medium", "large"], // content bill vs. what the genre's buyers expect
