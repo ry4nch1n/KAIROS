@@ -283,7 +283,10 @@ export async function fetchSteamGame(appid: number): Promise<RawGame | null> {
   );
   let steamspy: any = {};
   try {
-    steamspy = JSON.parse(await politeFetch(`${STEAMSPY}?request=appdetails&appid=${appid}`));
+    // SteamSpy is the most rate-limit-prone of the three endpoints and its data is enrichment,
+    // not load-bearing — give it a tighter per-endpoint timeout so a hang here fails soft fast
+    // and we continue with whatever the store/reviews endpoints already returned (#31).
+    steamspy = JSON.parse(await politeFetch(`${STEAMSPY}?request=appdetails&appid=${appid}`, 6000));
   } catch (e) { console.warn(`  steamspy ${appid} failed:`, String(e)); }
   return parseSteamGame(appid, entry.data, reviews?.query_summary ?? {}, steamspy);
 }
