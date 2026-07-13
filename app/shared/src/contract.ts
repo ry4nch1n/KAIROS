@@ -13,7 +13,10 @@ export const CONTRACT = {
   //     the `contentScopes` taxonomy). Also covers the Phase-B analytics payload extensions
   //     (genre supplyTrend, gap supplyRising, Overview/SteamOverview quadrant, economics
   //     conversion) — all additive, read defensively by the client.
-  version: 4,
+  // v5: Overview gained a `settings` facet — a small controlled setting/theme vocabulary
+  //     (fantasy, sci-fi, historical, …) derived from existing tags, orthogonal to genre
+  //     (#25 first slice). See taxonomy.settings below; additive, read defensively.
+  version: 5,
   pitch: {
     // v2: added visual-card fields — setting, artStyle, codeName, headerUrl, shotUrl.
     // v3: rating rework — scoreFields d1Fit/steamCeiling/buildCost → browserFit/steamFit/buildEase.
@@ -60,7 +63,28 @@ export const CONTRACT = {
     // degrades defensively and the contract test catches real drift in CI.
     recommended: ["new_notable", "browser", "tooling", "market", "top_signals", "founder_take"],
   },
-  taxonomy: { version: 1 },
+  taxonomy: {
+    // v2: added `settings` — the setting/theme axis (#25). A small controlled vocabulary
+    // kept SEPARATE from genre/mechanic (same discipline as the taxonomy split in #7): a
+    // game's setting is orthogonal to what it plays like, and market white space often lives
+    // at a genre × setting intersection a genre-only view is blind to. Derived server-side by
+    // mapping setting-bearing tags into these buckets; the curated per-tag mapping + a full
+    // genre × setting matrix are the residual design work (this is the tag-facet first slice).
+    version: 2,
+    settings: [
+      "fantasy",
+      "sci-fi",
+      "space",
+      "cyberpunk",
+      "post-apocalyptic",
+      "horror",
+      "historical",
+      "medieval",
+      "modern",
+      "western",
+      "military",
+    ],
+  },
 } as const;
 
 export type Contract = typeof CONTRACT;

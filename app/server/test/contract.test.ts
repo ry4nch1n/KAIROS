@@ -94,6 +94,18 @@ describe("C2b pitch v5 — scope + hook + founder-fit fields", () => {
   });
 });
 
+describe("C2c setting/theme taxonomy (#25)", () => {
+  it("declares a non-empty controlled setting vocabulary and bumped the taxonomy version", () => {
+    expect(CONTRACT.taxonomy.version).toBeGreaterThanOrEqual(2);
+    expect(CONTRACT.taxonomy.settings.length).toBeGreaterThan(0);
+    // orthogonal to genre — the canonical settings the derivation maps into
+    expect(CONTRACT.taxonomy.settings).toContain("sci-fi");
+    expect(CONTRACT.taxonomy.settings).toContain("fantasy");
+    // top-level contract version reflects the additive Overview.settings extension
+    expect(CONTRACT.version).toBeGreaterThanOrEqual(5);
+  });
+});
+
 describe("C3 validateBriefPayload is advisory, never hard-fails a real payload", () => {
   it("passes a complete payload with no warnings", () => {
     const payload: Record<string, unknown> = {};

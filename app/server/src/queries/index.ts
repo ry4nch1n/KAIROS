@@ -3,12 +3,12 @@ import type { Querier } from "../db/db.ts";
 import type {
   Platform, Overview, OverviewKPI, GenreMomentum, TagFreq, ScatterPoint,
   HiddenGem, MarketGap, FeatureHeatmap, Insight, BriefEditionMeta, BriefEdition,
-  GenreRow, DeveloperRow, NewRelease, Trajectory, SupplyTrend, GenreLandscapePoint, QuadrantPoint, GenreVelocityBar, GlossaryRow, BriefSteering,
+  GenreRow, DeveloperRow, NewRelease, Trajectory, SupplyTrend, GenreLandscapePoint, QuadrantPoint, GenreVelocityBar, GlossaryRow, SettingFacet, BriefSteering,
   ScaleTierRow, SteamGenreEconomics, SteamCohort, SteamComparable, SteamOverview,
   SteamGap, SteamPriceBand, SteamOwnershipRow, SteamDeveloperRow, SteamNewRelease,
   Pitch, PitchInput, LibraryItemInput,
 } from "shared";
-import { assertPitchInput, validateBriefPayload } from "../../../shared/src/contract.ts";
+import { assertPitchInput, validateBriefPayload, CONTRACT } from "../../../shared/src/contract.ts";
 import { teamSizeFor } from "../data/teamSize.ts";
 import { conversionFor } from "../data/genreConversion.ts";
 
@@ -317,6 +317,58 @@ export async function getTagFrequency(db: Querier, platform: Platform): Promise<
      GROUP BY ${canonSql("t.name")} ORDER BY cnt DESC LIMIT 12`
   );
   return rows.map((r) => ({ tag: r.tag, count: num(r.cnt) }));
+}
+
+// Setting/theme facet (#25). Setting is an axis ORTHOGONAL to genre — two "Simulation"
+// games in different settings compete in different fields, and market white space often
+// lives at a genre × setting intersection a genre-only view can't see. Portals/Steam carry
+// setting labels mixed into their flat tag lists; this maps the setting-bearing ones into
+// the controlled vocabulary (contract.taxonomy.settings) and drops the rest. The map is the
+// residual-design seam: enriching the tag→setting coverage needs no shape change, only more
+// keys here. Kept deliberately conservative — an unmapped tag is left OUT, never guessed,
+// so the facet reports real coverage rather than inflating it.
+const SETTING_TAGS: Record<string, string> = {
+  "fantasy": "fantasy", "high fantasy": "fantasy", "dark fantasy": "fantasy", "magic": "fantasy",
+  "sci-fi": "sci-fi", "scifi": "sci-fi", "science fiction": "sci-fi", "futuristic": "sci-fi",
+  "space": "space", "space sim": "space", "outer space": "space",
+  "cyberpunk": "cyberpunk",
+  "post-apocalyptic": "post-apocalyptic", "post apocalyptic": "post-apocalyptic", "apocalyptic": "post-apocalyptic",
+  "horror": "horror", "survival horror": "horror", "lovecraftian": "horror",
+  "historical": "historical", "history": "historical",
+  "medieval": "medieval",
+  "modern": "modern", "contemporary": "modern",
+  "western": "western", "wild west": "western",
+  "military": "military", "war": "military", "wwii": "military", "world war ii": "military",
+};
+
+export async function getSettingFacets(db: Querier, platform: Platform): Promise<SettingFacet[]> {
+  const keys = Object.keys(SETTING_TAGS);
+  const ph = keys.map((_, i) => `$${i + 1}`).join(",");
+  const rows = await db.query(
+    `SELECT lower(t.name) AS tagname, g.id AS gid, g.title AS title
+     FROM tags t
+     JOIN game_tags gt ON gt.tag_id = t.id
+     JOIN games g ON g.id = gt.game_id
+     JOIN sources src ON src.id = g.source_id
+     WHERE g.is_live ${pf(platform)} AND lower(t.name) IN (${ph})`,
+    keys
+  );
+  // Aggregate in JS: a game can carry several setting tags (setting isn't exclusive), so it
+  // counts once per DISTINCT setting it maps into — orthogonal axes, not a partition.
+  const bySetting = new Map<string, { games: Set<number>; examples: string[] }>();
+  for (const r of rows) {
+    const setting = SETTING_TAGS[String(r.tagname)];
+    if (!setting) continue;
+    const e = bySetting.get(setting) ?? { games: new Set<number>(), examples: [] };
+    e.games.add(num(r.gid));
+    if (e.examples.length < 3 && !e.examples.includes(r.title)) e.examples.push(r.title);
+    bySetting.set(setting, e);
+  }
+  // Preserve the contract's canonical setting order for ties; sort primarily by supply.
+  const order = new Map((CONTRACT.taxonomy.settings as readonly string[]).map((s, i) => [s, i]));
+  return [...bySetting.entries()]
+    .map(([setting, e]) => ({ setting, count: e.games.size, examples: e.examples }))
+    .sort((a, b) => b.count - a.count || (order.get(a.setting) ?? 99) - (order.get(b.setting) ?? 99));
 }
 
 const GEM_RATING_PCTILE = 0.75, GEM_VOTES_PCTILE = 0.25;
@@ -766,7 +818,7 @@ async function getTagGlossary(db: Querier, platform: Platform, tagNames: string[
 }
 
 export async function getOverview(db: Querier, platform: Platform): Promise<Overview> {
-  const [gd, vol, gemRows, tags, heatmap, gaps, landscape, quadrant, pressure] = await Promise.all([
+  const [gd, vol, gemRows, tags, heatmap, gaps, landscape, quadrant, pressure, settings] = await Promise.all([
     genreVotesByDate(db, platform),
     genreCounts(db, platform),
     gemBase(db, platform),
@@ -776,6 +828,7 @@ export async function getOverview(db: Querier, platform: Platform): Promise<Over
     getGenreLandscape(db, platform),
     getGenreQuadrant(db, platform),
     genreSupplyPressure(db, platform),
+    getSettingFacets(db, platform),
   ]);
   const scatter = await getScatter(db, platform, gemRows);
   const gems = await getHiddenGems(db, platform, gemRows);
@@ -792,7 +845,7 @@ export async function getOverview(db: Querier, platform: Platform): Promise<Over
     .map((genre) => ({ genre, v: velocity(gd.byGenre[genre], gd.daySpan), trajectory: classifyTrajectory(gd.byGenre[genre], gd.daySpan).trajectory }))
     .sort((a, b) => b.v - a.v)[0];
   const read = composeBrowserRead({ gap: gaps[0], mover, pressure });
-  return { kpi, read, momentum, tags, scatter, heatmap, gaps, insights, landscape, quadrant, velocityBars, glossary, platform, subtitle: subtitleFor(platform) };
+  return { kpi, read, momentum, tags, scatter, heatmap, gaps, insights, landscape, quadrant, velocityBars, glossary, settings, platform, subtitle: subtitleFor(platform) };
 }
 
 // ── Phase 2: Steam / PC analytics ──

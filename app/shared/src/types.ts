@@ -199,6 +199,13 @@ export interface QuadrantPoint {
 }
 
 export interface GenreVelocityBar { genre: string; votesPerDay: number; }
+
+// One row per setting/theme present in the catalogue (#25). Setting is an axis orthogonal
+// to genre — derived by mapping setting-bearing tags into a controlled vocabulary
+// (contract.taxonomy.settings). The first slice of a genre × setting view: it surfaces
+// which settings the catalogue actually covers, so a "genre looks open" call can be checked
+// against whether the specific setting the plan cares about is crowded.
+export interface SettingFacet { setting: string; count: number; examples: string[]; }
 export interface GlossaryRow { label: string; kind: "genre" | "tag"; count: number; examples: string[]; definition: string; }
 
 export interface Overview {
@@ -217,6 +224,7 @@ export interface Overview {
   quadrant: QuadrantPoint[];
   velocityBars: GenreVelocityBar[];
   glossary: GlossaryRow[];
+  settings: SettingFacet[];
   platform: Platform;
   subtitle: string;
 }
