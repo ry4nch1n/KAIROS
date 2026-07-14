@@ -15,15 +15,15 @@ export interface RawGame {
   votes: number | null;
   featured: boolean;
   // ── Phase 2: Steam / PC fields (optional; null/undefined for browser sources) ──
-  releaseDate?: string | null;       // ISO YYYY-MM-DD
-  plays?: number | null;             // owners estimate (also mirrored to owners_est)
-  ownersEst?: number | null;         // SteamSpy owners-bucket midpoint
+  releaseDate?: string | null; // ISO YYYY-MM-DD
+  plays?: number | null; // owners estimate (also mirrored to owners_est)
+  ownersEst?: number | null; // SteamSpy owners-bucket midpoint
   priceCents?: number | null;
   discountPct?: number | null;
-  ccu?: number | null;               // concurrent players
+  ccu?: number | null; // concurrent players
   medianPlaytimeMin?: number | null;
   metacritic?: number | null;
-  scaleTier?: string | null;         // 'hobby' | 'small_indie' | 'est_indie' | 'aaa'
+  scaleTier?: string | null; // 'hobby' | 'small_indie' | 'est_indie' | 'aaa'
 }
 
 export interface SourceAdapter {
@@ -35,8 +35,7 @@ export interface SourceAdapter {
   parseGame(html: string, url: string): RawGame;
 }
 
-const UA =
-  "KAIROS-GameRadar/0.1 (+market-intel; contact: solo-dev) Mozilla/5.0 (compatible)";
+const UA = "KAIROS-GameRadar/0.1 (+market-intel; contact: solo-dev) Mozilla/5.0 (compatible)";
 
 // Per-request timeout (#31). Every crawler request routes through politeFetch, so bounding
 // it here bounds them all — including the three sequential Steam endpoints in fetchSteamGame

@@ -14,7 +14,10 @@ function extractInitialState(html: string): any {
   if (marker < 0) throw new Error("no INITIAL_STATE");
   const start = html.indexOf("{", marker);
   if (start < 0) throw new Error("no object after INITIAL_STATE");
-  let depth = 0, inStr = false, esc = false, quote = "";
+  let depth = 0,
+    inStr = false,
+    esc = false,
+    quote = "";
   let i = start;
   for (; i < html.length; i++) {
     const ch = html[i];

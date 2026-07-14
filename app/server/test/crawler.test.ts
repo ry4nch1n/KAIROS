@@ -8,7 +8,7 @@ import { freshMemoryDb } from "../src/db/db.ts";
 
 const fixture = readFileSync(
   fileURLToPath(new URL("./fixtures/crazygames_game.html", import.meta.url)),
-  "utf8"
+  "utf8",
 );
 
 describe("A10b politeFetch timeout (#31)", () => {
@@ -18,11 +18,13 @@ describe("A10b politeFetch timeout (#31)", () => {
     globalThis.fetch = ((_url: any, opts: any) =>
       new Promise((_resolve, reject) => {
         opts.signal.addEventListener("abort", () =>
-          reject(Object.assign(new Error("aborted"), { name: "AbortError" }))
+          reject(Object.assign(new Error("aborted"), { name: "AbortError" })),
         );
       })) as any;
     try {
-      await expect(politeFetch("http://example.test/hang", 20)).rejects.toThrow(/timeout after 20ms/);
+      await expect(politeFetch("http://example.test/hang", 20)).rejects.toThrow(
+        /timeout after 20ms/,
+      );
     } finally {
       globalThis.fetch = orig;
     }

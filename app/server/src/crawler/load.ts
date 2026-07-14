@@ -12,13 +12,13 @@ export async function loadGames(
   sourceName: string,
   baseUrl: string,
   games: RawGame[],
-  crawlDateISO: string
+  crawlDateISO: string,
 ): Promise<{ crawlId: number; inserted: number }> {
   const src = await one(
     db,
     `INSERT INTO sources(name, base_url) VALUES ($1,$2)
      ON CONFLICT (name) DO UPDATE SET base_url = EXCLUDED.base_url RETURNING id`,
-    [sourceName, baseUrl]
+    [sourceName, baseUrl],
   );
   const sourceId = src.id as number;
 
@@ -31,14 +31,20 @@ export async function loadGames(
     crawl = await one(
       db,
       `INSERT INTO crawls(source_id, started_at, status) VALUES ($1,$2,'running') RETURNING id`,
-      [sourceId, crawlDateISO]
+      [sourceId, crawlDateISO],
     );
   }
   const crawlId = crawl.id as number;
 
   // coerce to a string|null so a stray object/number never poisons a TEXT column
   const s = (v: unknown): string | null =>
-    v == null ? null : typeof v === "string" ? v : typeof v === "object" ? (((v as any).name ?? (v as any).title) ?? null) : String(v);
+    v == null
+      ? null
+      : typeof v === "string"
+        ? v
+        : typeof v === "object"
+          ? ((v as any).name ?? (v as any).title ?? null)
+          : String(v);
 
   let inserted = 0;
   let skipped = 0;
@@ -55,7 +61,20 @@ export async function loadGames(
            release_date = COALESCE(EXCLUDED.release_date, games.release_date),
            last_seen_at = EXCLUDED.last_seen_at, is_live = true
          RETURNING id`,
-        [sourceId, s(r.sourceGameId), s(r.url), s(r.title), s(r.thumbnailUrl), s(r.developer), s(r.description), s(r.engine), s(r.orientation), r.mobile, r.releaseDate ?? null, crawlDateISO]
+        [
+          sourceId,
+          s(r.sourceGameId),
+          s(r.url),
+          s(r.title),
+          s(r.thumbnailUrl),
+          s(r.developer),
+          s(r.description),
+          s(r.engine),
+          s(r.orientation),
+          r.mobile,
+          r.releaseDate ?? null,
+          crawlDateISO,
+        ],
       );
       const gameId = game.id as number;
 
@@ -64,9 +83,23 @@ export async function loadGames(
            price_cents, discount_pct, owners_est, ccu, median_playtime_min, metacritic, scale_tier)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
          ON CONFLICT (game_id, crawl_id) DO NOTHING RETURNING id`,
-        [gameId, crawlId, crawlDateISO, r.rating, r.votes, r.plays ?? null, r.featured, s(r.genre),
-         r.priceCents ?? null, r.discountPct ?? null, r.ownersEst ?? null, r.ccu ?? null,
-         r.medianPlaytimeMin ?? null, r.metacritic ?? null, r.scaleTier ?? null]
+        [
+          gameId,
+          crawlId,
+          crawlDateISO,
+          r.rating,
+          r.votes,
+          r.plays ?? null,
+          r.featured,
+          s(r.genre),
+          r.priceCents ?? null,
+          r.discountPct ?? null,
+          r.ownersEst ?? null,
+          r.ccu ?? null,
+          r.medianPlaytimeMin ?? null,
+          r.metacritic ?? null,
+          r.scaleTier ?? null,
+        ],
       );
       if (before.length) inserted++;
 
@@ -76,9 +109,12 @@ export async function loadGames(
         const tag = await one(
           db,
           `INSERT INTO tags(name) VALUES ($1) ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name RETURNING id`,
-          [name]
+          [name],
         );
-        await db.query(`INSERT INTO game_tags(game_id, tag_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`, [gameId, tag.id]);
+        await db.query(
+          `INSERT INTO game_tags(game_id, tag_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`,
+          [gameId, tag.id],
+        );
       }
     } catch (e) {
       skipped++;
@@ -87,10 +123,9 @@ export async function loadGames(
   }
   if (skipped) console.warn(`  ${skipped} records skipped on load`);
 
-  await db.query(`UPDATE crawls SET finished_at = $2, status = 'ok', games_seen = $3 WHERE id = $1`, [
-    crawlId,
-    crawlDateISO,
-    games.length,
-  ]);
+  await db.query(
+    `UPDATE crawls SET finished_at = $2, status = 'ok', games_seen = $3 WHERE id = $1`,
+    [crawlId, crawlDateISO, games.length],
+  );
   return { crawlId, inserted };
 }

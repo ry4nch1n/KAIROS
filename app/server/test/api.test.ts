@@ -74,19 +74,26 @@ describe("A13 API routes", () => {
       date: "2026-07-09",
     };
     const bad = await fetch(`${base}/api/library`, {
-      method: "POST", headers: { "content-type": "application/json" },
+      method: "POST",
+      headers: { "content-type": "application/json" },
       body: JSON.stringify(item),
     });
     expect(bad.status).toBe(401);
 
     process.env.PUBLISH_TOKEN = "test-token-123";
     const hdrs = { "content-type": "application/json", authorization: "Bearer test-token-123" };
-    const ok = await fetch(`${base}/api/library`, { method: "POST", headers: hdrs, body: JSON.stringify(item) });
+    const ok = await fetch(`${base}/api/library`, {
+      method: "POST",
+      headers: hdrs,
+      body: JSON.stringify(item),
+    });
     expect(ok.status).toBe(200);
 
     // re-post the same mediaUrl with a changed title — updates in place, no duplicate
     const again = await fetch(`${base}/api/library`, {
-      method: "POST", headers: hdrs, body: JSON.stringify({ ...item, title: "Test Toy v2" }),
+      method: "POST",
+      headers: hdrs,
+      body: JSON.stringify({ ...item, title: "Test Toy v2" }),
     });
     expect(again.status).toBe(200);
     const rows = await (await fetch(`${base}/api/library`)).json();
@@ -98,7 +105,9 @@ describe("A13 API routes", () => {
 
     // invalid item (missing mediaUrl) is rejected
     const invalid = await fetch(`${base}/api/library`, {
-      method: "POST", headers: hdrs, body: JSON.stringify({ kind: "prototype", title: "No URL" }),
+      method: "POST",
+      headers: hdrs,
+      body: JSON.stringify({ kind: "prototype", title: "No URL" }),
     });
     expect(invalid.status).toBe(400);
   });
@@ -118,13 +127,15 @@ describe("brief publish (token-gated)", () => {
     const empty = await (await fetch(`${base}/api/brief/steering`)).json();
     expect(empty.flags).toEqual([]);
     const bad = await fetch(`${base}/api/brief/steering`, {
-      method: "POST", headers: { "content-type": "application/json" },
+      method: "POST",
+      headers: { "content-type": "application/json" },
       body: JSON.stringify({ flags: ["x"] }),
     });
     expect(bad.status).toBe(401);
     process.env.PUBLISH_TOKEN = "test-token-123";
     const ok = await fetch(`${base}/api/brief/steering`, {
-      method: "POST", headers: { "content-type": "application/json", authorization: "Bearer test-token-123" },
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: "Bearer test-token-123" },
       body: JSON.stringify({ flags: ["browser-first", "extraction-lite"] }),
     });
     expect(ok.status).toBe(200);

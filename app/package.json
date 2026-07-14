@@ -19,9 +19,13 @@
     "crawl:steam": "npm -w server run crawl:steam",
     "backfill:tiers": "npm -w server run backfill:tiers",
     "check:steam": "npm -w server run check:steam",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "format": "biome format --write .",
     "test": "npm -w server run test && npm -w web run test"
   },
   "devDependencies": {
+    "@biomejs/biome": "2.5.3",
     "concurrently": "^9.1.0"
   },
   "allowScripts": {

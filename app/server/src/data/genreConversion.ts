@@ -13,9 +13,9 @@
 export type ConversionSignal = "strong" | "typical" | "deliberation";
 export interface ConversionRef {
   signal: ConversionSignal;
-  note: string;   // one line, plain language
+  note: string; // one line, plain language
   source: string; // citation URL
-  asOf: string;   // YYYY-MM
+  asOf: string; // YYYY-MM
 }
 
 const GDC = "https://newsletter.gamediscover.co/p/the-state-of-steam-wishlist-conversions";
@@ -23,18 +23,50 @@ const GDC = "https://newsletter.gamediscover.co/p/the-state-of-steam-wishlist-co
 // Keyed by canonical (B1) genre, lowercased. Only genres with a clear directional signal
 // appear; everything else returns null and shows no chip.
 const REF: Record<string, ConversionRef> = {
-  simulation: { signal: "strong", note: "Crafty-buildy sims convert well — Steam's audience actively seeks them.", source: GDC, asOf: "2026-07" },
-  strategy:   { signal: "strong", note: "Strategy over-indexes on wishlist→sale conversion.", source: GDC, asOf: "2026-07" },
-  horror:     { signal: "strong", note: "Horror converts strongly — a highly wishlist-driven genre.", source: GDC, asOf: "2026-07" },
-  idle:       { signal: "strong", note: "Idle / incremental convert well; the audience buys the fantasy it wishlisted.", source: GDC, asOf: "2026-07" },
-  rpg:        { signal: "deliberation", note: "Higher-priced, narrative-heavy RPGs run a lower median — more deliberation before buying.", source: GDC, asOf: "2026-07" },
-  adventure:  { signal: "deliberation", note: "Story/adventure titles skew toward deliberation; conversion is price-sensitive.", source: GDC, asOf: "2026-07" },
+  simulation: {
+    signal: "strong",
+    note: "Crafty-buildy sims convert well — Steam's audience actively seeks them.",
+    source: GDC,
+    asOf: "2026-07",
+  },
+  strategy: {
+    signal: "strong",
+    note: "Strategy over-indexes on wishlist→sale conversion.",
+    source: GDC,
+    asOf: "2026-07",
+  },
+  horror: {
+    signal: "strong",
+    note: "Horror converts strongly — a highly wishlist-driven genre.",
+    source: GDC,
+    asOf: "2026-07",
+  },
+  idle: {
+    signal: "strong",
+    note: "Idle / incremental convert well; the audience buys the fantasy it wishlisted.",
+    source: GDC,
+    asOf: "2026-07",
+  },
+  rpg: {
+    signal: "deliberation",
+    note: "Higher-priced, narrative-heavy RPGs run a lower median — more deliberation before buying.",
+    source: GDC,
+    asOf: "2026-07",
+  },
+  adventure: {
+    signal: "deliberation",
+    note: "Story/adventure titles skew toward deliberation; conversion is price-sensitive.",
+    source: GDC,
+    asOf: "2026-07",
+  },
 };
 
 /** Conversion reference for a (canonical) genre, or null when there's no clear signal. */
 export function conversionFor(genre: string | null | undefined): ConversionRef | null {
-  const key = String(genre ?? "").toLowerCase().trim();
-  return key ? REF[key] ?? null : null;
+  const key = String(genre ?? "")
+    .toLowerCase()
+    .trim();
+  return key ? (REF[key] ?? null) : null;
 }
 
 export const CONVERSION_BASELINE =

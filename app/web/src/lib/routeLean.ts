@@ -22,17 +22,19 @@ const R1: RouteLean = {
 };
 
 export function routeLean(browserFit: number | null, steamFit: number | null): RouteLean {
-  const b = browserFit, s = steamFit;
+  const b = browserFit,
+    s = steamFit;
   if (b == null && s == null) return null;
   if (s == null) return R23; // browser-only ladder
-  if (b == null) return R1;  // steam-only ladder
+  if (b == null) return R1; // steam-only ladder
   if (b > s) return R23;
   if (s > b) return R1;
   return {
     label: b >= 2 ? "optionality" : "unclear lean",
     cls: "route-both",
-    tip: b >= 2
-      ? "Both platform fits are strong — keep the Phase-0 routes open; the toy test decides."
-      : "Neither platform fit is strong yet — the route isn't legible from the scores.",
+    tip:
+      b >= 2
+        ? "Both platform fits are strong — keep the Phase-0 routes open; the toy test decides."
+        : "Neither platform fit is strong yet — the route isn't legible from the scores.",
   };
 }

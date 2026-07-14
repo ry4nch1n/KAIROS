@@ -47,7 +47,7 @@ function expressRoutes(): Set<string> {
 function functionRoutes(): Set<string> {
   const src = readFileSync(
     fileURLToPath(new URL("../../netlify/functions/api.ts", import.meta.url)),
-    "utf8"
+    "utf8",
   );
   const out = new Set<string>();
   const methodOf = (line: string): string => {
@@ -63,7 +63,13 @@ function functionRoutes(): Set<string> {
       out.add(`${methodOf(line)} ${collapse(m[1].replace(/\/$/, "") + "/:p")}`);
     // path.match(/^\/x\/(.+)$/) ⇒ collapse the group to :p
     for (const m of line.matchAll(/path\.match\(\/([^/]+(?:\/[^/]+)*)\//g)) {
-      const norm = "/" + m[1].replace(/\^|\$/g, "").replace(/\\\//g, "/").replace(/^\/+/, "").replace(/\([^)]*\)/g, ":p");
+      const norm =
+        "/" +
+        m[1]
+          .replace(/\^|\$/g, "")
+          .replace(/\\\//g, "/")
+          .replace(/^\/+/, "")
+          .replace(/\([^)]*\)/g, ":p");
       out.add(`GET ${collapse(norm)}`);
     }
   }
@@ -81,16 +87,25 @@ describe("API route parity (Express dev ↔ Netlify Function prod)", () => {
 
   it("every dev route is served in prod", () => {
     const missing = [...dev].filter((r) => !prod.has(r));
-    expect(missing, `routes in Express but not the Netlify Function: ${missing.join(", ")}`).toEqual([]);
+    expect(
+      missing,
+      `routes in Express but not the Netlify Function: ${missing.join(", ")}`,
+    ).toEqual([]);
   });
 
   it("prod exposes no route absent from dev (except documented prod-only)", () => {
     const extra = [...prod].filter((r) => !dev.has(r) && !KNOWN_PROD_ONLY.has(r));
-    expect(extra, `routes in the Netlify Function but not Express — add to KNOWN_PROD_ONLY if intentional: ${extra.join(", ")}`).toEqual([]);
+    expect(
+      extra,
+      `routes in the Netlify Function but not Express — add to KNOWN_PROD_ONLY if intentional: ${extra.join(", ")}`,
+    ).toEqual([]);
   });
 
   it("KNOWN_PROD_ONLY entries still exist (allowlist can't rot)", () => {
     const stale = [...KNOWN_PROD_ONLY].filter((r) => !prod.has(r));
-    expect(stale, `KNOWN_PROD_ONLY lists routes the Function no longer has: ${stale.join(", ")}`).toEqual([]);
+    expect(
+      stale,
+      `KNOWN_PROD_ONLY lists routes the Function no longer has: ${stale.join(", ")}`,
+    ).toEqual([]);
   });
 });
