@@ -14,7 +14,9 @@ const STEAMSPY = "https://steamspy.com/api.php";
 /** SteamSpy owners is a bucket string like "5,000,000 .. 10,000,000". Return its midpoint. */
 export function parseOwners(s: string | null | undefined): number | null {
   if (!s || typeof s !== "string") return null;
-  const nums = (s.match(/[\d,]+/g) || []).map((n) => Number(n.replace(/,/g, ""))).filter((n) => !Number.isNaN(n));
+  const nums = (s.match(/[\d,]+/g) || [])
+    .map((n) => Number(n.replace(/,/g, "")))
+    .filter((n) => !Number.isNaN(n));
   if (!nums.length) return null;
   if (nums.length === 1) return nums[0];
   return Math.round((nums[0] + nums[1]) / 2);
@@ -44,19 +46,56 @@ const TIERS: ScaleTier[] = ["hobby", "small_indie", "est_indie", "aaa"];
 // Raw Fury, Team17, Coffee Stain, tinyBuild…) whose games ARE valid indie comps. Tune as needed.
 const MAJOR_BACKERS = [
   "valve",
-  "playstation", "sony interactive", "naughty dog", "sucker punch", "guerrilla",
-  "insomniac", "santa monica studio", "polyphony", "bungie", "bend studio",
-  "xbox game studios", "microsoft", "bethesda", "zenimax", "mojang", "343 industries",
-  "the coalition", "id software", "arkane", "machinegames",
+  "playstation",
+  "sony interactive",
+  "naughty dog",
+  "sucker punch",
+  "guerrilla",
+  "insomniac",
+  "santa monica studio",
+  "polyphony",
+  "bungie",
+  "bend studio",
+  "xbox game studios",
+  "microsoft",
+  "bethesda",
+  "zenimax",
+  "mojang",
+  "343 industries",
+  "the coalition",
+  "id software",
+  "arkane",
+  "machinegames",
   "nintendo",
-  "electronic arts", "ea sports", "ea dice", "bioware", "respawn",
+  "electronic arts",
+  "ea sports",
+  "ea dice",
+  "bioware",
+  "respawn",
   "ubisoft",
-  "activision", "blizzard",
-  "take-two", "take two", "rockstar games", "2k games",
-  "square enix", "bandai namco", "capcom", "sega", "atlus",
-  "warner bros", "wb games", "epic games",
-  "tencent", "netease", "krafton", "nexon", "konami",
-  "hoyoverse", "mihoyo", "cognosphere", "cd projekt",
+  "activision",
+  "blizzard",
+  "take-two",
+  "take two",
+  "rockstar games",
+  "2k games",
+  "square enix",
+  "bandai namco",
+  "capcom",
+  "sega",
+  "atlus",
+  "warner bros",
+  "wb games",
+  "epic games",
+  "tencent",
+  "netease",
+  "krafton",
+  "nexon",
+  "konami",
+  "hoyoverse",
+  "mihoyo",
+  "cognosphere",
+  "cd projekt",
 ];
 /** True if any developer or publisher is a known mega-publisher / first-party label. */
 export function isMajorBacked(developers: string[] = [], publishers: string[] = []): boolean {
@@ -71,7 +110,10 @@ export function isMajorBacked(developers: string[] = [], publishers: string[] = 
  * keeps the recognizable indie hits in the Comparables set instead of being filtered out as AAA.
  */
 export function classifyScaleTier(x: {
-  reviews: number; owners: number | null; selfPublished: boolean; majorBacked?: boolean;
+  reviews: number;
+  owners: number | null;
+  selfPublished: boolean;
+  majorBacked?: boolean;
 }): ScaleTier {
   // Backing — not scale — defines AAA.
   if (x.majorBacked) return "aaa";
@@ -88,8 +130,18 @@ export function classifyScaleTier(x: {
 }
 
 const MONTHS: Record<string, string> = {
-  jan: "01", feb: "02", mar: "03", apr: "04", may: "05", jun: "06",
-  jul: "07", aug: "08", sep: "09", oct: "10", nov: "11", dec: "12",
+  jan: "01",
+  feb: "02",
+  mar: "03",
+  apr: "04",
+  may: "05",
+  jun: "06",
+  jul: "07",
+  aug: "08",
+  sep: "09",
+  oct: "10",
+  nov: "11",
+  dec: "12",
 };
 /** Steam release_date.date — handles both "17 Sep, 2020" (intl) and "Mar 25, 2025" (en-US). */
 export function parseReleaseDate(s: string | null | undefined): string | null {
@@ -112,7 +164,10 @@ export function parseReleaseDate(s: string | null | undefined): string | null {
 /** Top-N SteamSpy tags by weight (the rich genre-like signal). */
 function topTags(tags: Record<string, number> | undefined, n = 10): string[] {
   if (!tags || typeof tags !== "object") return [];
-  return Object.entries(tags).sort((a, b) => b[1] - a[1]).slice(0, n).map(([name]) => name);
+  return Object.entries(tags)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, n)
+    .map(([name]) => name);
 }
 
 /** Join the three endpoints' payloads for one appid into a normalized RawGame. */
@@ -120,7 +175,7 @@ export function parseSteamGame(
   appid: number | string,
   appData: any,
   reviewSummary: any,
-  steamspy: any
+  steamspy: any,
 ): RawGame {
   const developers: string[] = Array.isArray(appData?.developers) ? appData.developers : [];
   const publishers: string[] = Array.isArray(appData?.publishers) ? appData.publishers : [];
@@ -171,11 +226,11 @@ export const INDIE_CANON: number[] = [
   2379780, // Balatro
   1145360, // Hades
   1145350, // Hades II
-  646570,  // Slay the Spire
+  646570, // Slay the Spire
   1794680, // Vampire Survivors
-  367520,  // Hollow Knight
-  413150,  // Stardew Valley
-  105600,  // Terraria
+  367520, // Hollow Knight
+  413150, // Stardew Valley
+  105600, // Terraria
 ];
 
 /** Parse appids from a Steam store-search `results_html` fragment (data-ds-appid attributes). */
@@ -229,16 +284,21 @@ export function mergeSeeds(lists: number[][], limit: number): number[] {
 /** Build a deduped appid seed list. Indie stream is listed first so it is well represented. */
 export async function seedAppIds(limit = SEED_LIMIT_DEFAULT): Promise<number[]> {
   const fetchIds = async (label: string, fn: () => Promise<number[]>): Promise<number[]> => {
-    try { return (await fn()).filter((n) => Number.isFinite(n) && n > 0); }
-    catch (e) { console.warn(`seed ${label} failed:`, String(e)); return []; }
+    try {
+      return (await fn()).filter((n) => Number.isFinite(n) && n > 0);
+    } catch (e) {
+      console.warn(`seed ${label} failed:`, String(e));
+      return [];
+    }
   };
   // (0) Recent + high-traction indies — Steam's TOP-SELLING Indie-tagged titles (tags=492).
   // This is the primary recency lever: top sellers skew to what's selling NOW, and the 2-year
   // Comparables window then keeps only the recent ones (filters out evergreen classics like
   // Terraria/Stardew that also chart). Released_DESC was rejected — it's near-zero-owner shovelware.
   const recent = await fetchIds("search topsellers Indie", async () => {
-    const url = `${STORE}/search/results/?query&start=0&count=100&filter=topsellers`
-      + `&tags=492&category1=998&supportedlang=english&infinite=1&json=1&cc=us&l=english`;
+    const url =
+      `${STORE}/search/results/?query&start=0&count=100&filter=topsellers` +
+      `&tags=492&category1=998&supportedlang=english&infinite=1&json=1&cc=us&l=english`;
     const j = JSON.parse(await politeFetch(url));
     return parseSearchAppids(j?.results_html ?? "");
   });
@@ -280,7 +340,9 @@ export async function fetchSteamGame(appid: number): Promise<RawGame | null> {
   const entry = adWrap?.[appid];
   if (!entry?.success || entry.data?.type !== "game") return null;
   const reviews = JSON.parse(
-    await politeFetch(`${STORE}/appreviews/${appid}?json=1&language=all&filter=summary&num_per_page=0`)
+    await politeFetch(
+      `${STORE}/appreviews/${appid}?json=1&language=all&filter=summary&num_per_page=0`,
+    ),
   );
   let steamspy: any = {};
   try {
@@ -288,7 +350,9 @@ export async function fetchSteamGame(appid: number): Promise<RawGame | null> {
     // not load-bearing — give it a tighter per-endpoint timeout so a hang here fails soft fast
     // and we continue with whatever the store/reviews endpoints already returned (#31).
     steamspy = JSON.parse(await politeFetch(`${STEAMSPY}?request=appdetails&appid=${appid}`, 6000));
-  } catch (e) { console.warn(`  steamspy ${appid} failed:`, String(e)); }
+  } catch (e) {
+    console.warn(`  steamspy ${appid} failed:`, String(e));
+  }
   return parseSteamGame(appid, entry.data, reviews?.query_summary ?? {}, steamspy);
 }
 
@@ -297,7 +361,7 @@ export const STEAM_BASE_URL = STORE;
 /** Full orchestrator: seed appids → fetch+join each → return RawGames for the loader. */
 export async function steamCrawl(
   limit = SEED_LIMIT_DEFAULT,
-  log: (m: string) => void = () => {}
+  log: (m: string) => void = () => {},
 ): Promise<{ games: RawGame[]; baseUrl: string }> {
   log(`[steam] seeding appids (limit ${limit})…\n`);
   const ids = await seedAppIds(limit);
@@ -306,7 +370,10 @@ export async function steamCrawl(
   for (const id of ids) {
     try {
       const g = await fetchSteamGame(id);
-      if (g) { games.push(g); log("."); } else log("x");
+      if (g) {
+        games.push(g);
+        log(".");
+      } else log("x");
     } catch (e) {
       log("!");
       console.warn(`\n  skip app ${id}: ${String(e)}`);

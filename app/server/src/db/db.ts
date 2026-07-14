@@ -39,7 +39,9 @@ export async function makePglite(dataDir?: string): Promise<Querier> {
 // ── Postgres / Neon (prod) ──
 export async function makePg(connectionString: string): Promise<Querier> {
   const pg = (await import("pg")).default;
-  const ssl = /localhost|127\.0\.0\.1/.test(connectionString) ? false : { rejectUnauthorized: false };
+  const ssl = /localhost|127\.0\.0\.1/.test(connectionString)
+    ? false
+    : { rejectUnauthorized: false };
   const pool = new pg.Pool({ connectionString, ssl });
   return {
     async query(text, params = []) {

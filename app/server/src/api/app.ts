@@ -26,7 +26,8 @@ export function createApp(db: Querier) {
   app.post("/api/brief/publish", async (req, res) => {
     const token = process.env.PUBLISH_TOKEN;
     const auth = req.headers.authorization || "";
-    if (!token || auth !== `Bearer ${token}`) return res.status(401).json({ error: "unauthorized" });
+    if (!token || auth !== `Bearer ${token}`)
+      return res.status(401).json({ error: "unauthorized" });
     try {
       await q.publishEdition(db, req.body);
       res.json({ ok: true, editionDate: req.body?.editionDate });
@@ -54,9 +55,15 @@ export function createApp(db: Querier) {
     }
   });
 
-  app.get("/api/genres", async (req, res) => res.json(await q.getGenres(db, parsePlatform(req.query.platform))));
-  app.get("/api/developers", async (req, res) => res.json(await q.getDevelopers(db, parsePlatform(req.query.platform))));
-  app.get("/api/new-releases", async (req, res) => res.json(await q.getNewReleases(db, parsePlatform(req.query.platform))));
+  app.get("/api/genres", async (req, res) =>
+    res.json(await q.getGenres(db, parsePlatform(req.query.platform))),
+  );
+  app.get("/api/developers", async (req, res) =>
+    res.json(await q.getDevelopers(db, parsePlatform(req.query.platform))),
+  );
+  app.get("/api/new-releases", async (req, res) =>
+    res.json(await q.getNewReleases(db, parsePlatform(req.query.platform))),
+  );
 
   app.get("/api/brief/editions", async (_req, res) => {
     res.json(await q.getBriefEditions(db));
@@ -66,7 +73,8 @@ export function createApp(db: Querier) {
   app.post("/api/brief/steering", async (req, res) => {
     const token = process.env.PUBLISH_TOKEN;
     const auth = req.headers.authorization || "";
-    if (!token || auth !== `Bearer ${token}`) return res.status(401).json({ error: "unauthorized" });
+    if (!token || auth !== `Bearer ${token}`)
+      return res.status(401).json({ error: "unauthorized" });
     try {
       await q.setBriefSteering(db, Array.isArray(req.body?.flags) ? req.body.flags : []);
       res.json({ ok: true });
@@ -85,14 +93,15 @@ export function createApp(db: Querier) {
     const rows = await db.query(
       `SELECT id, kind, title, summary, tags, status, media_url AS "mediaUrl",
               image_url AS "imageUrl", to_char(created_at, 'YYYY-MM-DD') AS date
-       FROM library_items ORDER BY created_at DESC`
+       FROM library_items ORDER BY created_at DESC`,
     );
     res.json(rows);
   });
   app.post("/api/library", async (req, res) => {
     const token = process.env.PUBLISH_TOKEN;
     const auth = req.headers.authorization || "";
-    if (!token || auth !== `Bearer ${token}`) return res.status(401).json({ error: "unauthorized" });
+    if (!token || auth !== `Bearer ${token}`)
+      return res.status(401).json({ error: "unauthorized" });
     try {
       const items = Array.isArray(req.body) ? req.body : [req.body];
       for (const it of items) await q.publishLibraryItem(db, it);
@@ -112,7 +121,8 @@ export function createApp(db: Querier) {
   app.post("/api/pitches", async (req, res) => {
     const token = process.env.PUBLISH_TOKEN;
     const auth = req.headers.authorization || "";
-    if (!token || auth !== `Bearer ${token}`) return res.status(401).json({ error: "unauthorized" });
+    if (!token || auth !== `Bearer ${token}`)
+      return res.status(401).json({ error: "unauthorized" });
     try {
       const items = Array.isArray(req.body) ? req.body : [req.body];
       for (const it of items) await q.publishPitch(db, it);
@@ -124,7 +134,8 @@ export function createApp(db: Querier) {
   app.delete("/api/pitches/:slug", async (req, res) => {
     const token = process.env.PUBLISH_TOKEN;
     const auth = req.headers.authorization || "";
-    if (!token || auth !== `Bearer ${token}`) return res.status(401).json({ error: "unauthorized" });
+    if (!token || auth !== `Bearer ${token}`)
+      return res.status(401).json({ error: "unauthorized" });
     try {
       const deleted = await q.deletePitch(db, req.params.slug);
       if (!deleted) return res.status(404).json({ error: "not found" });

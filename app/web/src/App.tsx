@@ -14,7 +14,13 @@ export default function App() {
   return (
     <div className="shell">
       <Rail active={svc} onSelect={setSvc} />
-      <Radar hidden={svc !== "radar"} onProject={(s) => { setRevSeed(s); setSvc("revenue"); }} />
+      <Radar
+        hidden={svc !== "radar"}
+        onProject={(s) => {
+          setRevSeed(s);
+          setSvc("revenue");
+        }}
+      />
       <Brief hidden={svc !== "brief"} />
       <Library hidden={svc !== "library"} />
       <Revenue hidden={svc !== "revenue"} seed={revSeed} onClearSeed={() => setRevSeed(null)} />

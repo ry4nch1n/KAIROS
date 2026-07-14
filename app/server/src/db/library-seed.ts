@@ -80,14 +80,14 @@ export async function ensureLibraryPrototypes(db: Querier): Promise<void> {
       `INSERT INTO library_items (kind, title, summary, media_url, image_url, tags, status, created_at)
        SELECT $1, $2, $3, $4, $5, $6::text[], $7, $8::timestamptz
        WHERE NOT EXISTS (SELECT 1 FROM library_items WHERE media_url = $4)`,
-      [p.kind, p.title, p.summary, p.mediaUrl, p.imageUrl, [...p.tags], p.status, p.date]
+      [p.kind, p.title, p.summary, p.mediaUrl, p.imageUrl, [...p.tags], p.status, p.date],
     );
     await db.query(
       `UPDATE library_items SET
          kind = $2, title = $3, summary = $4, image_url = $5, tags = $6::text[], status = $7,
          created_at = $8::timestamptz
        WHERE media_url = $1`,
-      [p.mediaUrl, p.kind, p.title, p.summary, p.imageUrl, [...p.tags], p.status, p.date]
+      [p.mediaUrl, p.kind, p.title, p.summary, p.imageUrl, [...p.tags], p.status, p.date],
     );
   }
 }

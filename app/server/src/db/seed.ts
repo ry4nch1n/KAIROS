@@ -71,15 +71,43 @@ const GENRE_TAGS: Record<string, string[]> = {
   Horror: ["horror", "atmosphere"],
   Strategy: ["strategy", "tower-defense"],
 };
-const CROSS_TAGS = ["physics", "pixel", "3d", "retro", "arcade", "mobile", "short-session", "merge"];
+const CROSS_TAGS = [
+  "physics",
+  "pixel",
+  "3d",
+  "retro",
+  "arcade",
+  "mobile",
+  "short-session",
+  "merge",
+];
 // Setting/theme tags (#25) — one per game via a deterministic rotation, so the Setting Mix
 // facet has evenly-spread sample coverage in local dev + tests (these map into the controlled
 // setting vocabulary in contract.taxonomy.settings). Kept out of the random CROSS_TAGS pool so
 // the seed stays deterministic and existing genre×tag gaps are undisturbed.
-const SETTING_TAGS_SEED = ["sci-fi", "fantasy", "space", "medieval", "cyberpunk", "post-apocalyptic", "horror", "historical"];
+const SETTING_TAGS_SEED = [
+  "sci-fi",
+  "fantasy",
+  "space",
+  "medieval",
+  "cyberpunk",
+  "post-apocalyptic",
+  "horror",
+  "historical",
+];
 const DEVELOPERS = [
-  "Nova Forge", "Pixel Cabin", "Loop Labs", "Mad Otter", "Solo Star", "Bitwave",
-  "Hexa Games", "Cozy Knoll", "Drift Co", "Volt Studio", "Tiny Titan", "Glasshouse",
+  "Nova Forge",
+  "Pixel Cabin",
+  "Loop Labs",
+  "Mad Otter",
+  "Solo Star",
+  "Bitwave",
+  "Hexa Games",
+  "Cozy Knoll",
+  "Drift Co",
+  "Volt Studio",
+  "Tiny Titan",
+  "Glasshouse",
 ];
 const ENGINES = ["HTML5", "Unity", "Phaser", "Three.js", "Construct"];
 const ORIENT = ["landscape", "portrait", "both"];
@@ -102,7 +130,7 @@ async function one(db: Querier, sql: string, params: unknown[]): Promise<Record<
 
 export async function seed(db: Querier): Promise<void> {
   await db.exec(
-    `TRUNCATE library_items, brief_editions, game_tags, game_snapshots, tags, games, crawls, sources RESTART IDENTITY CASCADE;`
+    `TRUNCATE library_items, brief_editions, game_tags, game_snapshots, tags, games, crawls, sources RESTART IDENTITY CASCADE;`,
   );
 
   const rng = mulberry32(20260626);
@@ -118,10 +146,11 @@ export async function seed(db: Querier): Promise<void> {
   }
 
   for (const src of SOURCES) {
-    const srcRow = await one(db, "INSERT INTO sources(name, base_url) VALUES ($1,$2) RETURNING id", [
-      src.name,
-      src.base_url,
-    ]);
+    const srcRow = await one(
+      db,
+      "INSERT INTO sources(name, base_url) VALUES ($1,$2) RETURNING id",
+      [src.name, src.base_url],
+    );
     const sourceId = srcRow.id as number;
 
     // weekly crawls for this source
@@ -130,7 +159,7 @@ export async function seed(db: Querier): Promise<void> {
       const c = await one(
         db,
         "INSERT INTO crawls(source_id, started_at, finished_at, status, games_seen) VALUES ($1,$2,$2,'ok',0) RETURNING id",
-        [sourceId, weekDate(i)]
+        [sourceId, weekDate(i)],
       );
       crawlIds.push(c.id);
     }
@@ -174,7 +203,7 @@ export async function seed(db: Querier): Promise<void> {
           rng() > 0.4,
           weekDate(debut),
           weekDate(WEEKS - 1),
-        ]
+        ],
       );
       const gameId = game.id as number;
 
@@ -185,10 +214,10 @@ export async function seed(db: Querier): Promise<void> {
       tagNames.add(SETTING_TAGS_SEED[idx % SETTING_TAGS_SEED.length]); // setting/theme facet (#25)
       for (const tn of tagNames) {
         const tid = await ensureTag(tn);
-        await db.query("INSERT INTO game_tags(game_id, tag_id) VALUES ($1,$2) ON CONFLICT DO NOTHING", [
-          gameId,
-          tid,
-        ]);
+        await db.query(
+          "INSERT INTO game_tags(game_id, tag_id) VALUES ($1,$2) ON CONFLICT DO NOTHING",
+          [gameId, tid],
+        );
       }
 
       // weekly snapshots (append-only)
@@ -211,7 +240,7 @@ export async function seed(db: Querier): Promise<void> {
             featured,
             featured && rng() > 0.6,
             genre,
-          ]
+          ],
         );
       }
     }
@@ -228,22 +257,60 @@ export async function seed(db: Querier): Promise<void> {
       "**WebGL load-time bar dropping**: three new size-reduction tools shipped this week.",
     ],
     new_notable: [
-      { name: "Vampire Survivors-like (1-dev)", status: "Launched", category: "Loop reference", blurb: "Auto-attack + weapon-evolution loop in a 6-week Phaser build.", relevance: "For you: confirms a solo scope can hit the rising survivor-like wave on web.", figure: "4.6★ CrazyGames", team: "solo", source: "https://crazygames.com" },
-      { name: "Cozy Merge Factory", status: "Demo", category: "Automation/logistics", blurb: "Merge + light logistics with a relaxing pace.", relevance: "For you: matches Radar gap #3 (cozy idle on Poki).", figure: "12k wishlists", source: "https://store.steampowered.com" },
+      {
+        name: "Vampire Survivors-like (1-dev)",
+        status: "Launched",
+        category: "Loop reference",
+        blurb: "Auto-attack + weapon-evolution loop in a 6-week Phaser build.",
+        relevance: "For you: confirms a solo scope can hit the rising survivor-like wave on web.",
+        figure: "4.6★ CrazyGames",
+        team: "solo",
+        source: "https://crazygames.com",
+      },
+      {
+        name: "Cozy Merge Factory",
+        status: "Demo",
+        category: "Automation/logistics",
+        blurb: "Merge + light logistics with a relaxing pace.",
+        relevance: "For you: matches Radar gap #3 (cozy idle on Poki).",
+        figure: "12k wishlists",
+        source: "https://store.steampowered.com",
+      },
     ],
     browser: [
-      { name: "Smash Karts", kind: "Browser game", status: "Trending", blurb: ".io kart battler holding the CrazyGames homepage.", relevance: "For you: short-session multiplayer loop worth dissecting.", figure: "50M plays", source: "https://crazygames.com" },
+      {
+        name: "Smash Karts",
+        kind: "Browser game",
+        status: "Trending",
+        blurb: ".io kart battler holding the CrazyGames homepage.",
+        relevance: "For you: short-session multiplayer loop worth dissecting.",
+        figure: "50M plays",
+        source: "https://crazygames.com",
+      },
     ],
     tooling: {
-      headline: "WebGL build-size tooling had a strong week — relevant if load-time is your blocker.",
+      headline:
+        "WebGL build-size tooling had a strong week — relevant if load-time is your blocker.",
       items: [
-        { group: "Web/Browser", headline: "Draco + texture atlasing preset", detail: "Cut a typical build by ~35%.", relevance: "For you: faster first-load = better web retention.", source: "https://example.com" },
+        {
+          group: "Web/Browser",
+          headline: "Draco + texture atlasing preset",
+          detail: "Cut a typical build by ~35%.",
+          relevance: "For you: faster first-load = better web retention.",
+          source: "https://example.com",
+        },
       ],
     },
     market: [
-      { headline: "CrazyGames rev-share at 70% for top earners", figure: "70%", detail: "Confirmed in their dev docs update.", source: "https://crazygames.com" },
+      {
+        headline: "CrazyGames rev-share at 70% for top earners",
+        figure: "70%",
+        detail: "Confirmed in their dev docs update.",
+        source: "https://crazygames.com",
+      },
     ],
-    reference_shelf: "Vampire Survivors, Dome Keeper, Luck be a Landlord, Mini Motorways — see Routine Notes › Reference Shelf.",
+    reference_shelf:
+      "Vampire Survivors, Dome Keeper, Luck be a Landlord, Mini Motorways — see Routine Notes › Reference Shelf.",
     founder_take: [
       "Browser-first remains the cheapest way to prove a loop; the survivor-like wave is real but crowding fast.",
       "Lean into a contained-systemic cozy hybrid where the Radar shows demand-supply gaps — Ship · Prove · Sustain.",
@@ -252,24 +319,42 @@ export async function seed(db: Querier): Promise<void> {
   const ed2 = {
     weekday: "Monday",
     phase_badge: "Recovery + discovery · Jun 2026",
-    top_signals: ["**Low-poly stylization** up ~28% QoQ in new releases — cheaper to produce solo."],
+    top_signals: [
+      "**Low-poly stylization** up ~28% QoQ in new releases — cheaper to produce solo.",
+    ],
     new_notable: [
-      { name: "Tiny Glade-like builder", status: "Announced", category: "Cozy/management", blurb: "Relaxing diorama builder.", relevance: "For you: low-poly cozy reference.", source: "https://store.steampowered.com" },
+      {
+        name: "Tiny Glade-like builder",
+        status: "Announced",
+        category: "Cozy/management",
+        blurb: "Relaxing diorama builder.",
+        relevance: "For you: low-poly cozy reference.",
+        source: "https://store.steampowered.com",
+      },
     ],
     browser: [],
     tooling: { headline: "Engine size tooling continues to improve.", items: [] },
-    market: [{ headline: "Match-3 losing features to merge hybrids", figure: "-21%", detail: "Across browser portals.", source: "https://example.com" }],
+    market: [
+      {
+        headline: "Match-3 losing features to merge hybrids",
+        figure: "-21%",
+        detail: "Across browser portals.",
+        source: "https://example.com",
+      },
+    ],
     reference_shelf: "Tiny Glade, Dorfromantik, Terra Nil.",
-    founder_take: ["Audit the art pipeline for low-poly reuse before committing to a visual direction."],
+    founder_take: [
+      "Audit the art pipeline for low-poly reuse before committing to a visual direction.",
+    ],
   };
 
   await db.query(
     `INSERT INTO brief_editions(edition_date, weekday, brief_type, payload, source_count) VALUES ($1,$2,$3,$4,$5)`,
-    ["2026-06-26", "thu", "indie", JSON.stringify(ed1), 14]
+    ["2026-06-26", "thu", "indie", JSON.stringify(ed1), 14],
   );
   await db.query(
     `INSERT INTO brief_editions(edition_date, weekday, brief_type, payload, source_count) VALUES ($1,$2,$3,$4,$5)`,
-    ["2026-06-23", "mon", "indie", JSON.stringify(ed2), 11]
+    ["2026-06-23", "mon", "indie", JSON.stringify(ed2), 11],
   );
   // library_items: seed the curated Prototypes collection (idempotent inserter,
   // shared with the prod migrate path so local and Neon stay in sync).

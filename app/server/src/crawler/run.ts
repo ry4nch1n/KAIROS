@@ -50,5 +50,7 @@ if (which === "steam") {
 }
 
 const res = await loadGames(db, sourceName, baseUrl, raw, date);
-console.log(`✔ [${sourceName}] loaded crawlId=${res.crawlId} inserted=${res.inserted}/${raw.length}`);
+console.log(
+  `✔ [${sourceName}] loaded crawlId=${res.crawlId} inserted=${res.inserted}/${raw.length}`,
+);
 process.exit(0);

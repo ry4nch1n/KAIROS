@@ -1,6 +1,17 @@
 import type {
-  Overview, Platform, BriefEditionMeta, BriefEdition, LibraryItem, Pitch, Contract,
-  GenreRow, DeveloperRow, NewRelease, HiddenGem, SteamOverview, BriefSteering,
+  Overview,
+  Platform,
+  BriefEditionMeta,
+  BriefEdition,
+  LibraryItem,
+  Pitch,
+  Contract,
+  GenreRow,
+  DeveloperRow,
+  NewRelease,
+  HiddenGem,
+  SteamOverview,
+  BriefSteering,
 } from "shared";
 
 async function getJSON<T>(url: string): Promise<T> {

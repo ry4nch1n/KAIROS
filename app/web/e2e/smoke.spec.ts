@@ -47,8 +47,6 @@ test.describe("KAIROS shell", () => {
   test("Revenue panel shows its heading", async ({ page }) => {
     await page.goto("/");
     await page.getByRole("button", { name: "Revenue Model", exact: true }).click();
-    await expect(
-      page.getByRole("heading", { name: /Revenue Model/ }),
-    ).toBeVisible();
+    await expect(page.getByRole("heading", { name: /Revenue Model/ })).toBeVisible();
   });
 });

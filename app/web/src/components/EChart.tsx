@@ -3,7 +3,13 @@ import * as echarts from "echarts";
 
 // Resizes via ResizeObserver so charts redraw correctly when their service
 // switches from display:none back to visible.
-export function EChart({ option, style }: { option: echarts.EChartsOption; style?: React.CSSProperties }) {
+export function EChart({
+  option,
+  style,
+}: {
+  option: echarts.EChartsOption;
+  style?: React.CSSProperties;
+}) {
   const el = useRef<HTMLDivElement>(null);
   const chart = useRef<echarts.ECharts | null>(null);
 

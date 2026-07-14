@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { steamProjection, scenarioBand, engine, ENGINES, type SteamInputs } from "./steamRevenue.ts";
+import {
+  steamProjection,
+  scenarioBand,
+  engine,
+  ENGINES,
+  type SteamInputs,
+} from "./steamRevenue.ts";
 
 const base: SteamInputs = {
   wishlists: 10_000,

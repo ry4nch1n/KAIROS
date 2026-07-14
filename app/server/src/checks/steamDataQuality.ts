@@ -11,18 +11,18 @@
 // is the exception: it's the actual queryable UI output over all live Steam games.
 
 export interface SteamQualityCounts {
-  crawled: number;      // games in the most-recent crawl (fresh cohort) — did the crawl produce data
-  withDate: number;     // fresh cohort with release_date  (date-parser / locale accuracy)
-  rated: number;        // fresh cohort with a rating
-  indie: number;        // fresh cohort with scale_tier <> 'aaa'  (indie seed present + not all-AAA)
-  comparables: number;  // getSteamComparables over ALL live Steam (recency window populated)
+  crawled: number; // games in the most-recent crawl (fresh cohort) — did the crawl produce data
+  withDate: number; // fresh cohort with release_date  (date-parser / locale accuracy)
+  rated: number; // fresh cohort with a rating
+  indie: number; // fresh cohort with scale_tier <> 'aaa'  (indie seed present + not all-AAA)
+  comparables: number; // getSteamComparables over ALL live Steam (recency window populated)
 }
 
 export interface SteamQualityThresholds {
   minCrawled: number;
-  minDateFill: number;   // fraction 0–1 of the fresh cohort
-  minRatedFill: number;  // fraction 0–1 of the fresh cohort
-  minIndie: number;      // fresh-cohort non-aaa count
+  minDateFill: number; // fraction 0–1 of the fresh cohort
+  minRatedFill: number; // fraction 0–1 of the fresh cohort
+  minIndie: number; // fresh-cohort non-aaa count
   minComparables: number;
 }
 
@@ -39,33 +39,53 @@ export const DEFAULT_STEAM_QUALITY: SteamQualityThresholds = {
 export interface SteamQualityResult {
   ok: boolean;
   failures: string[];
-  metrics: { crawled: number; dateFillPct: number; ratedPct: number; indie: number; comparables: number };
+  metrics: {
+    crawled: number;
+    dateFillPct: number;
+    ratedPct: number;
+    indie: number;
+    comparables: number;
+  };
 }
 
 const pct = (n: number) => `${Math.round(n * 100)}%`;
 
 export function assessSteamDataQuality(
   c: SteamQualityCounts,
-  t: SteamQualityThresholds = DEFAULT_STEAM_QUALITY
+  t: SteamQualityThresholds = DEFAULT_STEAM_QUALITY,
 ): SteamQualityResult {
   const dateFillPct = c.crawled ? c.withDate / c.crawled : 0;
   const ratedPct = c.crawled ? c.rated / c.crawled : 0;
   const failures: string[] = [];
 
   if (c.crawled < t.minCrawled)
-    failures.push(`latest crawl too small: ${c.crawled} < ${t.minCrawled} games (crawl produced little/no data?)`);
+    failures.push(
+      `latest crawl too small: ${c.crawled} < ${t.minCrawled} games (crawl produced little/no data?)`,
+    );
   if (dateFillPct < t.minDateFill)
-    failures.push(`release_date fill too low: ${pct(dateFillPct)} < ${pct(t.minDateFill)} (date-parser / locale regression?)`);
+    failures.push(
+      `release_date fill too low: ${pct(dateFillPct)} < ${pct(t.minDateFill)} (date-parser / locale regression?)`,
+    );
   if (ratedPct < t.minRatedFill)
     failures.push(`rating fill too low: ${pct(ratedPct)} < ${pct(t.minRatedFill)}`);
   if (c.indie < t.minIndie)
-    failures.push(`indie cohort too small: ${c.indie} < ${t.minIndie} (indie seed empty → all-AAA, or over-classification?)`);
+    failures.push(
+      `indie cohort too small: ${c.indie} < ${t.minIndie} (indie seed empty → all-AAA, or over-classification?)`,
+    );
   if (c.comparables < t.minComparables)
-    failures.push(`recent comparables too sparse: ${c.comparables} < ${t.minComparables} (recency window / seed recency regression?)`);
+    failures.push(
+      `recent comparables too sparse: ${c.comparables} < ${t.minComparables} (recency window / seed recency regression?)`,
+    );
 
   return {
     ok: failures.length === 0,
     failures,
-    metrics: { crawled: c.crawled, dateFillPct, ratedPct, indie: c.indie, comparables: c.comparables },
+    metrics: {
+      crawled: c.crawled,
+      dateFillPct,
+      ratedPct,
+      indie: c.indie,
+      comparables: c.comparables,
+    },
   };
 }

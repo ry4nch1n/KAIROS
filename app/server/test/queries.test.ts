@@ -22,7 +22,7 @@ describe("A2 seed integrity", () => {
 
   it("every game has at least one snapshot", async () => {
     const orphans = await db.query(
-      "SELECT count(*)::int n FROM games g WHERE NOT EXISTS (SELECT 1 FROM game_snapshots s WHERE s.game_id = g.id)"
+      "SELECT count(*)::int n FROM games g WHERE NOT EXISTS (SELECT 1 FROM game_snapshots s WHERE s.game_id = g.id)",
     );
     expect(orphans[0].n).toBe(0);
   });
@@ -99,7 +99,8 @@ describe("A7 market gaps (interpretable)", () => {
   it("rows carry absolute numbers and rank by score", async () => {
     const gaps = await q.getMarketGaps(db, "all");
     expect(gaps.length).toBeGreaterThan(0);
-    for (let i = 1; i < gaps.length; i++) expect(gaps[i - 1].score).toBeGreaterThanOrEqual(gaps[i].score);
+    for (let i = 1; i < gaps.length; i++)
+      expect(gaps[i - 1].score).toBeGreaterThanOrEqual(gaps[i].score);
     for (const c of gaps) {
       expect(c.supplyN).toBeGreaterThanOrEqual(2);
       expect(c.appetite).toBeGreaterThanOrEqual(0);
@@ -155,7 +156,8 @@ describe("A_explorer queries", () => {
   it("developers rollup is sorted by games desc with bounded ratings", async () => {
     const devs = await q.getDevelopers(db, "all");
     expect(devs.length).toBeGreaterThan(0);
-    for (let i = 1; i < devs.length; i++) expect(devs[i - 1].games).toBeGreaterThanOrEqual(devs[i].games);
+    for (let i = 1; i < devs.length; i++)
+      expect(devs[i - 1].games).toBeGreaterThanOrEqual(devs[i].games);
     for (const d of devs) {
       expect(d.avgRating).toBeGreaterThan(0);
       expect(d.avgRating).toBeLessThanOrEqual(5);
@@ -165,13 +167,15 @@ describe("A_explorer queries", () => {
   it("new releases respects the first_seen 14-day window", async () => {
     const nr = await q.getNewReleases(db, "all");
     const total = (await db.query("SELECT count(*)::int n FROM games"))[0].n;
-    const inWindow = (await db.query(
-      `SELECT count(DISTINCT g.id)::int n FROM games g JOIN v_latest l ON l.game_id=g.id
-       WHERE g.is_live AND g.first_seen_at >= (SELECT max(first_seen_at) FROM games) - interval '14 days'`
-    ))[0].n;
+    const inWindow = (
+      await db.query(
+        `SELECT count(DISTINCT g.id)::int n FROM games g JOIN v_latest l ON l.game_id=g.id
+       WHERE g.is_live AND g.first_seen_at >= (SELECT max(first_seen_at) FROM games) - interval '14 days'`,
+      )
+    )[0].n;
     expect(nr.length).toBeGreaterThan(0);
-    expect(nr.length).toBeLessThan(total);            // the window must exclude older games
-    expect(nr.length).toBe(Math.min(inWindow, 60));   // matches the window count (LIMIT 60)
+    expect(nr.length).toBeLessThan(total); // the window must exclude older games
+    expect(nr.length).toBe(Math.min(inWindow, 60)); // matches the window count (LIMIT 60)
   });
 });
 
@@ -203,12 +207,15 @@ describe("iter2 fixes", () => {
   it("velocity bars are sorted desc with numeric votes/day", async () => {
     const bars = await q.getGenreVelocityBars(db, "all");
     expect(bars.length).toBeGreaterThan(0);
-    for (let i = 1; i < bars.length; i++) expect(bars[i - 1].votesPerDay).toBeGreaterThanOrEqual(bars[i].votesPerDay);
+    for (let i = 1; i < bars.length; i++)
+      expect(bars[i - 1].votesPerDay).toBeGreaterThanOrEqual(bars[i].votesPerDay);
     expect(typeof bars[0].votesPerDay).toBe("number");
   });
   it("landscape points and overview glossary carry example games", async () => {
     const ov = await q.getOverview(db, "all");
-    expect(ov.landscape.every((p) => Array.isArray(p.examples) && p.examples.length <= 3)).toBe(true);
+    expect(ov.landscape.every((p) => Array.isArray(p.examples) && p.examples.length <= 3)).toBe(
+      true,
+    );
     expect(ov.glossary.length).toBeGreaterThan(0);
     expect(ov.glossary[0].examples.length).toBeGreaterThan(0);
     expect(ov.gaps.every((g) => Array.isArray(g.examples))).toBe(true);
@@ -218,7 +225,9 @@ describe("iter2 fixes", () => {
 describe("iter3 fixes", () => {
   it("glossary explains tags shown on the dashboard, and gaps expose genre/tag", async () => {
     const ov = await q.getOverview(db, "all");
-    expect(ov.gaps.every((g) => typeof g.genre === "string" && typeof g.tag === "string")).toBe(true);
+    expect(ov.gaps.every((g) => typeof g.genre === "string" && typeof g.tag === "string")).toBe(
+      true,
+    );
     // every gap's tag must be explained in the glossary
     const gloss = new Set(ov.glossary.filter((r) => r.kind === "tag").map((r) => r.label));
     expect(ov.gaps.every((g) => gloss.has(g.tag))).toBe(true);
@@ -241,14 +250,20 @@ describe("iter5 fixes", () => {
   it("every glossary tag has a non-empty definition", async () => {
     const ov = await q.getOverview(db, "all");
     expect(ov.glossary.length).toBeGreaterThan(0);
-    expect(ov.glossary.every((r) => typeof r.definition === "string" && r.definition.length > 0)).toBe(true);
+    expect(
+      ov.glossary.every((r) => typeof r.definition === "string" && r.definition.length > 0),
+    ).toBe(true);
   });
 });
 
 describe("p11 memoization guard", () => {
   it("memoized getOverview matches standalone query results", async () => {
     const ov = await q.getOverview(db, "all");
-    const [scatter, gems, gaps] = await Promise.all([q.getScatter(db, "all"), q.getHiddenGems(db, "all"), q.getMarketGaps(db, "all")]);
+    const [scatter, gems, gaps] = await Promise.all([
+      q.getScatter(db, "all"),
+      q.getHiddenGems(db, "all"),
+      q.getMarketGaps(db, "all"),
+    ]);
     expect(ov.scatter.length).toBe(scatter.length);
     expect(ov.scatter.filter((p) => p.gem).length).toBe(scatter.filter((p) => p.gem).length);
     expect(ov.gaps.map((g) => g.label)).toEqual(gaps.map((g) => g.label));
@@ -286,7 +301,15 @@ describe("D-momentum classifyTrajectory — age-adjusted velocity (#10)", () => 
 
 describe("D-curation isCurationTag / Market Gaps denylist (#14)", () => {
   it("flags platform-curation, brand, and device labels (case + ' Games' suffix insensitive)", () => {
-    for (const t of ["Popular Games", "New Games", "Crazy Games", "Mobile Games", "poki", "TRENDING", "Featured"])
+    for (const t of [
+      "Popular Games",
+      "New Games",
+      "Crazy Games",
+      "Mobile Games",
+      "poki",
+      "TRENDING",
+      "Featured",
+    ])
       expect(q.isCurationTag(t)).toBe(true);
   });
   it("does not flag real gameplay tags", () => {
@@ -312,9 +335,13 @@ describe("D-teamsize getSteamComparables attaches team-size estimates (#9)", () 
   });
   it("the solo-reachable filter is a subset that excludes mid/large studios", async () => {
     const rows = await q.getSteamComparables(db, 14);
-    const solo = rows.filter((c) => c.teamSize && (c.teamSize.bucket === "solo" || c.teamSize.bucket === "small"));
+    const solo = rows.filter(
+      (c) => c.teamSize && (c.teamSize.bucket === "solo" || c.teamSize.bucket === "small"),
+    );
     expect(solo.length).toBeLessThanOrEqual(rows.length);
-    expect(solo.every((c) => c.teamSize!.bucket === "solo" || c.teamSize!.bucket === "small")).toBe(true);
+    expect(solo.every((c) => c.teamSize!.bucket === "solo" || c.teamSize!.bucket === "small")).toBe(
+      true,
+    );
   });
 });
 
@@ -351,15 +378,24 @@ describe("A12 decision layer — this week's read (evaluation Phase A1)", () => 
 
   it("steam read flags top-heavy genres by mean ≫ median, never sells the mean as typical", () => {
     const econ = (over: Partial<import("shared").SteamGenreEconomics>) => ({
-      genre: "Roguelike", games: 10, medianPriceCents: 999, medianRating: 4,
-      totalOwners: 1_000_000, revenueProxy: 9_000_000,
-      medianRevenuePerGame: 100_000, meanRevenuePerGame: 900_000, ...over,
+      genre: "Roguelike",
+      games: 10,
+      medianPriceCents: 999,
+      medianRating: 4,
+      totalOwners: 1_000_000,
+      revenueProxy: 9_000_000,
+      medianRevenuePerGame: 100_000,
+      meanRevenuePerGame: 900_000,
+      ...over,
     });
     const lines = q.composeSteamRead({ opportunity: [], indie: [econ({})] });
     const warn = lines[lines.length - 1];
     expect(warn).toContain("Roguelike");
     expect(warn).toContain("top-heavy");
-    const calm = q.composeSteamRead({ opportunity: [], indie: [econ({ meanRevenuePerGame: 150_000 })] });
+    const calm = q.composeSteamRead({
+      opportunity: [],
+      indie: [econ({ meanRevenuePerGame: 150_000 })],
+    });
     expect(calm[calm.length - 1]).toContain("fair read");
   });
 });
@@ -380,7 +416,17 @@ describe("B1 taxonomy hygiene — genre/tag canonicalization (#7, #15)", () => {
   });
 
   it("SQL canonSql matches the JS twin exactly (parity — no drift)", async () => {
-    const samples = ["Simulation Games", "Puzzle", ".io", "Mouse Games", "3d", "Running Game", "Card Games", "Games", "Idle"];
+    const samples = [
+      "Simulation Games",
+      "Puzzle",
+      ".io",
+      "Mouse Games",
+      "3d",
+      "Running Game",
+      "Card Games",
+      "Games",
+      "Idle",
+    ];
     for (const s of samples) {
       const row = await db.query(`SELECT ${q.canonSql("$1")} AS c`, [s]);
       expect(row[0].c).toBe(q.canonicalName(s));
@@ -389,20 +435,24 @@ describe("B1 taxonomy hygiene — genre/tag canonicalization (#7, #15)", () => {
 
   it("merges 'Puzzle Games' into 'Puzzle' across genres + tags (end-to-end)", async () => {
     const src = (await db.query("SELECT id FROM sources WHERE name='poki'"))[0].id;
-    const crawl = (await db.query("SELECT id FROM crawls WHERE source_id=$1 ORDER BY id DESC LIMIT 1", [src]))[0].id;
+    const crawl = (
+      await db.query("SELECT id FROM crawls WHERE source_id=$1 ORDER BY id DESC LIMIT 1", [src])
+    )[0].id;
     const before = await q.getGenres(db, "all");
     const puzzleBefore = before.find((r) => r.genre === "Puzzle")!;
     expect(puzzleBefore).toBeTruthy();
 
-    const g = (await db.query(
-      `INSERT INTO games(source_id, source_game_id, url, title, first_seen_at, last_seen_at, is_live)
+    const g = (
+      await db.query(
+        `INSERT INTO games(source_id, source_game_id, url, title, first_seen_at, last_seen_at, is_live)
        VALUES ($1,'dup-puzzle-games','http://x/dup','Dup Puzzle', now() - interval '60 days', now(), true) RETURNING id`,
-      [src]
-    ))[0].id;
+        [src],
+      )
+    )[0].id;
     await db.query(
       `INSERT INTO game_snapshots(game_id, crawl_id, captured_at, rating, votes, genre)
        VALUES ($1,$2, now(), 4.1, 500, 'Puzzle Games')`,
-      [g, crawl]
+      [g, crawl],
     );
     const t = (await db.query("INSERT INTO tags(name) VALUES ('puzzle games') RETURNING id"))[0].id;
     await db.query("INSERT INTO game_tags(game_id, tag_id) VALUES ($1,$2)", [g, t]);
@@ -420,10 +470,10 @@ describe("B1 taxonomy hygiene — genre/tag canonicalization (#7, #15)", () => {
 describe("B2 supply velocity — is a genre flooding? (R1.1 + R1.3)", () => {
   it("classifySupply needs a real recent count to read 'rising' — one straggler can't cry crowding", () => {
     expect(q.classifySupply(0, 0)).toBe("quiet");
-    expect(q.classifySupply(1, 0)).toBe("steady");   // below the min-rising floor
-    expect(q.classifySupply(3, 0)).toBe("rising");    // real burst, nothing prior
-    expect(q.classifySupply(6, 2)).toBe("rising");    // 6 > 2×1.5
-    expect(q.classifySupply(1, 5)).toBe("cooling");   // supply drying up
+    expect(q.classifySupply(1, 0)).toBe("steady"); // below the min-rising floor
+    expect(q.classifySupply(3, 0)).toBe("rising"); // real burst, nothing prior
+    expect(q.classifySupply(6, 2)).toBe("rising"); // 6 > 2×1.5
+    expect(q.classifySupply(1, 5)).toBe("cooling"); // supply drying up
     expect(q.classifySupply(4, 4)).toBe("steady");
   });
 
@@ -438,16 +488,20 @@ describe("B2 supply velocity — is a genre flooding? (R1.1 + R1.3)", () => {
 
   it("a genre flooded with brand-new entrants reads 'rising'", async () => {
     const src = (await db.query("SELECT id FROM sources WHERE name='crazygames'"))[0].id;
-    const crawl = (await db.query("SELECT id FROM crawls WHERE source_id=$1 ORDER BY id DESC LIMIT 1", [src]))[0].id;
+    const crawl = (
+      await db.query("SELECT id FROM crawls WHERE source_id=$1 ORDER BY id DESC LIMIT 1", [src])
+    )[0].id;
     for (let i = 0; i < 4; i++) {
-      const g = (await db.query(
-        `INSERT INTO games(source_id, source_game_id, url, title, first_seen_at, last_seen_at, is_live)
+      const g = (
+        await db.query(
+          `INSERT INTO games(source_id, source_game_id, url, title, first_seen_at, last_seen_at, is_live)
          VALUES ($1,$2,$3,$4, now(), now(), true) RETURNING id`,
-        [src, `flood-${i}`, `http://x/flood${i}`, `Flood ${i}`]
-      ))[0].id;
+          [src, `flood-${i}`, `http://x/flood${i}`, `Flood ${i}`],
+        )
+      )[0].id;
       await db.query(
         `INSERT INTO game_snapshots(game_id, crawl_id, captured_at, rating, votes, genre) VALUES ($1,$2, now(), 4.0, 300, 'Floodtest')`,
-        [g, crawl]
+        [g, crawl],
       );
     }
     const rows = await q.getGenres(db, "all");
@@ -462,7 +516,8 @@ describe("B2 supply velocity — is a genre flooding? (R1.1 + R1.3)", () => {
     expect(gaps.length).toBeGreaterThan(0);
     for (const g of gaps) expect(typeof g.supplyRising).toBe("boolean");
     // score still sorted descending — the flag didn't reorder anything
-    for (let i = 1; i < gaps.length; i++) expect(gaps[i - 1].score).toBeGreaterThanOrEqual(gaps[i].score);
+    for (let i = 1; i < gaps.length; i++)
+      expect(gaps[i - 1].score).toBeGreaterThanOrEqual(gaps[i].score);
   });
 });
 
@@ -471,7 +526,7 @@ describe("B3 demand/supply quadrant (R1.2)", () => {
     const ov = await q.getOverview(db, "all");
     expect(ov.quadrant.length).toBeGreaterThan(0);
     for (const p of ov.quadrant) {
-      expect(p.supply).toBeGreaterThanOrEqual(4);        // HAVING count >= 4
+      expect(p.supply).toBeGreaterThanOrEqual(4); // HAVING count >= 4
       expect(p.appetite).toBeGreaterThanOrEqual(0);
       expect(p.weight).toBeGreaterThanOrEqual(0);
       expect(["rising", "steady", "cooling", "quiet"]).toContain(p.supplyTrend);

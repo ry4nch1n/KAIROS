@@ -32,14 +32,26 @@ describe("DQ assessSteamDataQuality — recency/accuracy invariants", () => {
   });
 
   it("flags a near-empty crawl", () => {
-    const r = assessSteamDataQuality({ crawled: 5, withDate: 5, rated: 5, indie: 5, comparables: 0 });
+    const r = assessSteamDataQuality({
+      crawled: 5,
+      withDate: 5,
+      rated: 5,
+      indie: 5,
+      comparables: 0,
+    });
     expect(r.ok).toBe(false);
     expect(r.failures.join(" ")).toMatch(/latest crawl too small/);
   });
 
   it("thresholds are conservative (won't fire on normal variance)", () => {
     // borderline-but-acceptable: 60% dated, 40% rated, 20 indie, 3 comparables
-    const r = assessSteamDataQuality({ crawled: 120, withDate: 72, rated: 48, indie: 20, comparables: 3 });
+    const r = assessSteamDataQuality({
+      crawled: 120,
+      withDate: 72,
+      rated: 48,
+      indie: 20,
+      comparables: 3,
+    });
     expect(r.ok).toBe(true);
     expect(DEFAULT_STEAM_QUALITY.minComparables).toBe(3);
   });

@@ -6,7 +6,7 @@ const tue = new Date("2026-06-30T12:00:00Z");
 
 describe("mondayOf", () => {
   it("returns the Monday that starts the week", () => {
-    expect(mondayOf(tue)).toBe(Date.UTC(2026, 5, 29));          // Tue → Mon Jun 29
+    expect(mondayOf(tue)).toBe(Date.UTC(2026, 5, 29)); // Tue → Mon Jun 29
     expect(mondayOf(new Date("2026-06-29T00:00:00Z"))).toBe(Date.UTC(2026, 5, 29)); // Mon → itself
     expect(mondayOf(new Date("2026-06-28T00:00:00Z"))).toBe(Date.UTC(2026, 5, 22)); // Sun → prior Mon
   });

@@ -36,7 +36,10 @@ function clippedValues(page: Page, scope: string) {
   return page.$$eval(`${scope} ${MUST_FIT}`, (els) =>
     els
       .filter((e) => e.scrollWidth > e.clientWidth + 1)
-      .map((e) => `"${(e.textContent || "").trim().slice(0, 24)}" (content ${e.scrollWidth}px > box ${e.clientWidth}px)`),
+      .map(
+        (e) =>
+          `"${(e.textContent || "").trim().slice(0, 24)}" (content ${e.scrollWidth}px > box ${e.clientWidth}px)`,
+      ),
   );
 }
 
@@ -56,7 +59,10 @@ async function settle(page: Page) {
 async function assertFits(page: Page, scope: string, label: string) {
   await expect(async () => {
     const over = await pageOverflow(page);
-    expect(over, `${label} scrolls the page horizontally by ${over}px at 375px`).toBeLessThanOrEqual(1);
+    expect(
+      over,
+      `${label} scrolls the page horizontally by ${over}px at 375px`,
+    ).toBeLessThanOrEqual(1);
     const clipped = await clippedValues(page, scope);
     expect(clipped, `${label} clips value(s) inside their card: ${clipped.join("; ")}`).toEqual([]);
   }).toPass({ timeout: 6000, intervals: [150, 300, 600, 1000] });
@@ -75,7 +81,11 @@ test.describe("mobile — layout fits at 375px", () => {
         // but don't hard-fail if ECharts is slow under parallel-worker load (the charts
         // are width:100% and can't cause page overflow anyway; the real risks are grids
         // and value displays, present with or without charts). assertFits() re-measures.
-        await page.locator(`${panel(svc)} canvas`).first().waitFor({ state: "visible", timeout: 20_000 }).catch(() => {});
+        await page
+          .locator(`${panel(svc)} canvas`)
+          .first()
+          .waitFor({ state: "visible", timeout: 20_000 })
+          .catch(() => {});
       }
       await settle(page);
       await assertFits(page, panel(svc), svc);
@@ -110,9 +120,14 @@ test.describe("mobile — layout fits at 375px", () => {
     // On mobile the sub-nav lives in a drawer — open it, jump to a table-heavy view.
     await page.locator(`${panel("radar")} .nav-toggle`).click();
     await page.locator(`${panel("radar")} .nav-item`, { hasText: "Genre Explorer" }).click();
-    await expect(page.locator(`${panel("radar")} .dtable`).first()).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator(`${panel("radar")} .dtable`).first()).toBeVisible({
+      timeout: 15_000,
+    });
     await settle(page);
     const over = await pageOverflow(page);
-    expect(over, `Genre Explorer spilled to the page (${over}px) instead of scrolling in its box`).toBeLessThanOrEqual(1);
+    expect(
+      over,
+      `Genre Explorer spilled to the page (${over}px) instead of scrolling in its box`,
+    ).toBeLessThanOrEqual(1);
   });
 });

@@ -131,7 +131,11 @@ describe("P2 /api/pitches route", () => {
     const url = `http://localhost:${port}/api/pitches`;
     try {
       // no token → 401
-      const noAuth = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(base) });
+      const noAuth = await fetch(url, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(base),
+      });
       expect(noAuth.status).toBe(401);
 
       // valid token, array of two → 200
@@ -167,11 +171,17 @@ describe("P3 DELETE /api/pitches/:slug", () => {
       // no token → 401
       expect((await fetch(u("salvage-line"), { method: "DELETE" })).status).toBe(401);
       // valid token → 200, row gone
-      const ok = await fetch(u("salvage-line"), { method: "DELETE", headers: { authorization: "Bearer test-token" } });
+      const ok = await fetch(u("salvage-line"), {
+        method: "DELETE",
+        headers: { authorization: "Bearer test-token" },
+      });
       expect(ok.status).toBe(200);
       expect((await q.getPitches(db)).length).toBe(0);
       // missing slug → 404
-      const gone = await fetch(u("salvage-line"), { method: "DELETE", headers: { authorization: "Bearer test-token" } });
+      const gone = await fetch(u("salvage-line"), {
+        method: "DELETE",
+        headers: { authorization: "Bearer test-token" },
+      });
       expect(gone.status).toBe(404);
     } finally {
       server.close();

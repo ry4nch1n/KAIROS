@@ -5,7 +5,7 @@ import { poki } from "../src/crawler/poki.ts";
 
 const fixture = readFileSync(
   fileURLToPath(new URL("./fixtures/poki_game.html", import.meta.url)),
-  "utf8"
+  "utf8",
 );
 
 describe("Poki adapter parse", () => {

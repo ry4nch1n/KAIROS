@@ -26,7 +26,13 @@ export interface FamilyCoverage {
  * family is the signal, not an omission. Rows sort by live coverage (active) desc, then total.
  */
 export function loopFamilyCoverage(pitches: Pitch[], families: string[]): FamilyCoverage[] {
-  const mk = (family: string): FamilyCoverage => ({ family, total: 0, active: 0, byStatus: {}, titles: [] });
+  const mk = (family: string): FamilyCoverage => ({
+    family,
+    total: 0,
+    active: 0,
+    byStatus: {},
+    titles: [],
+  });
   const base = new Map<string, FamilyCoverage>();
   for (const f of families) base.set(f, mk(f)); // seed every known family (incl. zero-coverage)
 
@@ -55,6 +61,6 @@ export function loopFamilyCoverage(pitches: Pitch[], families: string[]): Family
   addTitle(true);
 
   return [...base.values()].sort(
-    (a, b) => b.active - a.active || b.total - a.total || a.family.localeCompare(b.family)
+    (a, b) => b.active - a.active || b.total - a.total || a.family.localeCompare(b.family),
   );
 }

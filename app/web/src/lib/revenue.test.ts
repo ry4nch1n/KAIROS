@@ -88,7 +88,7 @@ describe("target persistence — per-browser localStorage, cleared with null", (
     expect(loadTargetSgd()).toBeNull();
   });
   it("rejects malformed or non-positive stored values", () => {
-    store.set("kairos.targetSgd", "{\"low\":-2}");
+    store.set("kairos.targetSgd", '{"low":-2}');
     expect(loadTargetSgd()).toBeNull();
     store.set("kairos.targetSgd", "not json");
     expect(loadTargetSgd()).toBeNull();

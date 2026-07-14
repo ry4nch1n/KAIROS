@@ -37,7 +37,7 @@ describe("quadrantOption", () => {
   });
   it("draws a median cross so the underserved quadrant is readable", () => {
     const ml = opt.series[0].markLine.data;
-    expect(ml.some((d: any) => d.xAxis === 12)).toBe(true);   // median supply of [6,12,20]
+    expect(ml.some((d: any) => d.xAxis === 12)).toBe(true); // median supply of [6,12,20]
     expect(ml.some((d: any) => d.yAxis === 1800)).toBe(true); // median appetite
   });
   it("uses log axes (wide demand/supply ranges) without a zero-crash", () => {
@@ -115,8 +115,22 @@ describe("velocityBarOption", () => {
 // ---------------------------------------------------------------------------
 describe("landscapeOption", () => {
   const pts: GenreLandscapePoint[] = [
-    { genre: "Action", supply: 90, p75Rating: 4.6, avgRating: 4.2, totalVotes: 1000000, examples: ["A", "B"] },
-    { genre: "Puzzle", supply: 30, p75Rating: 4.1, avgRating: 3.8, totalVotes: 200000, examples: ["C"] },
+    {
+      genre: "Action",
+      supply: 90,
+      p75Rating: 4.6,
+      avgRating: 4.2,
+      totalVotes: 1000000,
+      examples: ["A", "B"],
+    },
+    {
+      genre: "Puzzle",
+      supply: 30,
+      p75Rating: 4.1,
+      avgRating: 3.8,
+      totalVotes: 200000,
+      examples: ["C"],
+    },
   ];
   const opt = landscapeOption(pts) as any;
 
@@ -152,7 +166,7 @@ describe("heatmapOption", () => {
       { week: 0, genreIndex: 0, value: 42 }, // high-value cell
       { week: 0, genreIndex: 1, value: 10 },
       { week: 1, genreIndex: 0, value: 5 },
-      { week: 1, genreIndex: 1, value: 1 },  // low-value cell
+      { week: 1, genreIndex: 1, value: 1 }, // low-value cell
       { week: 2, genreIndex: 0, value: 8 },
       { week: 2, genreIndex: 1, value: 3 },
       { week: 3, genreIndex: 0, value: 2 },

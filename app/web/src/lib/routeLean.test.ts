@@ -8,7 +8,7 @@ describe("routeLean — the pitch-level route compass (C2)", () => {
   });
   it("a null axis (platform doesn't apply) is itself a firm lean", () => {
     expect(routeLean(2, null)?.cls).toBe("route-23"); // browser-only ladder
-    expect(routeLean(null, 2)?.cls).toBe("route-1");  // steam-only ladder
+    expect(routeLean(null, 2)?.cls).toBe("route-1"); // steam-only ladder
   });
   it("both strong + equal = optionality (keep Phase-0 doors open)", () => {
     expect(routeLean(3, 3)?.label).toBe("optionality");

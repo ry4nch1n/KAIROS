@@ -88,7 +88,10 @@ export function saveTargetSgd(t: TargetBand | null): void {
   }
 }
 
-export function targetBandUsd(sgdPerUsd: number, target: TargetBand): { low: number; high: number } {
+export function targetBandUsd(
+  sgdPerUsd: number,
+  target: TargetBand,
+): { low: number; high: number } {
   const rate = sgdPerUsd > 0 ? sgdPerUsd : DEFAULT_SGD_PER_USD;
   return { low: target.low / rate, high: target.high / rate };
 }
@@ -96,7 +99,11 @@ export function targetBandUsd(sgdPerUsd: number, target: TargetBand): { low: num
 export type TargetVerdict = "no-target" | "below" | "in-band" | "above";
 
 /** Where a projected monthly USD figure lands versus the user's SGD target band. */
-export function verdict(monthlyUsd: number, sgdPerUsd: number, target: TargetBand | null): TargetVerdict {
+export function verdict(
+  monthlyUsd: number,
+  sgdPerUsd: number,
+  target: TargetBand | null,
+): TargetVerdict {
   if (!target) return "no-target";
   const band = targetBandUsd(sgdPerUsd, target);
   if (monthlyUsd < band.low) return "below";
