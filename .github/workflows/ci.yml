@@ -1,8 +1,11 @@
 name: CI
-# Authoritative quality gate for the autonomous iteration loop. Runs the full test
-# suite (incl. the data-contract test) + the web build on every PR to main. Branch
-# protection requires this check green before a merge — so a bug in the agent's local
-# run can never bypass it. Lean on purpose (~2-3 min): no crawl, no deploy.
+# Authoritative quality gate for the autonomous iteration loop. Runs the Biome
+# lint/format check + the full test suite (incl. the data-contract test) + the web
+# build on every PR to main. Branch protection requires this check green before a
+# merge — so a bug in the agent's local run can never bypass it. The local pre-push
+# hook runs Biome too, but that hook is per-machine and bypassable; this step makes
+# lint/format a hard gate for every machine and cloud agent. Biome is ~100ms, so the
+# Actions-minute cost is negligible. Lean on purpose (~2-3 min): no crawl, no deploy.
 on:
   pull_request:
     branches: [main]
@@ -20,6 +23,8 @@ jobs:
         with:
           node-version: "22"
       - run: npm install
+      - name: Lint + format check (Biome)
+        run: npm run lint
       - name: Test (server + web, incl. contract test)
         run: npm test
       - name: Build (typecheck + bundle)
