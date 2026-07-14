@@ -16,12 +16,17 @@ name: deploy
 
 on:
   schedule:
-    # 01:00 UTC = 09:00 Singapore (you're awake to catch issues). Every day EXCEPT Monday
-    # (day-of-week 1): on Mondays the kairos-feedback-implementation routine implements the
-    # week's feedback and performs that day's deploy itself, so the scheduled deploy stands
-    # down to avoid shipping main ahead of the routine. `workflow_dispatch` still works any
-    # day, so the Monday routine (and a manual "Deploy now") can deploy whenever needed.
-    - cron: "0 1 * * 0,2-6" # Sun + Tue–Sat (skips Mon)
+    # 22:00 UTC = 06:00 Singapore (SGT, UTC+8) the NEXT calendar day — before the SGT
+    # workday. Every day EXCEPT SGT Monday: on Mondays the kairos-feedback-implementation
+    # routine implements the week's feedback and performs that day's deploy itself, so the
+    # scheduled deploy stands down to avoid shipping main ahead of the routine.
+    # `workflow_dispatch` still works any day, so the Monday routine (and a manual
+    # "Deploy now") can deploy whenever needed.
+    #
+    # Day-of-week in cron is UTC. Because 06:00 SGT falls on the PREVIOUS UTC day, skipping
+    # SGT Monday means skipping the 22:00-UTC-Sunday run (UTC day-of-week 0). So the schedule
+    # is UTC Mon–Sat (1-6), which fires at 06:00 SGT Tue–Sun.
+    - cron: "0 22 * * 1-6" # 22:00 UTC Mon–Sat = 06:00 SGT Tue–Sun (skips SGT Mon)
   workflow_dispatch: # manual "Deploy now" button in the Actions tab
     inputs:
       force:
