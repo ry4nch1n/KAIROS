@@ -28,23 +28,23 @@ export const LIBRARY_PROTOTYPES = [
     kind: "prototype",
     title: "Ferrywick — Loop Toy",
     summary:
-      "Tests the route-planning core: lay ferry lines to keep every village connected on a limited budget, then re-thread when the rising tide floods your low channels. Does drawing-and-re-routing-under-pressure feel good? Browser-playable.",
+      'v2.1 rework — visible shoals and deep channels (lines flood by the water they cross, so route choice is real), amber flood countdowns, a low-tide causeway gift, and a five-lines-for-six-villages budget so someone is always cut off: constant triage, no set-and-forget network. Loop feel-test for the "ferrywick-20260711" pitch. Browser-playable. Verdict 2026-07-14: shelved — with the loop finally forced, it plays as frantic link management: many actions, little satisfaction, and readability still strains under pressure. The tide-triage core is disproven, not just the presentation.',
     mediaUrl: `${PROTO}/ferrywick-20260711/`,
     imageUrl: `${ART}/ferrywick-20260711/header.png`,
     tags: ["Ferrywick", "route-planning", "browser"],
     status: "shelved",
-    date: "2026-07-11",
+    date: "2026-07-14",
   },
   {
     kind: "prototype",
     title: "Overflow — Loop Toy",
     summary:
-      "Typed parts ride a conveyor toward a spill chute; fire the matching machine before they fall off — but each machine needs a beat to reset, so the real pressure is your own backlog, not your reflexes. Tests whether managing rising typed throughput feels tense and satisfying at browser scale (the automation-under-pressure loop's core question). Browser-playable.",
+      'v2 rework — now the pitched game: machines work by themselves; your only verb is bolting each delivered machine into a permanent floor slot along the belt. The belt is a timeline (op chains meet stations in order), so early sprawl compounds as mid-shift contracts drift to new work types. Tests whether sticky placement gives calm, compounding pressure — not reflex panic. Loop feel-test for the "overflow-20260710" pitch. Browser-playable.',
     mediaUrl: `${PROTO}/overflow-20260710/`,
     imageUrl: `${ART}/overflow-20260710/header.png`,
     tags: ["Overflow", "automation-under-pressure", "browser"],
-    status: "shelved",
-    date: "2026-07-10",
+    status: "shipped",
+    date: "2026-07-14",
   },
   {
     kind: "prototype",
