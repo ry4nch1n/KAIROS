@@ -66,7 +66,9 @@ const dq = assessSteamDataQuality(
 );
 console.log("\nE5 data-quality:", dq.metrics, dq.ok ? "✅" : "❌");
 console.log("E5 comparables (recent, indie):", comparables.map((c) => `${c.releaseDate ?? "—"} ${c.title}`).slice(0, 8));
-if (!dq.ok) dq.failures.forEach((f) => console.error("   - " + f));
+if (!dq.ok) {
+  for (const f of dq.failures) console.error("   - " + f);
+}
 
 const out = {
   generatedAtUTC: new Date().toISOString(),

@@ -182,10 +182,11 @@ export const INDIE_CANON: number[] = [
 export function parseSearchAppids(html: string): number[] {
   const ids: number[] = [];
   const re = /data-ds-appid="(\d+)"/g;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(html ?? ""))) {
+  let m = re.exec(html ?? "");
+  while (m !== null) {
     const id = Number(m[1]);
     if (Number.isFinite(id) && id > 0 && !ids.includes(id)) ids.push(id);
+    m = re.exec(html ?? "");
   }
   return ids;
 }

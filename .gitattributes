@@ -1,0 +1,21 @@
+# Normalize line endings to LF in the repo AND the working tree on every
+# platform. The repo already stores LF (core.autocrlf was masking this on
+# Windows); this makes the checkout LF too, so tooling — Biome, tsc, tests —
+# behaves identically on Windows, macOS/Linux dev, and Netlify/CI.
+* text=auto eol=lf
+
+# Captured crawler fixtures: preserve exact bytes (some parser tests compare
+# against them verbatim). Never convert their line endings.
+app/server/test/fixtures/** -text
+
+# Binary assets — never normalize.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.pdf binary
+*.zip binary
