@@ -39,11 +39,11 @@ export const LIBRARY_PROTOTYPES = [
     kind: "prototype",
     title: "Overflow — Loop Toy",
     summary:
-      'v2 rework — now the pitched game: machines work by themselves; your only verb is bolting each delivered machine into a permanent floor slot along the belt. The belt is a timeline (op chains meet stations in order), so early sprawl compounds as mid-shift contracts drift to new work types. Tests whether sticky placement gives calm, compounding pressure — not reflex panic. Loop feel-test for the "overflow-20260710" pitch. Browser-playable.',
+      'v2 rework — now the pitched game: machines work by themselves; your only verb is bolting each delivered machine into a permanent floor slot along the belt. The belt is a timeline (op chains meet stations in order), so early sprawl compounds as mid-shift contracts drift to new work types. Loop feel-test for the "overflow-20260710" pitch. Browser-playable. Verdict 2026-07-14: shelved — a straight-belt timeline gives placement no real strategy: the canonical left-to-right order makes most choices obvious. The genre\'s depth (cf. Leek Factory) lives in routing topology — looping belts, machines that take in one direction and output in another — a dimension this distillation stripped out.',
     mediaUrl: `${PROTO}/overflow-20260710/`,
     imageUrl: `${ART}/overflow-20260710/header.png`,
     tags: ["Overflow", "automation-under-pressure", "browser"],
-    status: "shipped",
+    status: "shelved",
     date: "2026-07-14",
   },
   {
