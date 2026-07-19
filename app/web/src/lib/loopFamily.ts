@@ -12,11 +12,16 @@ import type { Pitch } from "shared";
 // prose happens at build time in the (separate) indie-brief tool. That's the design-heavy
 // residual tracked on the parent #12 — this ships the coverage backbone it plugs into.
 
+// Off-ladder dispositions — a decision to leave the ranked field, not a live bet. Mirrors
+// the leaderboard's OFF_LADDER: parked (deferred) and shelved (rejected) both drop out of
+// "active" coverage. Kept local to avoid a cycle with the Library component module.
+const OFF_LADDER = new Set(["parked", "shelved"]);
+
 export interface FamilyCoverage {
   family: string;
   total: number; // pitches tagged to this family
-  active: number; // non-shelved pitches (the live bets)
-  byStatus: Record<string, number>; // status -> count (proposed | prototyping | shipped | shelved | …)
+  active: number; // on-ladder pitches (the live bets — excludes parked + shelved)
+  byStatus: Record<string, number>; // status -> count (proposed | prototyping | building | parked | …)
   titles: string[]; // up to 3 example titles, live ones first
 }
 
@@ -43,18 +48,19 @@ export function loopFamilyCoverage(pitches: Pitch[], families: string[]): Family
     row.total++;
     const st = p.status || "proposed";
     row.byStatus[st] = (row.byStatus[st] || 0) + 1;
-    if (st !== "shelved") row.active++;
+    if (!OFF_LADDER.has(st)) row.active++;
     base.set(f, row);
   }
 
-  // Example titles: live (non-shelved) pitches first, then shelved to fill, capped at 3.
-  const addTitle = (wantShelved: boolean) => {
+  // Example titles: live (on-ladder) pitches first, then off-ladder (parked/shelved) to
+  // fill, capped at 3.
+  const addTitle = (wantOffLadder: boolean) => {
     for (const p of pitches) {
       if (!p.loopFamily) continue;
       const row = base.get(p.loopFamily);
       if (!row || row.titles.length >= 3) continue;
-      const shelved = (p.status || "") === "shelved";
-      if (shelved === wantShelved && !row.titles.includes(p.title)) row.titles.push(p.title);
+      const offLadder = OFF_LADDER.has(p.status || "");
+      if (offLadder === wantOffLadder && !row.titles.includes(p.title)) row.titles.push(p.title);
     }
   };
   addTitle(false);
