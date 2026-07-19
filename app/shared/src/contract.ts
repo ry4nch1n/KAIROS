@@ -18,7 +18,11 @@ export const CONTRACT = {
   //     (#25 first slice). See taxonomy.settings below; additive, read defensively.
   // v6: pitch v6 read-through — see pitch.version below (`validated` pitch status, the
   //     play-tested lead-candidate verdict the leaderboard ranks above `prototyping`).
-  version: 6,
+  // v7: pitch v7 read-through — see pitch.version below. `status` stops trying to say two
+  //     things at once. It gains `building` (the committed lead, in production — pinned atop
+  //     the leaderboard) and `parked` (promising but deliberately deferred — split cleanly
+  //     from `shelved`, which now means "rejected" only). Additive to the enum.
+  version: 7,
   pitch: {
     // v2: added visual-card fields — setting, artStyle, codeName, headerUrl, shotUrl.
     // v3: rating rework — scoreFields d1Fit/steamCeiling/buildCost → browserFit/steamFit/buildEase.
@@ -38,7 +42,14 @@ export const CONTRACT = {
     // v6: added the `validated` status — a play-test verdict above `prototyping` (loop proved
     //     out, this is the lead candidate) but short of `shipped`. The leaderboard ranks it
     //     above prototyping; the prototype card already styles it (cyan chip). Additive.
-    version: 6,
+    // v7: `status` was quietly encoding two orthogonal things — evidence (how proven the loop
+    //     is) and disposition (what you decided to do with it). Two new values split them out:
+    //     `building` = the committed lead in active production (a DECISION that can precede
+    //     `validated`; the leaderboard pins it as "Current focus"), and `parked` = promising
+    //     but deliberately deferred, revisit later — distinct from `shelved`, which is now
+    //     "rejected, won't revisit" only. Off-ladder states (parked/shelved) leave the ranked
+    //     board but stay visible in their own shelves. Additive to the enum.
+    version: 7,
     loopFamilies: [
       "extraction-lite",
       "automation-under-pressure",
@@ -50,7 +61,10 @@ export const CONTRACT = {
       "synergy-builder",
     ],
     badges: ["recommended", "retention-safe", "cashflow", "cheapest-build"],
-    statuses: ["proposed", "prototyping", "validated", "shelved", "shipped"],
+    // On-ladder (a live bet, ranked on the leaderboard): proposed → prototyping → validated
+    // → building → shipped. Off-ladder dispositions (leave the ranked board, kept not deleted):
+    // parked (deferred, revisit) and shelved (rejected).
+    statuses: ["proposed", "prototyping", "validated", "building", "shipped", "parked", "shelved"],
     platformLadders: ["browser->steam", "browser-only", "steam-only"],
     provenances: ["market-backed", "design-derived"],
     contentScopes: ["small", "medium", "large"], // content bill vs. what the genre's buyers expect

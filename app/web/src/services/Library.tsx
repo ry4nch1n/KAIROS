@@ -307,15 +307,20 @@ const COLLECTION_BLURB: Record<string, string> = {
 // currently winning, and what evidence would change that" — score dots side by side,
 // sorted by evidence state (tested beats untested paper strength), with explicit
 // missing-evidence chips so the next action is legible per row.
-// Evidence-state order for the leaderboard: a play-tested lead candidate (`validated`) outranks
-// one still in gray-box (`prototyping`), which outranks paper-only (`proposed`). `shelved` never
-// reaches here — rankPitches filters it out.
+// Evidence-state order for the ranked board: the committed lead (`building`) sits atop,
+// then shipped, then a play-tested candidate (`validated`) outranks one still in gray-box
+// (`prototyping`), which outranks paper-only (`proposed`). The off-ladder dispositions
+// (`parked` = deferred, `shelved` = rejected) never reach the ranked list — rankPitches
+// filters both out; the view renders them in their own shelves instead.
 const STATUS_RANK: Record<string, number> = {
-  shipped: 0,
-  validated: 1,
-  prototyping: 2,
-  proposed: 3,
+  building: 0,
+  shipped: 1,
+  validated: 2,
+  prototyping: 3,
+  proposed: 4,
 };
+// Off-ladder dispositions — a decision to leave the ranked field, not an evidence state.
+const OFF_LADDER = new Set(["parked", "shelved"]);
 
 function scoreMean(p: Pitch): number {
   // Average of the PRESENT 1..3 axes — an axis scored n/a (e.g. a Steam-only pitch with no
@@ -331,7 +336,7 @@ function scoreMean(p: Pitch): number {
 
 export function rankPitches(pitches: Pitch[]): Pitch[] {
   return pitches
-    .filter((p) => p.status !== "shelved")
+    .filter((p) => !OFF_LADDER.has(p.status))
     .sort((a, b) => {
       const s = (STATUS_RANK[a.status] ?? 9) - (STATUS_RANK[b.status] ?? 9);
       if (s !== 0) return s;
@@ -357,101 +362,232 @@ function evidenceChips(p: Pitch): { label: string; missing: boolean }[] {
   return chips;
 }
 
+// The five 1..3 score axes, as a compact labelled dot-strip — used in the focus/parked
+// rows where the full comparison table would be overkill.
+const SCORE_STRIP: [keyof Pitch, string][] = [
+  ["browserFit", "Browser"],
+  ["steamFit", "Steam"],
+  ["buildEase", "Build"],
+  ["marketability", "Hook"],
+  ["founderFit", "Founder"],
+];
+function ScoreStrip({ p }: { p: Pitch }) {
+  return (
+    <span className="fdots">
+      {SCORE_STRIP.map(([k, label]) => {
+        const v = p[k] as number | null;
+        return (
+          <span key={label}>
+            {label} {v !== null ? <Dots n={v} /> : "n/a"}
+          </span>
+        );
+      })}
+    </span>
+  );
+}
+
+// The open field — the ranked comparison table, unchanged in columns. Only contenders on
+// the evidence ladder (validated / prototyping / proposed) reach it; the pick is pinned
+// above, and off-ladder dispositions render in their own shelves below.
+function FieldTable({ rows }: { rows: Pitch[] }) {
+  return (
+    <table className="dtable">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Pitch</th>
+          <th>Loop</th>
+          <th
+            className="r"
+            title="Browser-native viability: instant hook, portal retention, ad-monetizability"
+          >
+            Browser
+          </th>
+          <th className="r" title="Paid-Steam laddering potential + revenue ceiling vs comps">
+            Steam
+          </th>
+          <th className="r" title="Solo-dev feasibility — higher = cheaper/easier">
+            Build
+          </th>
+          <th className="r" title="First-session hook / does it capsule (the marketability lens)">
+            Hook
+          </th>
+          <th className="r" title="Personal pull + edge — would you still care in month four?">
+            Founder
+          </th>
+          <th
+            className="r"
+            title="Estimated days to a testable gray-box loop — the kill-gate clock"
+          >
+            Gray-box
+          </th>
+          <th title="Route compass from the two platform-fit scores: browser-heavy → Routes 2/3, Steam-heavy → Route 1, both strong → optionality">
+            Route
+          </th>
+          <th>Status</th>
+          <th>Evidence</th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((p, i) => (
+          <tr key={p.slug}>
+            <td className="r">{i + 1}</td>
+            <td className="gname">{p.title}</td>
+            <td>{p.loopFamily ? LOOP_LABEL[p.loopFamily] || p.loopFamily : "—"}</td>
+            <td className="r">{p.browserFit !== null ? <Dots n={p.browserFit} /> : "—"}</td>
+            <td className="r">{p.steamFit !== null ? <Dots n={p.steamFit} /> : "—"}</td>
+            <td className="r">{p.buildEase !== null ? <Dots n={p.buildEase} /> : "—"}</td>
+            <td className="r">{p.marketability !== null ? <Dots n={p.marketability} /> : "—"}</td>
+            <td className="r">{p.founderFit !== null ? <Dots n={p.founderFit} /> : "—"}</td>
+            <td className="r">{p.grayBoxDays != null ? "~" + p.grayBoxDays + "d" : "—"}</td>
+            <td>
+              {(() => {
+                const r = routeLean(p.browserFit, p.steamFit);
+                return r ? (
+                  <span className={"route-chip " + r.cls} title={r.tip}>
+                    {r.label}
+                  </span>
+                ) : (
+                  "—"
+                );
+              })()}
+            </td>
+            <td>
+              <span className={"ptag st st-" + p.status}>{p.status}</span>
+            </td>
+            <td>
+              <span className="ev-chips">
+                {evidenceChips(p).map((c) => (
+                  <span key={c.label} className={"ev-chip" + (c.missing ? " ev-missing" : "")}>
+                    {c.label}
+                  </span>
+                ))}
+              </span>
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
+// The leaderboard answers "which candidate is winning, and what would change that" — but
+// evidence state and the portfolio decision are two questions (a play-tested game you've
+// parked outranks nothing you're building). So the board reads as bands: the committed
+// lead pinned as Current focus, the open field ranked beneath, then Parked / Shelved /
+// Idea-pool shelves so a deferred gem stays visible instead of vanishing like a reject.
 function LeaderboardView({ pitches }: { pitches: Pitch[] }) {
-  const ranked = rankPitches(pitches);
-  if (!ranked.length)
+  const ranked = rankPitches(pitches); // on-ladder only (parked + shelved already filtered)
+  const focus = ranked.filter((p) => p.status === "building" || p.status === "shipped");
+  const field = ranked.filter((p) => p.status === "validated" || p.status === "prototyping");
+  const ideaPool = ranked.filter((p) => p.status === "proposed");
+  const parked = pitches.filter((p) => p.status === "parked");
+  const shelved = pitches.filter((p) => p.status === "shelved");
+
+  if (!pitches.length)
     return (
       <div className="empty">
-        <h3>No active pitches to rank yet</h3>
+        <h3>No pitches to rank yet</h3>
       </div>
     );
+
   return (
     <div className="card">
       <h3>
         Candidate leaderboard
-        <span className="sub">non-shelved pitches — evidence state first, paper scores second</span>
+        <span className="sub">the pick, the open field, and what's parked</span>
       </h3>
       <p className="view-head">
-        A tested loop outranks a stronger-looking untested one. The chips say what's missing —
-        that's the next action for the row, not a demerit.
+        The committed game is pinned up top; the field ranks by evidence state, then paper score (a
+        tested loop outranks a stronger-looking untested one). Parked ideas stay visible for later —
+        a deferred bet isn't a rejected one.
       </p>
-      <table className="dtable">
-        <thead>
-          <tr>
-            <th>#</th>
-            <th>Pitch</th>
-            <th>Loop</th>
-            <th
-              className="r"
-              title="Browser-native viability: instant hook, portal retention, ad-monetizability"
-            >
-              Browser
-            </th>
-            <th className="r" title="Paid-Steam laddering potential + revenue ceiling vs comps">
-              Steam
-            </th>
-            <th className="r" title="Solo-dev feasibility — higher = cheaper/easier">
-              Build
-            </th>
-            <th className="r" title="First-session hook / does it capsule (the marketability lens)">
-              Hook
-            </th>
-            <th className="r" title="Personal pull + edge — would you still care in month four?">
-              Founder
-            </th>
-            <th
-              className="r"
-              title="Estimated days to a testable gray-box loop — the kill-gate clock"
-            >
-              Gray-box
-            </th>
-            <th title="Route compass from the two platform-fit scores: browser-heavy → Routes 2/3, Steam-heavy → Route 1, both strong → optionality">
-              Route
-            </th>
-            <th>Status</th>
-            <th>Evidence</th>
-          </tr>
-        </thead>
-        <tbody>
-          {ranked.map((p, i) => (
-            <tr key={p.slug}>
-              <td className="r">{i + 1}</td>
-              <td className="gname">{p.title}</td>
-              <td>{p.loopFamily ? LOOP_LABEL[p.loopFamily] || p.loopFamily : "—"}</td>
-              <td className="r">{p.browserFit !== null ? <Dots n={p.browserFit} /> : "—"}</td>
-              <td className="r">{p.steamFit !== null ? <Dots n={p.steamFit} /> : "—"}</td>
-              <td className="r">{p.buildEase !== null ? <Dots n={p.buildEase} /> : "—"}</td>
-              <td className="r">{p.marketability !== null ? <Dots n={p.marketability} /> : "—"}</td>
-              <td className="r">{p.founderFit !== null ? <Dots n={p.founderFit} /> : "—"}</td>
-              <td className="r">{p.grayBoxDays != null ? "~" + p.grayBoxDays + "d" : "—"}</td>
-              <td>
-                {(() => {
-                  const r = routeLean(p.browserFit, p.steamFit);
-                  return r ? (
-                    <span className={"route-chip " + r.cls} title={r.tip}>
-                      {r.label}
-                    </span>
-                  ) : (
-                    "—"
-                  );
-                })()}
-              </td>
-              <td>
-                <span className={"ptag st st-" + p.status}>{p.status}</span>
-              </td>
-              <td>
-                <span className="ev-chips">
-                  {evidenceChips(p).map((c) => (
-                    <span key={c.label} className={"ev-chip" + (c.missing ? " ev-missing" : "")}>
-                      {c.label}
-                    </span>
-                  ))}
-                </span>
-              </td>
-            </tr>
+
+      {focus.length > 0 && (
+        <div className="lb-focus">
+          <div className="lb-band-h">
+            <span className="t">▶ Current focus</span>
+            <span className="sub">the committed game — in production</span>
+          </div>
+          {focus.map((p) => (
+            <div className="lb-focus-row" key={p.slug}>
+              <span className="crown" aria-hidden>
+                ★
+              </span>
+              <span className="fname">
+                {p.title}
+                <small>
+                  {p.status === "shipped" ? "shipped" : "in production"}
+                  {p.loopFamily ? " · " + (LOOP_LABEL[p.loopFamily] || p.loopFamily) : ""}
+                  {p.grayBoxDays != null ? " · ~" + p.grayBoxDays + "d to gray-box" : ""}
+                </small>
+              </span>
+              <ScoreStrip p={p} />
+              <span className={"ptag st st-" + p.status}>{p.status}</span>
+            </div>
           ))}
-        </tbody>
-      </table>
+        </div>
+      )}
+
+      <div className="lb-band-h">
+        <span className="t">The field</span>
+        <span className="sub">open contenders — evidence state, then paper score</span>
+      </div>
+      {field.length > 0 ? (
+        <FieldTable rows={field} />
+      ) : (
+        <p className="lb-empty-field">
+          No open contenders right now — the field is clear behind the current focus.
+        </p>
+      )}
+
+      {parked.length > 0 && (
+        <div className="lb-shelf lb-parked" style={{ marginTop: 16 }}>
+          <div className="lb-band-h">
+            <span className="t">Parked — revisit later</span>
+            <span className="sub">promising, deliberately deferred · scores kept intact</span>
+          </div>
+          {parked.map((p) => (
+            <div className="lb-parked-row" key={p.slug}>
+              <span className="pname">
+                {p.title}
+                {p.oneLiner && <small>{p.oneLiner}</small>}
+              </span>
+              <ScoreStrip p={p} />
+              <span className="ptag st st-parked">parked</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {ideaPool.length > 0 && (
+        <details className="lb-collapsed">
+          <summary>
+            <span className="ptag st st-proposed">idea pool</span>
+            <span>
+              {ideaPool.length} unbuilt paper pitch{ideaPool.length === 1 ? "" : "es"} — lowest
+              evidence
+            </span>
+            <span className="tw" aria-hidden>
+              ＋
+            </span>
+          </summary>
+          <div className="lb-list">{ideaPool.map((p) => p.title).join(" · ")}</div>
+        </details>
+      )}
+
+      {shelved.length > 0 && (
+        <details className="lb-collapsed">
+          <summary>
+            <span className="ptag st st-shelved">shelved</span>
+            <span>{shelved.length} rejected — won't revisit</span>
+            <span className="tw" aria-hidden>
+              ＋
+            </span>
+          </summary>
+          <div className="lb-list">{shelved.map((p) => p.title).join(" · ")}</div>
+        </details>
+      )}
     </div>
   );
 }
@@ -559,7 +695,9 @@ export function Library({ hidden }: { hidden: boolean }) {
   const isEmpty =
     loaded && !isLeaderboard && !isFamilies && shownPitches.length === 0 && shownItems.length === 0;
   const totalLatest = pitches[0]?.pitchDate;
-  const activePitchCount = pitches.filter((p) => p.status !== "shelved").length;
+  // The leaderboard badge counts live bets only — the ranked board (on-ladder statuses),
+  // excluding both off-ladder dispositions (parked = deferred, shelved = rejected).
+  const activePitchCount = pitches.filter((p) => !OFF_LADDER.has(p.status)).length;
 
   return (
     <section className="service" data-svc="library" hidden={hidden}>

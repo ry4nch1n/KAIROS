@@ -122,6 +122,24 @@ describe("C2d pitch v6 — `validated` status", () => {
   });
 });
 
+describe("C2e pitch v7 — `building` + `parked` statuses", () => {
+  it("bumped both versions and added building + parked to the status vocabulary", () => {
+    expect(CONTRACT.pitch.version).toBeGreaterThanOrEqual(7);
+    expect(CONTRACT.version).toBeGreaterThanOrEqual(7);
+    expect(CONTRACT.pitch.statuses).toContain("building");
+    expect(CONTRACT.pitch.statuses).toContain("parked");
+  });
+  it("accepts the committed-lead status (building) and the deferred status (parked)", () => {
+    expect(validatePitchInput({ ...goodPitch, status: "building" }).ok).toBe(true);
+    expect(validatePitchInput({ ...goodPitch, status: "parked" }).ok).toBe(true);
+  });
+  it("keeps rejecting an unknown status (must still bump the contract to add one)", () => {
+    const r = validatePitchInput({ ...goodPitch, status: "greenlit" });
+    expect(r.ok).toBe(false);
+    expect(r.errors.join(" ")).toMatch(/status/);
+  });
+});
+
 describe("C3 validateBriefPayload is advisory, never hard-fails a real payload", () => {
   it("passes a complete payload with no warnings", () => {
     const payload: Record<string, unknown> = {};

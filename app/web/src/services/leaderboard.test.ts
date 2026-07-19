@@ -68,4 +68,25 @@ describe("rankPitches — evidence-state order", () => {
     ]);
     expect(ranked.map((x) => x.slug)).toEqual(["hearthspeak", "solar-forge"]);
   });
+
+  it("pins the committed lead (building) atop, even above a validated candidate", () => {
+    // The whole point of v7: a decision (building) beats a stronger evidence state
+    // (validated). This is exactly the Jester's-War-over-Hearthspeak fix.
+    const ranked = rankPitches([
+      p({ slug: "hearthspeak", status: "validated" }),
+      p({ slug: "jesters-war", status: "building" }),
+      p({ slug: "some-proto", status: "prototyping" }),
+    ]);
+    expect(ranked[0].slug).toBe("jesters-war");
+    expect(ranked.map((x) => x.slug)).toEqual(["jesters-war", "hearthspeak", "some-proto"]);
+  });
+
+  it("drops parked pitches off the ranked board, like shelved (they render in a shelf)", () => {
+    const ranked = rankPitches([
+      p({ slug: "keep", status: "prototyping" }),
+      p({ slug: "parked-gem", status: "parked" }),
+      p({ slug: "gone", status: "shelved" }),
+    ]);
+    expect(ranked.map((x) => x.slug)).toEqual(["keep"]);
+  });
 });
