@@ -495,13 +495,8 @@ function LeaderboardView({ pitches }: { pitches: Pitch[] }) {
     <div className="card">
       <h3>
         Candidate leaderboard
-        <span className="sub">the pick, the open field, and what's parked</span>
+        <span className="sub">the pick, the field, the parked</span>
       </h3>
-      <p className="view-head">
-        The committed game is pinned up top; the field ranks by evidence state, then paper score (a
-        tested loop outranks a stronger-looking untested one). Parked ideas stay visible for later —
-        a deferred bet isn't a rejected one.
-      </p>
 
       {focus.length > 0 && (
         <div className="lb-focus">
