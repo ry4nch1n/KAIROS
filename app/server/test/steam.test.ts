@@ -958,3 +958,43 @@ describe("D14 GET /api/steam", () => {
     }
   });
 });
+
+describe("D17 getSteamGenreQuadrant demand axis (issue #89)", () => {
+  it("uses median reviews, not the coarse owners buckets, for appetite", async () => {
+    const db = await freshMemoryDb();
+    await seedSteamSample(db);
+    const pts = await q.getSteamGenreQuadrant(db);
+    // Action's only non-AAA title is filtered to 1 row, so HAVING count(*) >= 2 leaves Puzzle.
+    const puzzle = pts.find((p) => p.genre === "Puzzle")!;
+    expect(puzzle).toBeTruthy();
+    // votes 800 / 1,500 → median 1,150. The old axis (owners 30k / 60k) would give 45,000.
+    expect(puzzle.appetite).toBe(1150);
+    // bubble weight stays the owners × price revenue proxy, in dollars
+    expect(puzzle.weight).toBe((30_000 * 500 + 60_000 * 1000) / 100);
+  });
+
+  it("does not collapse genres onto the 10,000 owners-bucket floor", async () => {
+    const db = await freshMemoryDb();
+    // Two genres whose titles all sit in SteamSpy's lowest owners bucket (midpoint 10,000):
+    // a median-owners axis pins both to 10,000; a median-reviews axis separates them.
+    await loadGames(
+      db,
+      "steam",
+      STEAM_BASE_URL,
+      [
+        steamGame({ sourceGameId: "q1", genre: "Strategy", ownersEst: 10_000, votes: 40 }),
+        steamGame({ sourceGameId: "q2", genre: "Strategy", ownersEst: 10_000, votes: 60 }),
+        steamGame({ sourceGameId: "q3", genre: "Racing", ownersEst: 10_000, votes: 900 }),
+        steamGame({ sourceGameId: "q4", genre: "Racing", ownersEst: 10_000, votes: 1_100 }),
+      ],
+      "2026-06-30T00:00:00.000Z",
+    );
+    const pts = await q.getSteamGenreQuadrant(db);
+    const strategy = pts.find((p) => p.genre === "Strategy")!;
+    const racing = pts.find((p) => p.genre === "Racing")!;
+    expect(strategy.appetite).toBe(50);
+    expect(racing.appetite).toBe(1000);
+    expect(strategy.appetite).not.toBe(racing.appetite);
+    expect(pts.every((p) => p.appetite !== 10_000)).toBe(true);
+  });
+});

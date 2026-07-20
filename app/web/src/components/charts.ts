@@ -353,9 +353,12 @@ export function quadrantOption(
       {
         type: "scatter",
         data,
-        // Owners are SteamSpy bucket midpoints, so many genres land on the SAME y (identical
-        // buckets) and their labels collide on one line. A white label chip keeps each legible,
-        // shiftY nudges colliders apart vertically, and hideOverlap drops any that still touch.
+        // Genres can still share a y value (both axes are counts, and small genres cluster), so
+        // labels collide on one line. A white label chip keeps each legible, shiftY nudges
+        // colliders apart vertically, and hideOverlap drops any that still touch. The severe case
+        // was the old Steam demand axis: median SteamSpy OWNERS, a bucket midpoint whose lowest
+        // bucket (0..20k) collapses to 10,000 and stacked nearly every genre on one line. That
+        // axis is now median reviews (see getSteamGenreQuadrant), so collisions are incidental.
         label: {
           show: true,
           formatter: (p: any) => p.value[3],

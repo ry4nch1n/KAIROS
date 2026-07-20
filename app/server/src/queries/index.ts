@@ -986,15 +986,22 @@ export async function getGenreQuadrant(db: Querier, platform: Platform): Promise
   }));
 }
 
-// Steam flavor: appetite = median owners, weight = revenue proxy (Σ owners × price, $).
+// Steam flavor: appetite = median reviews, weight = revenue proxy (Σ owners × price, $).
+// Demand is measured in reviews, not owners: owners_est is a SteamSpy owners-BUCKET midpoint
+// (parseOwners), and the lowest bucket 0..20,000 collapses to a single value, 10,000. The median
+// indie title in nearly every genre sits in that bucket, so a median-owners axis pinned every
+// genre to 10,000 and the quadrant lost all discrimination. Reviews (l.votes) are continuous —
+// the same signal the browser quadrant uses. Owners still drive the revenue-proxy bubble weight,
+// where summing across a genre averages the bucket coarseness out.
 export async function getSteamGenreQuadrant(db: Querier): Promise<QuadrantPoint[]> {
   const supply = await genreSupplyTrend(db, "steam");
   const rows = await db.query(
     `SELECT ${canonSql("l.genre")} AS genre, count(*)::int AS supply,
-            percentile_cont(0.5) WITHIN GROUP (ORDER BY l.owners_est)::float AS appetite,
+            percentile_cont(0.5) WITHIN GROUP (ORDER BY l.votes)::float AS appetite,
             coalesce(sum(l.owners_est * l.price_cents), 0)::float AS weight_cents
      FROM v_latest l JOIN games g ON g.id = l.game_id JOIN sources src ON src.id = g.source_id
      WHERE g.is_live AND src.name = 'steam' AND l.genre IS NOT NULL AND l.owners_est IS NOT NULL
+       AND l.votes IS NOT NULL
        AND (l.scale_tier IS NULL OR l.scale_tier <> 'aaa')
      GROUP BY ${canonSql("l.genre")} HAVING count(*) >= 2`,
   );
