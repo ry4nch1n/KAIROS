@@ -35,6 +35,7 @@ const LOOP_LABEL: Record<string, string> = {
   "extraction-lite": "Extraction-lite",
   "automation-under-pressure": "Automation-under-pressure",
   "wave-defense-prep": "Wave-defense + prep",
+  "minimal-input-survivors": "Minimal-input survivors",
   "cozy-craft": "Cozy craft-loop",
   "contained-systemic": "Contained-systemic",
   "idle-tycoon": "Idle / tycoon",
