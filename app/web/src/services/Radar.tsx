@@ -1272,7 +1272,7 @@ function SteamView({
         )}
         <EChart option={tierBarOption(data.tiers)} style={{ minHeight: 240 }} />
       </div>
-      <QuadrantCard points={data.quadrant} yName="median owners" weightName="revenue proxy $" />
+      <QuadrantCard points={data.quadrant} yName="median reviews" weightName="revenue proxy $" />
       <div className="grid g-2">
         <div className="card">
           {head(I.money, "Top indie genres", "by revenue proxy")}
