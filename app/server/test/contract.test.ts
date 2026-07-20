@@ -140,6 +140,23 @@ describe("C2e pitch v7 — `building` + `parked` statuses", () => {
   });
 });
 
+describe("C2f pitch v8 — `minimal-input-survivors` split out of `wave-defense-prep` (#72)", () => {
+  it("bumped both versions and added the new loop family", () => {
+    expect(CONTRACT.pitch.version).toBeGreaterThanOrEqual(8);
+    expect(CONTRACT.version).toBeGreaterThanOrEqual(8);
+    expect(CONTRACT.pitch.loopFamilies).toContain("minimal-input-survivors");
+  });
+  it("keeps wave-defense-prep as a distinct, separate family", () => {
+    expect(CONTRACT.pitch.loopFamilies).toContain("wave-defense-prep");
+    expect(new Set(CONTRACT.pitch.loopFamilies).size).toBe(CONTRACT.pitch.loopFamilies.length);
+  });
+  it("accepts a pitch in the new family", () => {
+    expect(validatePitchInput({ ...goodPitch, loopFamily: "minimal-input-survivors" }).ok).toBe(
+      true,
+    );
+  });
+});
+
 describe("C3 validateBriefPayload is advisory, never hard-fails a real payload", () => {
   it("passes a complete payload with no warnings", () => {
     const payload: Record<string, unknown> = {};

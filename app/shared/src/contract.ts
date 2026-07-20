@@ -22,7 +22,9 @@ export const CONTRACT = {
   //     things at once. It gains `building` (the committed lead, in production — pinned atop
   //     the leaderboard) and `parked` (promising but deliberately deferred — split cleanly
   //     from `shelved`, which now means "rejected" only). Additive to the enum.
-  version: 7,
+  // v8: pitch v8 read-through — see pitch.version below (`minimal-input-survivors` loop
+  //     family, split out of `wave-defense-prep`). Additive to the taxonomy.
+  version: 8,
   pitch: {
     // v2: added visual-card fields — setting, artStyle, codeName, headerUrl, shotUrl.
     // v3: rating rework — scoreFields d1Fit/steamCeiling/buildCost → browserFit/steamFit/buildEase.
@@ -49,11 +51,19 @@ export const CONTRACT = {
     //     but deliberately deferred, revisit later — distinct from `shelved`, which is now
     //     "rejected, won't revisit" only. Off-ladder states (parked/shelved) leave the ranked
     //     board but stay visible in their own shelves. Additive to the enum.
-    version: 7,
+    // v8: `wave-defense-prep` was holding two different loops. It now means prep-then-defend
+    //     only — you build/place/position between waves and the defending is the payoff
+    //     (tower/base defense, Vigil). The new `minimal-input-survivors` family is the
+    //     movement-only auto-attack lineage (Vampire Survivors / Brotato, Sporelight): the
+    //     player only steers, all attacking is automatic, and the decisions are level-up
+    //     picks mid-run. Different loop, different market — the merged value made the
+    //     family coverage view read as supply that wasn't there. Additive to the enum.
+    version: 8,
     loopFamilies: [
       "extraction-lite",
       "automation-under-pressure",
       "wave-defense-prep",
+      "minimal-input-survivors",
       "cozy-craft",
       "contained-systemic",
       "idle-tycoon",
