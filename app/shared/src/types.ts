@@ -37,6 +37,14 @@ export interface SteamGenreEconomics {
   conversion: ConversionRef | null; // wishlist→sale directional signal, or null
 }
 
+// Sub-genre lens: the same economics row, keyed on a SteamSpy tag instead of a store genre
+// (`genre` carries the tag name). Tags overlap, so rows do NOT partition the catalog — each
+// is "the market of games carrying this tag". Demand is median reviews, a continuous signal,
+// not owners buckets.
+export interface SteamTagEconomics extends SteamGenreEconomics {
+  medianVotes: number; // median review count per game — the demand estimator for this tag
+}
+
 // Curated, researched team-size estimate (see server data/teamSize.ts). solo=1–2, small=3–10,
 // mid=11–30, large=30+. Always rendered as "est." with its source — never as fact.
 export type TeamSizeBucket = "solo" | "small" | "mid" | "large";
@@ -122,6 +130,7 @@ export interface SteamOverview {
   tiers: ScaleTierRow[];
   indie: SteamGenreEconomics[]; // indie-addressable cohort (default benchmark)
   all: SteamGenreEconomics[]; // all tiers incl. AAA (demand-context view)
+  tagEconomics: SteamTagEconomics[]; // sub-genre lens — indie cohort, keyed on SteamSpy tags
   comparables: SteamComparable[];
   opportunity: SteamGap[];
   quadrant: QuadrantPoint[];

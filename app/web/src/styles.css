@@ -534,6 +534,9 @@ button {
   font-weight: 600;
   display: flex;
   align-items: center;
+  /* wrap so a header carrying two control groups (e.g. lens + cohort) stacks on a phone
+     instead of pushing the card past the viewport */
+  flex-wrap: wrap;
   gap: 8px;
   color: var(--text);
 }
