@@ -731,7 +731,7 @@ function RevBand({ r }: { r: SteamGenreEconomics }) {
   if (r.revenueBandHighPerGame == null) return null; // older payloads carry no band
   const same = r.revenueBandLowPerGame === r.revenueBandHighPerGame;
   return (
-    <div className="rev-band" title={BAND_TIP}>
+    <div className="est-band" title={BAND_TIP}>
       {same
         ? proxy(r.revenueBandLowPerGame)
         : `${proxy(r.revenueBandLowPerGame)}–${proxy(r.revenueBandHighPerGame)}`}

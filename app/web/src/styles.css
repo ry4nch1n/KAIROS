@@ -2379,7 +2379,8 @@ a.est-chip:hover {
 
 /* Cross-estimate revenue band (#53) — uncertainty annotation under the headline median,
    deliberately quiet: it qualifies the number above it, it isn't a second number. */
-.rev-band {
+/* (named est-band, not rev-band — .rev-band is the Revenue panel's scenario group) */
+.est-band {
   font-family: "Fira Code";
   font-size: 10px;
   font-weight: 400;
