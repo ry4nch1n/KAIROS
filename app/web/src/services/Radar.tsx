@@ -739,13 +739,26 @@ function ConvChip({ c }: { c: SteamGenreEconomics["conversion"] }) {
   );
 }
 
-function EconTable({ rows }: { rows: SteamGenreEconomics[] }) {
+function EconTable({
+  rows,
+  keyLabel = "Genre",
+  demand = false,
+}: {
+  rows: (SteamGenreEconomics & { medianVotes?: number })[];
+  keyLabel?: string;
+  demand?: boolean;
+}) {
   return (
     <table className="dtable">
       <thead>
         <tr>
-          <th>Genre</th>
+          <th>{keyLabel}</th>
           <th className="r">Games</th>
+          {demand ? (
+            <th className="r" title={DEMAND_TIP}>
+              Median reviews
+            </th>
+          ) : null}
           <th className="r">Median price</th>
           <th className="r">Median rating</th>
           <th className="r" title={OWNERS_TIP}>
@@ -770,6 +783,7 @@ function EconTable({ rows }: { rows: SteamGenreEconomics[] }) {
               <ConvChip c={r.conversion} />
             </td>
             <td className="r">{r.games}</td>
+            {demand ? <td className="r">{fmt(r.medianVotes ?? 0)}</td> : null}
             <td className="r">{money(r.medianPriceCents)}</td>
             <td className="r">{rate(r.medianRating)}</td>
             <td className="r">{fmtOwners(r.totalOwners)}</td>
@@ -1164,35 +1178,74 @@ function SteamKpis({ data }: { data: SteamOverview }) {
   );
 }
 
+const DEMAND_TIP =
+  "Median review count per game — a continuous demand signal, unlike owner estimates, which are coarse buckets.";
+const SUBGENRE_TIP =
+  "Sub-genres come from community tags, so a game carries several — rows overlap and deliberately do not add up to the catalog. Each row reads as “the market of games carrying this tag”.";
+
+// Store genres are coarse (Action, Indie, Strategy), so a real market like Deckbuilding is
+// split across several of them and can't be read on its own. The sub-genre lens re-keys the
+// same economics on community tags (#90).
 function GenreEconCard({ data }: { data: SteamOverview }) {
   const [cohort, setCohort] = useState<"indie" | "all">("indie");
+  const [lens, setLens] = useState<"genre" | "tag">("genre");
+  const tagRows = data.tagEconomics ?? [];
   return (
     <div className="card">
       <h3>
-        {I.money}Genre economics
-        <span className="sub">owners × realized price — what a genre is worth at this scale</span>
-        <span className="seg" role="tablist" aria-label="Cohort" style={{ marginLeft: "auto" }}>
+        {I.money}
+        {lens === "genre" ? "Genre economics" : "Sub-genre economics"}
+        <span className="sub">owners × realized price — what a market is worth at this scale</span>
+        <span className="seg" role="tablist" aria-label="Lens" style={{ marginLeft: "auto" }}>
           <button
-            className={"seg-btn" + (cohort === "indie" ? " active" : "")}
-            onClick={() => setCohort("indie")}
+            className={"seg-btn" + (lens === "genre" ? " active" : "")}
+            onClick={() => setLens("genre")}
           >
-            Indie
+            Genre
           </button>
           <button
-            className={"seg-btn" + (cohort === "all" ? " active" : "")}
-            onClick={() => setCohort("all")}
+            className={"seg-btn" + (lens === "tag" ? " active" : "")}
+            onClick={() => setLens("tag")}
+            disabled={!tagRows.length}
+            title={SUBGENRE_TIP}
           >
-            All tiers
+            Sub-genre
           </button>
         </span>
+        {lens === "genre" && (
+          <span className="seg" role="tablist" aria-label="Cohort">
+            <button
+              className={"seg-btn" + (cohort === "indie" ? " active" : "")}
+              onClick={() => setCohort("indie")}
+            >
+              Indie
+            </button>
+            <button
+              className={"seg-btn" + (cohort === "all" ? " active" : "")}
+              onClick={() => setCohort("all")}
+            >
+              All tiers
+            </button>
+          </span>
+        )}
       </h3>
-      {cohort === "all" && (
+      {lens === "genre" && cohort === "all" && (
         <p className="view-head">
           All tiers include AAA — owners/revenue are dominated by mega-hits; demand context only,{" "}
           <b>not</b> a solo-dev benchmark.
         </p>
       )}
-      <EconTable rows={cohort === "indie" ? data.indie : data.all} />
+      {lens === "tag" && (
+        <p className="view-head">
+          Indie cohort, keyed on community tags — the markets store genres hide. Tags overlap, so
+          rows <b>don't</b> sum to the catalog; read each as the market of games carrying that tag.
+        </p>
+      )}
+      {lens === "tag" ? (
+        <EconTable rows={tagRows} keyLabel="Sub-genre" demand />
+      ) : (
+        <EconTable rows={cohort === "indie" ? data.indie : data.all} />
+      )}
     </div>
   );
 }

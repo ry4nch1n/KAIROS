@@ -26,6 +26,7 @@ import type {
   BriefSteering,
   ScaleTierRow,
   SteamGenreEconomics,
+  SteamTagEconomics,
   SteamCohort,
   SteamComparable,
   SteamOverview,
@@ -1157,6 +1158,59 @@ export async function getSteamGenreEconomics(
   }));
 }
 
+// Sub-genre (tag) economics for Steam (#90). Store genres are coarse — Action / Indie /
+// Strategy — so a real market like "Deckbuilding" or "Roguelike Deckbuilder" is scattered
+// across several store buckets and can't be read as its own market. SteamSpy weighted tags
+// are already crawled into tags/game_tags, so the same economics aggregate keyed on tag name
+// gives a sub-genre lens for free. Tags overlap by design (a game carries many), so counts
+// across rows deliberately do NOT sum to the catalog — each row is "the market of games
+// carrying this tag". Demand is median REVIEWS, not median owners (#89): owners_est is a
+// SteamSpy bucket midpoint whose lowest bucket collapses to 10,000 and flattens the axis.
+const TAG_ECON_MIN_SUPPLY = 3; // below this a "market" is noise, not a market
+const TAG_ECON_LIMIT = 30;
+export async function getSteamTagEconomics(
+  db: Querier,
+  opts?: { cohort?: SteamCohort; minSupply?: number; limit?: number },
+): Promise<SteamTagEconomics[]> {
+  const cohort = opts?.cohort ?? "indie";
+  const minSupply = opts?.minSupply ?? TAG_ECON_MIN_SUPPLY;
+  const tierFilter =
+    cohort === "indie" ? "AND (l.scale_tier IS NULL OR l.scale_tier <> 'aaa')" : "";
+  const rows = await db.query(
+    `SELECT ${canonSql("t.name")} AS tag, count(*)::int AS games,
+            percentile_cont(0.5) WITHIN GROUP (ORDER BY l.price_cents)::float AS med_price,
+            percentile_cont(0.5) WITHIN GROUP (ORDER BY l.rating)::float AS med_rating,
+            percentile_cont(0.5) WITHIN GROUP (ORDER BY coalesce(l.votes, 0))::float AS med_votes,
+            coalesce(sum(l.owners_est), 0)::float AS total_owners,
+            coalesce(sum(l.owners_est * l.price_cents), 0)::float AS rev_cents,
+            percentile_cont(0.5) WITHIN GROUP (
+              ORDER BY coalesce(l.owners_est, 0) * coalesce(l.price_cents, 0))::float AS med_rev_cents
+     FROM v_latest l
+     JOIN games g ON g.id = l.game_id
+     JOIN sources src ON src.id = g.source_id
+     JOIN game_tags gt ON gt.game_id = g.id
+     JOIN tags t ON t.id = gt.tag_id
+     WHERE g.is_live AND src.name = 'steam' ${tierFilter}
+     GROUP BY ${canonSql("t.name")} HAVING count(*) >= ${Number(minSupply) | 0}
+     ORDER BY rev_cents DESC`,
+  );
+  return rows
+    .filter((r) => !isCurationTag(r.tag))
+    .slice(0, opts?.limit ?? TAG_ECON_LIMIT)
+    .map((r) => ({
+      genre: r.tag, // same row shape as the store-genre table, keyed on the tag
+      games: num(r.games),
+      medianPriceCents: Math.round(num(r.med_price)),
+      medianRating: r.med_rating == null ? null : +Number(r.med_rating).toFixed(2),
+      medianVotes: Math.round(num(r.med_votes)),
+      totalOwners: num(r.total_owners),
+      revenueProxy: Math.round(num(r.rev_cents) / 100),
+      medianRevenuePerGame: Math.round(num(r.med_rev_cents) / 100),
+      meanRevenuePerGame: num(r.games) ? Math.round(num(r.rev_cents) / 100 / num(r.games)) : 0,
+      conversion: conversionFor(r.tag),
+    }));
+}
+
 // Indie-tier rated games — the realistic "comparables" peer set, focused on RECENT releases:
 // a rolling ~2-year window (start of the current year minus 2 → 2024-01-01 today, keeping all
 // of 2024 incl. Balatro; rolls forward automatically each year). Ordered newest first, with an
@@ -1436,6 +1490,7 @@ export async function getSteamOverview(db: Querier): Promise<SteamOverview> {
     ownership,
     developers,
     newReleases,
+    tagEconomics,
   ] = await Promise.all([
     getScaleTierBreakdown(db, "steam"),
     getSteamGenreEconomics(db, { cohort: "indie" }),
@@ -1447,6 +1502,7 @@ export async function getSteamOverview(db: Querier): Promise<SteamOverview> {
     getSteamOwnership(db),
     getSteamDevelopers(db),
     getSteamNewReleases(db),
+    getSteamTagEconomics(db),
   ]);
   const games = tiers.reduce((s, t) => s + t.games, 0);
   const aaa = tiers.find((t) => t.tier === "aaa")?.games ?? 0;
@@ -1473,6 +1529,7 @@ export async function getSteamOverview(db: Querier): Promise<SteamOverview> {
     tiers,
     indie,
     all,
+    tagEconomics,
     comparables,
     opportunity,
     quadrant,

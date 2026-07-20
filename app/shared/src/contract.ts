@@ -24,7 +24,10 @@ export const CONTRACT = {
   //     from `shelved`, which now means "rejected" only). Additive to the enum.
   // v8: pitch v8 read-through — see pitch.version below (`minimal-input-survivors` loop
   //     family, split out of `wave-defense-prep`). Additive to the taxonomy.
-  version: 8,
+  // v9: SteamOverview gained `tagEconomics` — a sub-genre (tag-keyed) economics lens over the
+  //     existing tags/game_tags data, so markets that store genres hide (Deckbuilding,
+  //     Roguelike Deckbuilder…) are readable on their own. Additive; demand is median reviews.
+  version: 9,
   pitch: {
     // v2: added visual-card fields — setting, artStyle, codeName, headerUrl, shotUrl.
     // v3: rating rework — scoreFields d1Fit/steamCeiling/buildCost → browserFit/steamFit/buildEase.

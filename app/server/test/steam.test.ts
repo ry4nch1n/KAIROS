@@ -422,6 +422,92 @@ describe("D10 getSteamGenreEconomics (indie-default cohort)", () => {
   });
 });
 
+describe("D10c getSteamTagEconomics (sub-genre lens, #90)", () => {
+  // Three "Deckbuilding" games spread across two store genres — the market a store-genre
+  // table cannot show — plus a thin tag and a curation tag that must both be dropped.
+  async function seedTagged(db: Querier) {
+    const games: RawGame[] = [
+      steamGame({
+        sourceGameId: "T1",
+        genre: "Strategy",
+        tags: ["Deckbuilding", "Popular"],
+        priceCents: 1500,
+        ownersEst: 100_000,
+        votes: 4_000,
+        rating: 4.6,
+      }),
+      steamGame({
+        sourceGameId: "T2",
+        genre: "Indie",
+        tags: ["Deckbuilding"],
+        priceCents: 1000,
+        ownersEst: 60_000,
+        votes: 2_000,
+        rating: 4.4,
+      }),
+      steamGame({
+        sourceGameId: "T3",
+        genre: "Casual",
+        tags: ["Deckbuilding", "Solitaire"],
+        priceCents: 500,
+        ownersEst: 30_000,
+        votes: 900,
+        rating: 4.2,
+      }),
+      steamGame({
+        sourceGameId: "T4",
+        genre: "Action",
+        tags: ["Deckbuilding"],
+        scaleTier: "aaa",
+        priceCents: 6000,
+        ownersEst: 9_000_000,
+        votes: 300_000,
+        rating: 4.9,
+      }),
+    ];
+    await loadGames(db, "steam", STEAM_BASE_URL, games, "2026-06-30T00:00:00.000Z");
+  }
+
+  it("aggregates a market that spans several store genres, indie-cohort by default", async () => {
+    const db = await freshMemoryDb();
+    await seedTagged(db);
+    const rows = await q.getSteamTagEconomics(db, { minSupply: 3 });
+    const deck = rows.find((r) => r.genre === "Deckbuilding")!;
+    expect(deck).toBeTruthy();
+    expect(deck.games).toBe(3); // AAA excluded, all three store genres folded in
+    expect(deck.totalOwners).toBe(190_000);
+    expect(deck.medianPriceCents).toBe(1000);
+    expect(deck.medianVotes).toBe(2_000); // continuous demand signal (#89), not owners buckets
+    expect(deck.medianRating).toBe(4.4);
+    expect(deck.revenueProxy).toBe(2_250_000); // (100k*15 + 60k*10 + 30k*5)
+  });
+
+  it("drops curation tags and tags under the supply threshold", async () => {
+    const db = await freshMemoryDb();
+    await seedTagged(db);
+    const names = (await q.getSteamTagEconomics(db, { minSupply: 3 })).map((r) => r.genre);
+    expect(names).not.toContain("Popular"); // curation label, not a market
+    expect(names).not.toContain("Solitaire"); // only 1 game — noise, not a market
+  });
+
+  it("includes AAA when cohort='all' and respects the limit", async () => {
+    const db = await freshMemoryDb();
+    await seedTagged(db);
+    const rows = await q.getSteamTagEconomics(db, { cohort: "all", minSupply: 3, limit: 1 });
+    expect(rows).toHaveLength(1);
+    expect(rows[0].genre).toBe("Deckbuilding");
+    expect(rows[0].games).toBe(4);
+  });
+
+  it("getSteamOverview carries the sub-genre lens", async () => {
+    const db = await freshMemoryDb();
+    await seedTagged(db);
+    const ov = await q.getSteamOverview(db);
+    expect(Array.isArray(ov.tagEconomics)).toBe(true);
+    expect(ov.tagEconomics.find((r) => r.genre === "Deckbuilding")!.games).toBe(3);
+  });
+});
+
 describe("D11 platform isolation incl. steam", () => {
   it("steam queries ignore browser rows and vice-versa", async () => {
     const db = await freshMemoryDb();
