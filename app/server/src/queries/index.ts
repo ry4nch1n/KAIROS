@@ -1122,6 +1122,54 @@ export async function getScaleTierBreakdown(
   return rows.map((r) => ({ tier: r.tier, games: num(r.games) }));
 }
 
+// ── Cross-estimate revenue band (#53) ──
+// Every revenue figure here used to rest on ONE estimator: SteamSpy owners-bucket midpoint ×
+// price. Those buckets are wide (the lowest collapses to 10,000) and degrading, so a single
+// bad bucket silently skews genre medians with no visible uncertainty. The second estimator is
+// the Boxleiter method: units ≈ review count × a multiplier. One documented constant, not
+// per-genre magic numbers — the public review-to-sales ratio has drifted from ~50-60x in the
+// early 2010s to roughly 30-50x in the modern era (Boxleiter/Galyonkin lineage; VG Insights'
+// 2023-24 recalibrations sit in the low-to-mid 30s). 35 is the defensible middle of that range.
+export const BOXLEITER_MULTIPLIER = 35;
+// Past this ratio the two estimators are telling different stories; show the band, not a point.
+export const ESTIMATOR_DISAGREE_RATIO = 3;
+
+/** Sorted band + disagreement read over the two independent per-game revenue estimators. */
+export function revenueBand(
+  ownersBased: number,
+  boxleiter: number,
+): {
+  revenueBandLowPerGame: number;
+  revenueBandHighPerGame: number;
+  estimatorRatio: number;
+  estimatorsDisagree: boolean;
+} {
+  const low = Math.min(ownersBased, boxleiter);
+  const high = Math.max(ownersBased, boxleiter);
+  // A zero low means one estimator says "no revenue" — a ratio is undefined, not infinite.
+  // Report ratio 0 and only call it a disagreement when the other side is non-zero.
+  const ratio = low > 0 ? +(high / low).toFixed(2) : 0;
+  return {
+    revenueBandLowPerGame: low,
+    revenueBandHighPerGame: high,
+    estimatorRatio: ratio,
+    estimatorsDisagree: low > 0 ? ratio > ESTIMATOR_DISAGREE_RATIO : high > 0,
+  };
+}
+
+// SQL for the Boxleiter per-game revenue median, in cents (free/unrated games count as 0,
+// matching the owners-based median's treatment — see #24).
+const BOXLEITER_MED_SQL = `percentile_cont(0.5) WITHIN GROUP (
+              ORDER BY coalesce(l.votes, 0)::float8 * ${BOXLEITER_MULTIPLIER} * coalesce(l.price_cents, 0)::float8)::float`;
+// (float8 casts, not integers: a heavily reviewed AAA title × 35 × price in cents overflows int4.)
+
+// Band fields shared by the store-genre and sub-genre (tag) economics rows — both lenses
+// aggregate the same way, so the cross-estimate must be identical in both.
+function econBandFields(medRevDollars: number, medRevBlCents: unknown) {
+  const boxleiter = Math.round(num(medRevBlCents) / 100);
+  return { medianRevenueBoxleiter: boxleiter, ...revenueBand(medRevDollars, boxleiter) };
+}
+
 // Per-genre economics for Steam, defaulting to the indie-addressable cohort
 // (AAA excluded so its outliers don't distort the benchmark medians — see Phase 2 design).
 export async function getSteamGenreEconomics(
@@ -1138,24 +1186,29 @@ export async function getSteamGenreEconomics(
             coalesce(sum(l.owners_est), 0)::float AS total_owners,
             coalesce(sum(l.owners_est * l.price_cents), 0)::float AS rev_cents,
             percentile_cont(0.5) WITHIN GROUP (
-              ORDER BY coalesce(l.owners_est, 0) * coalesce(l.price_cents, 0))::float AS med_rev_cents
+              ORDER BY coalesce(l.owners_est, 0) * coalesce(l.price_cents, 0))::float AS med_rev_cents,
+            ${BOXLEITER_MED_SQL} AS med_rev_bl_cents
      FROM v_latest l JOIN games g ON g.id = l.game_id JOIN sources src ON src.id = g.source_id
      WHERE g.is_live AND src.name = 'steam' AND l.genre IS NOT NULL ${tierFilter}
      GROUP BY ${canonSql("l.genre")} ORDER BY total_owners DESC`,
   );
   // Per-game reads (#24): free/unpriced games count as $0 in the median (coalesce above)
   // rather than being skipped — a genre of mostly-free games honestly medians near $0.
-  return rows.map((r) => ({
-    genre: r.genre,
-    games: num(r.games),
-    medianPriceCents: Math.round(num(r.med_price)),
-    medianRating: r.med_rating == null ? null : +Number(r.med_rating).toFixed(2),
-    totalOwners: num(r.total_owners),
-    revenueProxy: Math.round(num(r.rev_cents) / 100),
-    medianRevenuePerGame: Math.round(num(r.med_rev_cents) / 100),
-    meanRevenuePerGame: num(r.games) ? Math.round(num(r.rev_cents) / 100 / num(r.games)) : 0,
-    conversion: conversionFor(r.genre),
-  }));
+  return rows.map((r) => {
+    const medRev = Math.round(num(r.med_rev_cents) / 100);
+    return {
+      genre: r.genre,
+      games: num(r.games),
+      medianPriceCents: Math.round(num(r.med_price)),
+      medianRating: r.med_rating == null ? null : +Number(r.med_rating).toFixed(2),
+      totalOwners: num(r.total_owners),
+      revenueProxy: Math.round(num(r.rev_cents) / 100),
+      medianRevenuePerGame: medRev,
+      meanRevenuePerGame: num(r.games) ? Math.round(num(r.rev_cents) / 100 / num(r.games)) : 0,
+      conversion: conversionFor(r.genre),
+      ...econBandFields(medRev, r.med_rev_bl_cents),
+    };
+  });
 }
 
 // Sub-genre (tag) economics for Steam (#90). Store genres are coarse — Action / Indie /
@@ -1184,7 +1237,8 @@ export async function getSteamTagEconomics(
             coalesce(sum(l.owners_est), 0)::float AS total_owners,
             coalesce(sum(l.owners_est * l.price_cents), 0)::float AS rev_cents,
             percentile_cont(0.5) WITHIN GROUP (
-              ORDER BY coalesce(l.owners_est, 0) * coalesce(l.price_cents, 0))::float AS med_rev_cents
+              ORDER BY coalesce(l.owners_est, 0) * coalesce(l.price_cents, 0))::float AS med_rev_cents,
+            ${BOXLEITER_MED_SQL} AS med_rev_bl_cents
      FROM v_latest l
      JOIN games g ON g.id = l.game_id
      JOIN sources src ON src.id = g.source_id
@@ -1197,18 +1251,22 @@ export async function getSteamTagEconomics(
   return rows
     .filter((r) => !isCurationTag(r.tag))
     .slice(0, opts?.limit ?? TAG_ECON_LIMIT)
-    .map((r) => ({
-      genre: r.tag, // same row shape as the store-genre table, keyed on the tag
-      games: num(r.games),
-      medianPriceCents: Math.round(num(r.med_price)),
-      medianRating: r.med_rating == null ? null : +Number(r.med_rating).toFixed(2),
-      medianVotes: Math.round(num(r.med_votes)),
-      totalOwners: num(r.total_owners),
-      revenueProxy: Math.round(num(r.rev_cents) / 100),
-      medianRevenuePerGame: Math.round(num(r.med_rev_cents) / 100),
-      meanRevenuePerGame: num(r.games) ? Math.round(num(r.rev_cents) / 100 / num(r.games)) : 0,
-      conversion: conversionFor(r.tag),
-    }));
+    .map((r) => {
+      const medRev = Math.round(num(r.med_rev_cents) / 100);
+      return {
+        genre: r.tag, // same row shape as the store-genre table, keyed on the tag
+        games: num(r.games),
+        medianPriceCents: Math.round(num(r.med_price)),
+        medianRating: r.med_rating == null ? null : +Number(r.med_rating).toFixed(2),
+        medianVotes: Math.round(num(r.med_votes)),
+        totalOwners: num(r.total_owners),
+        revenueProxy: Math.round(num(r.rev_cents) / 100),
+        medianRevenuePerGame: medRev,
+        meanRevenuePerGame: num(r.games) ? Math.round(num(r.rev_cents) / 100 / num(r.games)) : 0,
+        conversion: conversionFor(r.tag),
+        ...econBandFields(medRev, r.med_rev_bl_cents),
+      };
+    });
 }
 
 // Indie-tier rated games — the realistic "comparables" peer set, focused on RECENT releases:

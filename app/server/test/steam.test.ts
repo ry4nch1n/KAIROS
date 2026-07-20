@@ -641,6 +641,89 @@ describe("D10c genre economics per-game revenue — size vs opportunity (#24)", 
   });
 });
 
+describe("D10d Boxleiter cross-estimate band (#53)", () => {
+  it("bands the two estimators and only flags a real split", () => {
+    // agreement: 2x apart is inside the 3x threshold
+    const near = q.revenueBand(100_000, 200_000);
+    expect(near.revenueBandLowPerGame).toBe(100_000);
+    expect(near.revenueBandHighPerGame).toBe(200_000);
+    expect(near.estimatorRatio).toBe(2);
+    expect(near.estimatorsDisagree).toBe(false);
+    // disagreement: past 3x the estimators tell different stories, whichever side is bigger
+    expect(q.revenueBand(100_000, 500_000).estimatorsDisagree).toBe(true);
+    expect(q.revenueBand(500_000, 100_000).estimatorsDisagree).toBe(true);
+    expect(q.revenueBand(500_000, 100_000).revenueBandLowPerGame).toBe(100_000);
+    // one estimator at zero: no defined ratio, but "some vs none" is still a disagreement
+    const half = q.revenueBand(0, 80_000);
+    expect(half.estimatorRatio).toBe(0);
+    expect(half.estimatorsDisagree).toBe(true);
+    // both zero (a free genre) is agreement, not a warning
+    expect(q.revenueBand(0, 0).estimatorsDisagree).toBe(false);
+  });
+
+  it("computes the second estimator from review counts on genre and sub-genre rows alike", async () => {
+    const db = await freshMemoryDb();
+    await loadGames(
+      db,
+      "steam",
+      STEAM_BASE_URL,
+      // $10 games; owners buckets say 10k–90k, reviews say 1,000 × 35 = 35,000 units.
+      // Median owners-based = $200k, median Boxleiter = 1000 × 35 × $10 = $350k.
+      [10_000, 20_000, 90_000].map((owners, i) =>
+        steamGame({
+          sourceGameId: `bl${i}`,
+          genre: "Sim",
+          tags: ["Deckbuilding"],
+          scaleTier: "small_indie",
+          ownersEst: owners,
+          priceCents: 1000,
+          votes: 1000,
+        }),
+      ),
+      "2026-06-30T00:00:00.000Z",
+    );
+    const row = (await q.getSteamGenreEconomics(db)).find((r) => r.genre === "Sim")!;
+    expect(row.medianRevenuePerGame).toBe(200_000); // owners × price, unchanged
+    expect(row.medianRevenueBoxleiter).toBe(350_000); // reviews × 35 × price
+    expect(row.revenueBandLowPerGame).toBe(200_000);
+    expect(row.revenueBandHighPerGame).toBe(350_000);
+    expect(row.estimatorsDisagree).toBe(false);
+    // the sub-genre (tag) lens must carry the identical cross-estimate, not a different one
+    const tagRow = (await q.getSteamTagEconomics(db, { minSupply: 3 })).find(
+      (r) => r.genre === "Deckbuilding",
+    )!;
+    expect(tagRow.medianRevenueBoxleiter).toBe(350_000);
+    expect(tagRow.revenueBandHighPerGame).toBe(350_000);
+  });
+
+  it("flags a genre whose owners buckets and review counts tell different stories", async () => {
+    const db = await freshMemoryDb();
+    await loadGames(
+      db,
+      "steam",
+      STEAM_BASE_URL,
+      // Bucketed at the 10,000 floor but barely reviewed: owners say $100k/game,
+      // reviews (10 × 35 × $10 = $3.5k) say two orders of magnitude less.
+      [1, 2, 3].map((i) =>
+        steamGame({
+          sourceGameId: `sp${i}`,
+          genre: "Puzzle",
+          scaleTier: "hobby",
+          ownersEst: 10_000,
+          priceCents: 1000,
+          votes: 10,
+        }),
+      ),
+      "2026-06-30T00:00:00.000Z",
+    );
+    const row = (await q.getSteamGenreEconomics(db)).find((r) => r.genre === "Puzzle")!;
+    expect(row.medianRevenuePerGame).toBe(100_000);
+    expect(row.medianRevenueBoxleiter).toBe(3_500);
+    expect(row.estimatorsDisagree).toBe(true);
+    expect(row.estimatorRatio).toBeGreaterThan(3);
+  });
+});
+
 describe("D12 getSteamComparables", () => {
   it("returns indie-tier rated games (AAA excluded, only rated)", async () => {
     const db = await freshMemoryDb();

@@ -719,6 +719,31 @@ const MEAN_REV_TIP =
 const TOTAL_REV_TIP =
   "Total revenue proxy = Σ owners × current price across the genre (directional, not a P&L). Measures category size, not per-game opportunity.";
 
+// Cross-estimate band (#53). One estimator is a point estimate pretending to be a fact; two
+// independent ones are an honest range. Rendered under the headline number, never instead of it.
+const BAND_TIP =
+  "Cross-check range from two independent estimators: owners × price, and reviews × 35 × price (Boxleiter method). Wide range = the underlying data is uncertain, so read the range, not the point.";
+const SPLIT_TIP =
+  "The two revenue estimators differ by more than 3×, so this genre's revenue is not reliably known — treat the range as the answer.";
+
+/** Sub-line under the headline median: the two estimators as a range, flagged when they split. */
+function RevBand({ r }: { r: SteamGenreEconomics }) {
+  if (r.revenueBandHighPerGame == null) return null; // older payloads carry no band
+  const same = r.revenueBandLowPerGame === r.revenueBandHighPerGame;
+  return (
+    <div className="rev-band" title={BAND_TIP}>
+      {same
+        ? proxy(r.revenueBandLowPerGame)
+        : `${proxy(r.revenueBandLowPerGame)}–${proxy(r.revenueBandHighPerGame)}`}
+      {r.estimatorsDisagree ? (
+        <span className="est-split" title={SPLIT_TIP}>
+          wide
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
 const CONV_LABEL: Record<string, string> = {
   strong: "converts well",
   typical: "typical",
@@ -789,6 +814,7 @@ function EconTable({
             <td className="r">{fmtOwners(r.totalOwners)}</td>
             <td className="r" style={{ fontWeight: 600 }}>
               {proxy(r.medianRevenuePerGame)}
+              <RevBand r={r} />
             </td>
             <td className="r">{proxy(r.meanRevenuePerGame)}</td>
             <td className="r">{proxy(r.revenueProxy)}</td>

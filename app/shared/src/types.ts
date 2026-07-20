@@ -35,6 +35,15 @@ export interface SteamGenreEconomics {
   medianRevenuePerGame: number; // dollars; the "typical outcome", resists mega-hit skew
   meanRevenuePerGame: number; // dollars; mean ≫ median = category is top-heavy
   conversion: ConversionRef | null; // wishlist→sale directional signal, or null
+  // Cross-estimate band (#53). `medianRevenuePerGame` above rests on ONE estimator —
+  // SteamSpy owners-bucket midpoint × price — and those buckets are wide. A second,
+  // independent Boxleiter-style estimator (reviews × multiplier × price) gives a range
+  // instead of false precision. Low/high are the two estimators sorted, per game (median).
+  medianRevenueBoxleiter: number; // dollars; reviews × multiplier × price, median per game
+  revenueBandLowPerGame: number; // dollars; min(owners-based, Boxleiter)
+  revenueBandHighPerGame: number; // dollars; max(owners-based, Boxleiter)
+  estimatorRatio: number; // high ÷ low (1 = agreement); 0 when the band can't be formed
+  estimatorsDisagree: boolean; // true past the disagreement threshold — read the band, not a point
 }
 
 // Sub-genre lens: the same economics row, keyed on a SteamSpy tag instead of a store genre
