@@ -27,7 +27,12 @@ export const CONTRACT = {
   // v9: SteamOverview gained `tagEconomics` — a sub-genre (tag-keyed) economics lens over the
   //     existing tags/game_tags data, so markets that store genres hide (Deckbuilding,
   //     Roguelike Deckbuilder…) are readable on their own. Additive; demand is median reviews.
-  version: 9,
+  // v10: SteamGenreEconomics (and the tag lens that extends it) gained a second, independent
+  //      revenue estimator — Boxleiter-style reviews × multiplier × price — exposed as a BAND
+  //      (`revenueBandLowPerGame` / `revenueBandHighPerGame`) plus `estimatorRatio` and
+  //      `estimatorsDisagree`, so a single shaky owners bucket can no longer pass as precision.
+  //      Additive; read defensively (older payloads simply lack the band).
+  version: 10,
   pitch: {
     // v2: added visual-card fields — setting, artStyle, codeName, headerUrl, shotUrl.
     // v3: rating rework — scoreFields d1Fit/steamCeiling/buildCost → browserFit/steamFit/buildEase.
