@@ -61,14 +61,7 @@ export default async (req: Request) => {
       for (const it of items) await q.publishLibraryItem(db, it);
       return json({ ok: true, count: items.length });
     }
-    if (path === "/library")
-      return json(
-        await db.query(
-          `SELECT id, kind, title, summary, tags, status, media_url AS "mediaUrl",
-                image_url AS "imageUrl", to_char(created_at, 'YYYY-MM-DD') AS date
-         FROM library_items ORDER BY created_at DESC`,
-        ),
-      );
+    if (path === "/library") return json(await q.libraryItems(db));
     if (req.method === "POST" && path === "/pitches") {
       if (!isAuthorized(req.headers)) return json(unauthorizedBody(), UNAUTHORIZED_STATUS);
       const body = await req.json();

@@ -125,6 +125,15 @@ CREATE TABLE IF NOT EXISTS library_items (
 -- Additive so prod migrates in place (existing rows keep NULL until backfilled).
 ALTER TABLE library_items ADD COLUMN IF NOT EXISTS image_url TEXT;
 
+-- Link a card to the pitch whose concept it tests. Disposition (proposed/prototyping/
+-- validated/building/parked/shelved) is a property of the CONCEPT, not of a build artifact,
+-- so a linked card DERIVES its status from pitches.status at read time instead of storing a
+-- second copy. That second copy is exactly what kept drifting: the leaderboard reads
+-- pitches.status while the card read its own column, and nothing joined them.
+-- (The backfill that populates this lives at the end of the file — it joins `pitches`,
+-- which is created further down.)
+ALTER TABLE library_items ADD COLUMN IF NOT EXISTS pitch_slug TEXT;
+
 -- pitches namespace: game-concept pitches (the Library "Pitches" collection).
 -- Written by the weekly kairos-iterate routine (token-gated POST /api/pitches, upsert on slug).
 -- Dated + classified so future batches stay cleanly grouped and sortable.
@@ -182,3 +191,14 @@ ALTER TABLE pitches ADD COLUMN IF NOT EXISTS hook          TEXT;  -- capsule pro
 ALTER TABLE pitches ADD COLUMN IF NOT EXISTS marketability INT;   -- 1..3 first-session pull (was #26 "Grab")
 ALTER TABLE pitches ADD COLUMN IF NOT EXISTS founder_fit   INT;   -- 1..3 personal pull + edge
 ALTER TABLE pitches ADD COLUMN IF NOT EXISTS why_me        TEXT;  -- why this holds your attention / your edge
+
+-- Backfill library_items.pitch_slug (must run AFTER `pitches` exists — hence the file tail).
+-- Prototype URLs embed their pitch slug (…/<slug>/), so existing cards self-link on the next
+-- migrate and start deriving their status from the pitch. Only fills NULLs, so an explicit
+-- link is never overwritten (Solar Forge's toy is on its own host and doesn't match the URL
+-- convention — the curated seed links that one directly).
+UPDATE library_items li
+   SET pitch_slug = p.slug
+  FROM pitches p
+ WHERE li.pitch_slug IS NULL
+   AND li.media_url LIKE '%/' || p.slug || '/%';

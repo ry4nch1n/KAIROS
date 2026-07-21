@@ -85,12 +85,7 @@ export function createApp(db: Querier) {
   });
 
   app.get("/api/library", async (_req, res) => {
-    const rows = await db.query(
-      `SELECT id, kind, title, summary, tags, status, media_url AS "mediaUrl",
-              image_url AS "imageUrl", to_char(created_at, 'YYYY-MM-DD') AS date
-       FROM library_items ORDER BY created_at DESC`,
-    );
-    res.json(rows);
+    res.json(await q.libraryItems(db));
   });
   app.post("/api/library", async (req, res) => {
     if (!isAuthorized(req.headers)) return res.status(UNAUTHORIZED_STATUS).json(unauthorizedBody());
