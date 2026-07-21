@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll } from "vitest";
-import { freshMemoryDb, type Querier } from "../src/db/db.ts";
+import { freshMemoryDb, applySchema, type Querier } from "../src/db/db.ts";
 import { seed } from "../src/db/seed.ts";
 import * as q from "../src/queries/index.ts";
 
@@ -549,5 +549,51 @@ describe("B4 small wins — conversion signal on Steam genre economics (R4.1)", 
         expect(typeof r.conversion.source).toBe("string");
       }
     }
+  });
+});
+
+// The migrate-time backfill that links EXISTING prototype cards to their pitch by URL
+// convention (…/<slug>/). This is what converts the already-posted cards (Jester's War,
+// Starbind, Duskloom) — the ones not in the curated seed — onto the derived status, so it
+// has to keep working or those cards silently keep their stale stored status.
+describe("library_items.pitch_slug backfill", () => {
+  it("self-links a card whose media_url embeds a pitch slug, then derives that pitch's status", async () => {
+    const fresh = await freshMemoryDb();
+    await fresh.query(
+      `INSERT INTO pitches (slug, title, status, pitch_date) VALUES ($1,$2,$3,$4)`,
+      ["backfill-me-20260719", "Backfill Me", "building", "2026-07-19"],
+    );
+    // a card posted before pitch_slug existed: link is NULL, stored status is stale
+    await fresh.query(
+      `INSERT INTO library_items (kind, title, media_url, status) VALUES ($1,$2,$3,$4)`,
+      [
+        "prototype",
+        "Backfill Me — Loop Toy",
+        "https://kairos-prototypes.netlify.app/backfill-me-20260719/",
+        "prototyping",
+      ],
+    );
+
+    await applySchema(fresh); // idempotent re-apply = what a migrate does
+
+    const [row] = await fresh.query(
+      `SELECT pitch_slug FROM library_items WHERE title = 'Backfill Me — Loop Toy'`,
+    );
+    expect(row.pitch_slug).toBe("backfill-me-20260719");
+
+    const card = (await q.libraryItems(fresh)).find((c) => c.pitchSlug === "backfill-me-20260719");
+    expect(card?.status).toBe("building"); // derived, not the stale "prototyping"
+  });
+
+  it("leaves an unmatched card unlinked and falls back to its own status", async () => {
+    const fresh = await freshMemoryDb();
+    await fresh.query(
+      `INSERT INTO library_items (kind, title, media_url, status) VALUES ($1,$2,$3,$4)`,
+      ["prototype", "Off-Host Toy", "https://some-other-host.netlify.app", "prototyping"],
+    );
+    await applySchema(fresh);
+    const card = (await q.libraryItems(fresh)).find((c) => c.title === "Off-Host Toy");
+    expect(card?.pitchSlug).toBeNull();
+    expect(card?.status).toBe("prototyping");
   });
 });

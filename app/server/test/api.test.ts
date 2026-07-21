@@ -62,6 +62,53 @@ describe("A13 API routes", () => {
     expect(proto.imageUrl).toContain("kairos-pitch-art");
   });
 
+  // The drift guard. A prototype card and the leaderboard used to keep separate status
+  // columns with nothing joining them, so a play-test verdict landed on one and not the
+  // other (and the seed re-asserted its hard-coded status every migrate). A linked card now
+  // DERIVES status from its pitch, so the two surfaces cannot disagree.
+  it("GET /api/library derives a linked card's status from its pitch, not its own column", async () => {
+    process.env.PUBLISH_TOKEN = "test-token-123";
+    const hdrs = { "content-type": "application/json", authorization: "Bearer test-token-123" };
+    const slug = "derive-me-20260719";
+    // a pitch that is the source of truth for disposition
+    await fetch(`${base}/api/pitches`, {
+      method: "POST",
+      headers: hdrs,
+      body: JSON.stringify({
+        slug,
+        title: "Derive Me",
+        pitchDate: "2026-07-19",
+        status: "prototyping",
+      }),
+    });
+    // a card linked to it, deliberately carrying a CONTRADICTORY stored status
+    await fetch(`${base}/api/library`, {
+      method: "POST",
+      headers: hdrs,
+      body: JSON.stringify({
+        kind: "prototype",
+        title: "Derive Me — Loop Toy",
+        mediaUrl: `https://kairos-prototypes.netlify.app/${slug}/`,
+        pitchSlug: slug,
+        status: "draft", // stale/wrong on purpose — must be ignored in favour of the pitch
+      }),
+    });
+    const card = () =>
+      fetch(`${base}/api/library`)
+        .then((r) => r.json())
+        .then((rows: any[]) => rows.find((it) => it.pitchSlug === slug));
+
+    expect((await card()).status).toBe("prototyping"); // pitch wins over the card's own column
+
+    // flip ONLY the pitch — the card must follow with no second write
+    await fetch(`${base}/api/pitches`, {
+      method: "POST",
+      headers: hdrs,
+      body: JSON.stringify({ slug, title: "Derive Me", pitchDate: "2026-07-19", status: "parked" }),
+    });
+    expect((await card()).status).toBe("parked");
+  });
+
   it("POST /api/library: 401 without token → upsert with token → idempotent on mediaUrl", async () => {
     const item = {
       kind: "prototype",

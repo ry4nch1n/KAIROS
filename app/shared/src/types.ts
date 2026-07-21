@@ -403,7 +403,11 @@ export interface LibraryItem {
   title: string;
   summary: string;
   tags: string[];
+  // DERIVED for cards linked to a pitch: the API returns the linked pitch's status, so a
+  // prototype card can never disagree with the leaderboard. Falls back to the item's own
+  // stored status when there's no linked pitch (non-prototype collections).
   status: string;
+  pitchSlug: string | null; // the pitch whose concept this card tests — the status source
   mediaUrl: string | null; // playable/asset link (e.g. a hosted prototype)
   imageUrl: string | null; // poster/thumbnail shown on the card
   date: string | null; // YYYY-MM-DD — e.g. a prototype's publish date
@@ -419,7 +423,10 @@ export interface LibraryItemInput {
   summary?: string | null;
   imageUrl?: string | null;
   tags?: string[] | null;
-  status?: string | null; // defaults to "draft"
+  // Ignored on read for pitch-linked cards (status derives from the pitch). Still used by
+  // collections that own their own status. Defaults to "draft".
+  status?: string | null;
+  pitchSlug?: string | null; // link to the pitch this card tests; omit to keep an existing link
   date?: string | null; // YYYY-MM-DD publish date (becomes created_at)
 }
 

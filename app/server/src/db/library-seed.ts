@@ -3,11 +3,16 @@
 // `media_url` doubles as the natural key so the inserter is idempotent — safe to run
 // on every Neon migrate (and after the local seed truncate) without duplicating rows.
 //
-// This list is the SOURCE OF TRUTH for the KAIROS prototype cards: `ensureLibraryPrototypes`
-// heals every field (title/summary/tags/status/image) against it on each migrate, so a
-// routine post that lands with a bad encoding or a stale title converges back to the clean,
-// standardized card within a day. Naming is standardized to `<Name> — <Verb-noun> Toy`
-// (no code-name echo). Cards not in this list (newer routine prototypes) are left untouched.
+// This list is the SOURCE OF TRUTH for the KAIROS prototype cards' PRESENTATION:
+// `ensureLibraryPrototypes` heals title/summary/tags/image/pitchSlug against it on each
+// migrate, so a routine post that lands with a bad encoding or a stale title converges back
+// to the clean, standardized card within a day. Naming is standardized to
+// `<Name> — <Verb-noun> Toy` (no code-name echo). Cards not in this list are left untouched.
+//
+// It deliberately does NOT own `status`. Disposition belongs to the pitch, and the card
+// derives it via `pitchSlug` → `pitches.status` at read time. Healing a hard-coded status
+// here is what silently reverted play-test verdicts on every migrate and kept the card
+// disagreeing with the leaderboard — the drift this link exists to end.
 import type { Querier } from "./db.ts";
 
 const ART = "https://kairos-pitch-art.netlify.app";
@@ -21,7 +26,7 @@ export const LIBRARY_PROTOTYPES = [
     mediaUrl: `${PROTO}/hearthspeak-20260711/`,
     imageUrl: `${ART}/hearthspeak-20260711/header.png`,
     tags: ["Hearthspeak", "extraction-lite", "browser"],
-    status: "validated",
+    pitchSlug: "hearthspeak-20260711",
     date: "2026-07-12",
   },
   {
@@ -32,7 +37,7 @@ export const LIBRARY_PROTOTYPES = [
     mediaUrl: `${PROTO}/ferrywick-20260711/`,
     imageUrl: `${ART}/ferrywick-20260711/header.png`,
     tags: ["Ferrywick", "route-planning", "browser"],
-    status: "shelved",
+    pitchSlug: "ferrywick-20260711",
     date: "2026-07-14",
   },
   {
@@ -43,7 +48,7 @@ export const LIBRARY_PROTOTYPES = [
     mediaUrl: `${PROTO}/overflow-20260710/`,
     imageUrl: `${ART}/overflow-20260710/header.png`,
     tags: ["Overflow", "automation-under-pressure", "browser"],
-    status: "shelved",
+    pitchSlug: "overflow-20260710",
     date: "2026-07-14",
   },
   {
@@ -54,7 +59,7 @@ export const LIBRARY_PROTOTYPES = [
     mediaUrl: "https://solar-forge-globe-toy.netlify.app",
     imageUrl: `${ART}/solar-forge-20260706/header.png`,
     tags: ["Solar Forge", "logistics", "browser"],
-    status: "prototyping",
+    pitchSlug: "solar-forge-20260706",
     date: "2026-07-08",
   },
 ] as const;
@@ -77,17 +82,17 @@ export async function ensureLibraryPrototypes(db: Querier): Promise<void> {
   }
   for (const p of LIBRARY_PROTOTYPES) {
     await db.query(
-      `INSERT INTO library_items (kind, title, summary, media_url, image_url, tags, status, created_at)
+      `INSERT INTO library_items (kind, title, summary, media_url, image_url, tags, pitch_slug, created_at)
        SELECT $1, $2, $3, $4, $5, $6::text[], $7, $8::timestamptz
        WHERE NOT EXISTS (SELECT 1 FROM library_items WHERE media_url = $4)`,
-      [p.kind, p.title, p.summary, p.mediaUrl, p.imageUrl, [...p.tags], p.status, p.date],
+      [p.kind, p.title, p.summary, p.mediaUrl, p.imageUrl, [...p.tags], p.pitchSlug, p.date],
     );
     await db.query(
       `UPDATE library_items SET
-         kind = $2, title = $3, summary = $4, image_url = $5, tags = $6::text[], status = $7,
+         kind = $2, title = $3, summary = $4, image_url = $5, tags = $6::text[], pitch_slug = $7,
          created_at = $8::timestamptz
        WHERE media_url = $1`,
-      [p.mediaUrl, p.kind, p.title, p.summary, p.imageUrl, [...p.tags], p.status, p.date],
+      [p.mediaUrl, p.kind, p.title, p.summary, p.imageUrl, [...p.tags], p.pitchSlug, p.date],
     );
   }
 }

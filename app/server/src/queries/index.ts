@@ -1818,6 +1818,27 @@ export async function publishPitch(db: Querier, p: PitchInput): Promise<void> {
   );
 }
 
+// Read the Library collections. A card linked to a pitch (`pitch_slug`) DERIVES its status
+// from that pitch, so a prototype card and the leaderboard can never disagree — they read the
+// same field. Unlinked cards keep their own stored status (other collections own theirs).
+//
+// This lives here rather than inline in the two API entry points on purpose: the SQL used to
+// be duplicated verbatim in app.ts and the Netlify function, and routeParity only diffs route
+// SURFACES, not query bodies — so a join added to one and not the other would drift silently.
+export async function libraryItems(db: Querier): Promise<Record<string, any>[]> {
+  return db.query(
+    `SELECT li.id, li.kind, li.title, li.summary, li.tags,
+            COALESCE(p.status, li.status) AS status,
+            li.pitch_slug AS "pitchSlug",
+            li.media_url  AS "mediaUrl",
+            li.image_url  AS "imageUrl",
+            to_char(li.created_at, 'YYYY-MM-DD') AS date
+       FROM library_items li
+       LEFT JOIN pitches p ON p.slug = li.pitch_slug
+      ORDER BY li.created_at DESC`,
+  );
+}
+
 // Publish/upsert a library item (e.g. a hosted prototype card). Keyed on media_url —
 // the same natural key the curated seed uses — so posting is idempotent: a re-post of
 // the same hosted URL refreshes the card in place. No unique index exists on media_url,
@@ -1833,8 +1854,8 @@ export async function publishLibraryItem(db: Querier, it: LibraryItemInput): Pro
   if (errors.length) throw new Error(`library item invalid: ${errors.join("; ")}`);
 
   await db.query(
-    `INSERT INTO library_items (kind, title, summary, media_url, image_url, tags, status, created_at)
-     SELECT $1, $2, $3, $4, $5, $6::text[], $7, COALESCE($8::timestamptz, now())
+    `INSERT INTO library_items (kind, title, summary, media_url, image_url, tags, status, pitch_slug, created_at)
+     SELECT $1, $2, $3, $4, $5, $6::text[], $7, $9, COALESCE($8::timestamptz, now())
      WHERE NOT EXISTS (SELECT 1 FROM library_items WHERE media_url = $4)`,
     [
       it.kind,
@@ -1845,11 +1866,15 @@ export async function publishLibraryItem(db: Querier, it: LibraryItemInput): Pro
       it.tags ?? [],
       it.status ?? "draft",
       it.date ?? null,
+      it.pitchSlug ?? null,
     ],
   );
+  // pitch_slug uses COALESCE so a poster that omits it keeps the existing link rather than
+  // unlinking the card (which would silently drop it back to its own stale stored status).
   await db.query(
     `UPDATE library_items SET
        kind = $2, title = $3, summary = $4, image_url = $5, tags = $6::text[], status = $7,
+       pitch_slug = COALESCE($9, pitch_slug),
        created_at = COALESCE($8::timestamptz, created_at)
      WHERE media_url = $1`,
     [
@@ -1861,6 +1886,7 @@ export async function publishLibraryItem(db: Querier, it: LibraryItemInput): Pro
       it.tags ?? [],
       it.status ?? "draft",
       it.date ?? null,
+      it.pitchSlug ?? null,
     ],
   );
 }
