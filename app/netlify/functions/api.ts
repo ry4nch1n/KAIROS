@@ -28,23 +28,28 @@ const pp = (v: string | null): Platform => (v && PLATFORMS.includes(v) ? v : "al
 //
 // Netlify voids s-maxage/max-age on every new deploy, so the daily deploy already acts as a
 // cache purge aligned with the daily crawl — no manual invalidation needed.
+//
+// `durable` is load-bearing, not decoration: without it an edge-cache MISS on any node still
+// invokes the function (and wakes Neon). The durable cache is shared across edge nodes, so a
+// miss is served from it instead of paying another cold start — which is the exact failure
+// mode measured here.
 type CachePolicy = "daily" | "short" | "static" | "none";
 const CACHE: Record<CachePolicy, Record<string, string>> = {
   // Crawl-derived analytics: the crawl runs once daily, so an hour at the edge is honest.
   daily: {
     "cache-control": "public, max-age=60",
-    "netlify-cdn-cache-control": "public, s-maxage=3600, stale-while-revalidate=86400",
+    "netlify-cdn-cache-control": "public, durable, s-maxage=3600, stale-while-revalidate=86400",
   },
   // Routine-written reads (pitches/library/brief): a publish should appear within ~a minute.
   // A POST does not purge the GET cache, so keep the edge TTL short here.
   short: {
     "cache-control": "public, max-age=30",
-    "netlify-cdn-cache-control": "public, s-maxage=60, stale-while-revalidate=600",
+    "netlify-cdn-cache-control": "public, durable, s-maxage=60, stale-while-revalidate=600",
   },
   // Taxonomy/versions: changes only WITH a deploy, and a deploy voids the cache.
   static: {
     "cache-control": "public, max-age=300",
-    "netlify-cdn-cache-control": "public, s-maxage=86400, stale-while-revalidate=604800",
+    "netlify-cdn-cache-control": "public, durable, s-maxage=86400, stale-while-revalidate=604800",
   },
   // Mutations, auth failures, 404s, errors. The old blanket max-age=300 cached these too —
   // a cached 401 or error response is never what we want.

@@ -33,7 +33,9 @@ describe("prod API cache policy", () => {
   it("caches crawl-derived reads at the CDN, which is what avoids waking Neon", () => {
     const src = read(API);
     // Browser-only `max-age` was the original bug — it never populated the edge cache.
-    expect(src).toMatch(/"netlify-cdn-cache-control":\s*"public,\s*s-maxage=\d+/);
+    // `durable` is required, not optional: without it an edge-cache MISS still invokes the
+    // function and wakes Neon, which is the cold start this whole change exists to avoid.
+    expect(src).toMatch(/"netlify-cdn-cache-control":\s*"public,\s*durable,\s*s-maxage=\d+/);
     // stale-while-revalidate is the part that makes an expired entry return instantly.
     expect(src).toMatch(/stale-while-revalidate=\d+/);
     for (const p of ["/overview", "/steam", "/genres"]) {
