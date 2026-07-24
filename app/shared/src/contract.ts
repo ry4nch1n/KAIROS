@@ -37,7 +37,11 @@ export const CONTRACT = {
   //      release_date, the "door is closing" crowding flag) and `demandTrajectory` (median-reviews
   //      momentum across snapshot windows, "new" until history deepens) — so a sub-genre reads
   //      "growing or saturating?" like a store genre (#114). Additive; read defensively.
-  version: 11,
+  // v12: MarketGap and SteamGap (the opportunity-ranked lists) gained `components` — the three
+  //      signed z-score contributions (demand / quality / supply) that already sum to the
+  //      composite `score`, surfaced so the ranking stops being a black box (#87). No formula
+  //      change: the components ARE the score's existing intermediates. Additive; read defensively.
+  version: 12,
   pitch: {
     // v2: added visual-card fields — setting, artStyle, codeName, headerUrl, shotUrl.
     // v3: rating rework — scoreFields d1Fit/steamCeiling/buildCost → browserFit/steamFit/buildEase.

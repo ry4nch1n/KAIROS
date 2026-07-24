@@ -583,6 +583,13 @@ export async function getMarketGaps(db: Querier, platform: Platform): Promise<Ma
       score: +(zApp(num(r.appetite)) + zQual(num(r.quality_ceil)) - zSup(num(r.supply_n))).toFixed(
         2,
       ),
+      // Same intermediates the score above sums — surfaced, not re-derived (#87). Signs match:
+      // demand/quality lift, supply is negated. Rounded independently; sum ≈ score ±0.02.
+      components: {
+        demand: +zApp(num(r.appetite)).toFixed(2),
+        quality: +zQual(num(r.quality_ceil)).toFixed(2),
+        supply: +(-zSup(num(r.supply_n))).toFixed(2),
+      },
       examples: gex.get(`${r.genre} × ${r.tag}`) ?? [],
       supplyRising: supply.get(r.genre)?.trend === "rising",
     }))
@@ -1696,6 +1703,13 @@ export async function getSteamOpportunity(db: Querier): Promise<SteamGap[]> {
       qualityCeil: +num(r.quality).toFixed(2),
       medianPriceCents: Math.round(num(r.med_price)),
       score: +(zDem(num(r.demand)) + zQual(num(r.quality)) - zSup(num(r.supply_n))).toFixed(2),
+      // Same intermediates the score above sums — surfaced, not re-derived (#87). Signs match:
+      // demand/quality lift, supply is negated. Rounded independently; sum ≈ score ±0.02.
+      components: {
+        demand: +zDem(num(r.demand)).toFixed(2),
+        quality: +zQual(num(r.quality)).toFixed(2),
+        supply: +(-zSup(num(r.supply_n))).toFixed(2),
+      },
       examples: ex.get(`${r.genre} × ${r.tag}`) ?? [],
       supplyRising: supply.get(r.genre)?.trend === "rising",
     }))

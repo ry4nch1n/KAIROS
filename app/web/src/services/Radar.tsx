@@ -16,6 +16,7 @@ import type {
   SteamNewRelease,
   SteamComparable,
   SteamTagLookup,
+  ScoreComponents,
   SupplyTrend,
   Trajectory,
 } from "shared";
@@ -363,6 +364,27 @@ function OverviewView({ ov }: { ov: Overview }) {
 const Z_TIP =
   "z(x) = how many standard deviations x sits above the average across all genre × tag pairs ranked here. Positive score = better opportunity than the average pair; each term contributes roughly ±1 per standard deviation.";
 
+// The composite's own factors, made legible (#87): the three z-score contributions that
+// sum to the opportunity score. Neutral labels; demand/quality lift, supply is negated so a
+// crowded market reads negative. Flex-wraps — safe at 375px, no fixed-width panel.
+function ScoreBreakdown({ c }: { c: ScoreComponents }) {
+  const term = (label: string, v: number) => (
+    <span
+      className="score-term"
+      title={`${label}: ${v >= 0 ? "+" : ""}${v.toFixed(2)} — its contribution to the opportunity score (z-score, in standard deviations)`}
+    >
+      {label} <b className={v >= 0 ? "pos" : "neg"}>{`${v >= 0 ? "+" : ""}${v.toFixed(2)}`}</b>
+    </span>
+  );
+  return (
+    <div className="score-breakdown num" title="How the opportunity score adds up (z-score terms)">
+      {term("demand", c.demand)}
+      {term("quality", c.quality)}
+      {term("supply", c.supply)}
+    </div>
+  );
+}
+
 function GapList({ gaps }: { gaps: Overview["gaps"] }) {
   return (
     <div className="gaplist">
@@ -384,6 +406,7 @@ function GapList({ gaps }: { gaps: Overview["gaps"] }) {
                 supply rising
               </span>
             )}
+            <ScoreBreakdown c={g.components} />
           </div>
           <div className="gap-stats num">
             <span>
@@ -881,6 +904,7 @@ function OppList({ gaps }: { gaps: SteamGap[] }) {
                 supply rising
               </span>
             )}
+            <ScoreBreakdown c={g.components} />
           </div>
           <div className="gap-stats num">
             <span>

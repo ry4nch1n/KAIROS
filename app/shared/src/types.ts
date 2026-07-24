@@ -101,6 +101,16 @@ export interface SteamComparable {
   reviewVelocity: number | null;
 }
 
+// Signed contributions that make the composite opportunity `score` legible (#87). Each
+// term is a z-score contribution and the three SUM to `score` (within display rounding):
+// demand + quality push it up, supply pushes it down (already negated, so a crowded
+// market reads negative). Surfaced, not re-derived — the same intermediates the score sums.
+export interface ScoreComponents {
+  demand: number; // z(demand) — higher appetite/owners lifts the score
+  quality: number; // z(quality ceiling: P90 rating)
+  supply: number; // −z(supply: # games) — more competitors lowers the score
+}
+
 export interface SteamGap {
   label: string;
   genre: string;
@@ -110,6 +120,7 @@ export interface SteamGap {
   qualityCeil: number; // P90 rating
   medianPriceCents: number; // monetization
   score: number;
+  components: ScoreComponents; // the score's breakdown (#87) — sums to `score`
   examples: string[];
   supplyRising: boolean; // genre accreting recent releases fast (R1.3 annotation)
 }
@@ -217,6 +228,7 @@ export interface MarketGap {
   appetite: number;
   qualityCeil: number;
   score: number;
+  components: ScoreComponents; // the score's breakdown (#87) — sums to `score`
   examples: string[];
   // Recency annotation (R1.3): true when the gap's genre is accreting new entrants fast.
   // The z-score `score` is unchanged — this flags "the door is closing" without silently
