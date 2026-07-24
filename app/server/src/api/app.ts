@@ -53,6 +53,16 @@ export function createApp(db: Querier) {
     }
   });
 
+  // Named sub-genre lookup (#113) — `?tag=` (or `?tags=a,b`). The ranked lens in /api/steam
+  // is a top-30 by total revenue, so a specific market is only reachable by name.
+  app.get("/api/steam/tags", async (req, res) => {
+    try {
+      res.json(await q.getSteamTagLookup(db, req.query.tag ?? req.query.tags));
+    } catch (e) {
+      res.status(500).json({ error: String(e) });
+    }
+  });
+
   app.get("/api/genres", async (req, res) =>
     res.json(await q.getGenres(db, parsePlatform(req.query.platform))),
   );

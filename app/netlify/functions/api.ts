@@ -85,6 +85,14 @@ export default async (req: Request) => {
     }
     if (path === "/overview") return json(await q.getOverview(db, platform), 200, "daily");
     if (path === "/steam") return json(await q.getSteamOverview(db), 200, "daily");
+    // Named sub-genre lookup (#113) — crawl-derived like the rest of the Steam analytics, and
+    // the query string is part of the cache key, so "daily" is correct here too.
+    if (path === "/steam/tags")
+      return json(
+        await q.getSteamTagLookup(db, url.searchParams.get("tag") ?? url.searchParams.get("tags")),
+        200,
+        "daily",
+      );
     if (path === "/hidden-gems") return json(await q.getHiddenGems(db, platform), 200, "daily");
     if (path === "/genres") return json(await q.getGenres(db, platform), 200, "daily");
     if (path === "/developers") return json(await q.getDevelopers(db, platform), 200, "daily");

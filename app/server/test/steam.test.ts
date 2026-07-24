@@ -508,6 +508,102 @@ describe("D10c getSteamTagEconomics (sub-genre lens, #90)", () => {
   });
 });
 
+describe("D10d getSteamTagLookup — named sub-genre lookup (#113)", () => {
+  // The ranked lens orders by TOTAL revenue, so a generic high-volume tag out-earns a real
+  // niche market by construction and the niche one falls off the cut — not "hard to find"
+  // but unreachable. Seeded: a generic tag (also carrying a curation label), a real 3-title
+  // market, and a near-name 2-title variant that must stay below the supply floor.
+  const many = (ids: string[], o: Partial<RawGame>) =>
+    ids.map((id) => steamGame({ ...o, sourceGameId: id }));
+  async function seedRanked(db: Querier) {
+    const games: RawGame[] = [
+      ...many(["A1", "A2", "A3"], {
+        genre: "Action",
+        tags: ["Action", "Popular"],
+        priceCents: 2000,
+        ownersEst: 500_000,
+      }),
+      ...many(["D1", "D2", "D3"], {
+        genre: "Strategy",
+        tags: ["Deckbuilding"],
+        priceCents: 1500,
+        ownersEst: 50_000,
+      }),
+      ...many(["E1", "E2"], { genre: "Casual", tags: ["Deckbuilder"], ownersEst: 20_000 }),
+    ];
+    await loadGames(db, "steam", STEAM_BASE_URL, games, "2026-06-30T00:00:00.000Z");
+  }
+
+  it("reaches a market the ranked cut hides, and keeps both quality floors", async () => {
+    const db = await freshMemoryDb();
+    await seedRanked(db);
+    // Ranked path with the cut applied: the niche market is simply absent.
+    const ranked = await q.getSteamTagEconomics(db, { limit: 1 });
+    expect(ranked.map((r) => r.genre)).not.toContain("Deckbuilding");
+    const found = await q.getSteamTagLookup(db, "deckbuild"); // partial + lower-case, as typed
+    expect(found.rows.map((r) => r.genre)).toEqual(["Deckbuilding"]);
+    expect(found.rows[0].games).toBe(3);
+    // Supply floor kept — the 2-title near-name is NAMED as too thin, not silently dropped.
+    expect(found.minSupply).toBe(3);
+    expect(found.thin).toEqual([{ tag: "Deckbuilder", games: 2 }]);
+    // Curation filtering kept — a lookup is not a back door around the floors.
+    const curated = await q.getSteamTagLookup(db, "popular"); // 3 games, but a curation label
+    expect([...curated.rows, ...curated.thin]).toEqual([]);
+  });
+
+  it("takes comma-separated tags, and refuses a query too short to name a market", async () => {
+    const db = await freshMemoryDb();
+    await seedRanked(db);
+    const multi = await q.getSteamTagLookup(db, "deckbuilding, action");
+    expect(multi.rows.map((r) => r.genre).sort()).toEqual(["Action", "Deckbuilding"]);
+    for (const bad of ["", "  ", "a", null, undefined])
+      expect(await q.getSteamTagLookup(db, bad)).toEqual({
+        query: "",
+        minSupply: 3,
+        rows: [],
+        thin: [],
+      });
+  });
+
+  it("sanitizes the query and treats SQL-looking input as a literal", async () => {
+    expect(q.parseTagQuery("  DeckBuild  ")).toEqual(["deckbuild"]);
+    expect(q.parseTagQuery("%deck%_")).toEqual(["deck"]); // LIKE metachars are not user syntax
+    expect(q.parseTagQuery("a,b,deck")).toEqual(["deck"]); // sub-2-char terms dropped
+    expect(q.parseTagQuery("t1,t2,t3,t4,t5,t6,t7")).toHaveLength(5); // term cap
+    expect(q.parseTagQuery("x".repeat(500))[0].length).toBeLessThanOrEqual(60); // length cap
+    const db = await freshMemoryDb();
+    await seedRanked(db);
+    // Parameterized, never interpolated: the payload is inert and the table survives.
+    expect((await q.getSteamTagLookup(db, "deck'; DROP TABLE tags; --")).rows).toEqual([]);
+    const still = await db.query("SELECT count(*)::int AS n FROM tags");
+    expect(Number(still[0].n)).toBeGreaterThan(0);
+  });
+
+  it("GET /api/steam/tags serves the lookup, via ?tag= or ?tags=", async () => {
+    const db = await freshMemoryDb();
+    await seedRanked(db);
+    const app = createApp(db);
+    const server = app.listen(0);
+    await new Promise<void>((r) => server.once("listening", () => r()));
+    const port = (server.address() as any).port;
+    try {
+      for (const qs of ["tag=deckbuild", "tags=deckbuild"]) {
+        const res = await fetch(`http://localhost:${port}/api/steam/tags?${qs}`);
+        expect(res.status).toBe(200);
+        const j = await res.json();
+        expect(j.rows.map((r: { genre: string }) => r.genre)).toContain("Deckbuilding");
+        expect(j.thin).toEqual([{ tag: "Deckbuilder", games: 2 }]);
+      }
+      // No param at all is a well-formed empty answer, not a 500 or a full dump.
+      const bare = await fetch(`http://localhost:${port}/api/steam/tags`);
+      expect(bare.status).toBe(200);
+      expect((await bare.json()).rows).toEqual([]);
+    } finally {
+      server.close();
+    }
+  });
+});
+
 describe("D11 platform isolation incl. steam", () => {
   it("steam queries ignore browser rows and vice-versa", async () => {
     const db = await freshMemoryDb();

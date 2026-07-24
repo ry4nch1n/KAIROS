@@ -15,6 +15,7 @@ import type {
   SteamDeveloperRow,
   SteamNewRelease,
   SteamComparable,
+  SteamTagLookup,
 } from "shared";
 import { api } from "../lib/api.ts";
 import type { RevenueSeed } from "../lib/steamRevenue.ts";
@@ -1212,10 +1213,39 @@ const SUBGENRE_TIP =
 // Store genres are coarse (Action, Indie, Strategy), so a real market like Deckbuilding is
 // split across several of them and can't be read on its own. The sub-genre lens re-keys the
 // same economics on community tags (#90).
+const TAG_QUERY_MIN = 2; // below this a query matches half the tag table — mirrors the server floor
+
 function GenreEconCard({ data }: { data: SteamOverview }) {
   const [cohort, setCohort] = useState<"indie" | "all">("indie");
   const [lens, setLens] = useState<"genre" | "tag">("genre");
   const tagRows = data.tagEconomics ?? [];
+  // Named sub-genre lookup (#113). The ranked list below is the top 30 by TOTAL revenue, which
+  // broad tags win by construction — so a specific market has to be reachable by name instead.
+  const [tagQuery, setTagQuery] = useState("");
+  const [lookup, setLookup] = useState<SteamTagLookup | null>(null);
+  const [looking, setLooking] = useState(false);
+  const trimmed = tagQuery.trim();
+  const searching = lens === "tag" && trimmed.length >= TAG_QUERY_MIN;
+  useEffect(() => {
+    if (!searching) {
+      setLookup(null);
+      setLooking(false);
+      return;
+    }
+    let live = true;
+    setLooking(true);
+    const t = setTimeout(() => {
+      fetch(`/api/steam/tags?tag=${encodeURIComponent(trimmed)}`)
+        .then((r) => (r.ok ? (r.json() as Promise<SteamTagLookup>) : null))
+        .then((r) => live && setLookup(r))
+        .catch(() => live && setLookup(null))
+        .finally(() => live && setLooking(false));
+    }, 300);
+    return () => {
+      live = false;
+      clearTimeout(t);
+    };
+  }, [trimmed, searching]);
   return (
     <div className="card">
       <h3>
@@ -1262,13 +1292,62 @@ function GenreEconCard({ data }: { data: SteamOverview }) {
         </p>
       )}
       {lens === "tag" && (
-        <p className="view-head">
-          Indie cohort, keyed on community tags — the markets store genres hide. Tags overlap, so
-          rows <b>don't</b> sum to the catalog; read each as the market of games carrying that tag.
-        </p>
+        <>
+          <p className="view-head">
+            Indie cohort, keyed on community tags — the markets store genres hide. Tags overlap, so
+            rows <b>don't</b> sum to the catalog; read each as the market of games carrying that
+            tag.
+          </p>
+          {/* Wraps and shrinks so the card never forces a page-level horizontal scroll on a phone. */}
+          <form
+            role="search"
+            style={{ display: "flex", flexWrap: "wrap", gap: 8, margin: "6px 0 10px" }}
+            onSubmit={(e) => e.preventDefault()}
+          >
+            <input
+              type="search"
+              value={tagQuery}
+              onChange={(e) => setTagQuery(e.target.value)}
+              placeholder="Find a sub-genre by name — partial matches work"
+              aria-label="Find a sub-genre by name"
+              style={{
+                flex: "1 1 200px",
+                minWidth: 0,
+                border: "1px solid var(--border)",
+                borderRadius: 9,
+                padding: "8px 11px",
+                fontFamily: "Fira Code",
+                fontSize: 13,
+                color: "var(--text)",
+                background: "var(--surface-2)",
+              }}
+            />
+            {trimmed ? (
+              <button type="button" className="seg-btn" onClick={() => setTagQuery("")}>
+                Clear
+              </button>
+            ) : null}
+          </form>
+          {searching && (
+            <p className="view-head">
+              {looking && !lookup
+                ? "Searching…"
+                : lookup?.rows.length
+                  ? `${lookup.rows.length} match${lookup.rows.length === 1 ? "" : "es"} for “${trimmed}” — the revenue ranking is bypassed, so a small market still shows.`
+                  : `Nothing above the ${lookup?.minSupply ?? TAG_QUERY_MIN}-title floor matches “${trimmed}”.`}
+              {lookup?.thin.length ? (
+                <>
+                  {" "}
+                  Too thin to read as a market:{" "}
+                  {lookup.thin.map((t) => `${t.tag} (${t.games})`).join(", ")}.
+                </>
+              ) : null}
+            </p>
+          )}
+        </>
       )}
       {lens === "tag" ? (
-        <EconTable rows={tagRows} keyLabel="Sub-genre" demand />
+        <EconTable rows={searching ? (lookup?.rows ?? []) : tagRows} keyLabel="Sub-genre" demand />
       ) : (
         <EconTable rows={cohort === "indie" ? data.indie : data.all} />
       )}

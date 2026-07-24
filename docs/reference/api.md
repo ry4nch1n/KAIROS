@@ -5,7 +5,7 @@
 
 # API reference
 
-18 routes served by the Express app factory. The
+19 routes served by the Express app factory. The
 Netlify Function mirrors this surface; `routeParity.test.ts` fails the suite if the two drift.
 
 | Method | Path |
@@ -24,6 +24,7 @@ Netlify Function mirrors this surface; `routeParity.test.ts` fails the suite if 
 | `GET` | `/api/overview` |
 | `GET` | `/api/pitches` |
 | `GET` | `/api/steam` |
+| `GET` | `/api/steam/tags` |
 | `POST` | `/api/brief/publish` |
 | `POST` | `/api/brief/steering` |
 | `POST` | `/api/library` |
