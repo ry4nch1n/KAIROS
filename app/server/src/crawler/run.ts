@@ -2,7 +2,7 @@
 import { crazygames } from "./crazygames.ts";
 import { poki } from "./poki.ts";
 import { steamCrawl } from "./steam.ts";
-import { loadGames } from "./load.ts";
+import { crawlRotation, loadGames } from "./load.ts";
 import { politeFetch, sleep, type SourceAdapter, type RawGame } from "./base.ts";
 import { appDb, applySchema, usingNeon } from "../db/db.ts";
 
@@ -31,8 +31,11 @@ if (which === "steam") {
     console.error("unknown source:", which, "available: crazygames, poki, steam");
     process.exit(1);
   }
-  console.log(`[${adapter.name}] enumerating (limit ${limit})…`);
-  const urls = await adapter.listGameUrls(limit);
+  // Rotation = how many times this source has been crawled. Successive runs therefore start
+  // at a different sitemap offset (#99) instead of re-fetching the same prefix forever.
+  const rotation = await crawlRotation(db, adapter.name);
+  console.log(`[${adapter.name}] enumerating (limit ${limit}, rotation ${rotation})…`);
+  const urls = await adapter.listGameUrls(limit, { rotation });
   console.log(`[${adapter.name}] ${urls.length} game urls`);
   for (const url of urls) {
     try {
