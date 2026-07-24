@@ -13,10 +13,10 @@ value means bumping the relevant version in the same commit.**
 
 | Scope | Version |
 |-------|---------|
-| `(top level)` | **12** |
+| `(top level)` | **13** |
 | `pitch` | **8** |
 | `briefPayload` | **1** |
-| `taxonomy` | **2** |
+| `taxonomy` | **3** |
 
 ## Taxonomies
 
@@ -58,4 +58,8 @@ value means bumping the relevant version in the same commit.**
 
 ### `taxonomy.settings`
 
-11 values: `fantasy` · `sci-fi` · `space` · `cyberpunk` · `post-apocalyptic` · `horror` · `historical` · `medieval` · `modern` · `western` · `military`
+12 values: `fantasy` · `fairytale` · `sci-fi` · `space` · `cyberpunk` · `post-apocalyptic` · `horror` · `historical` · `medieval` · `modern` · `western` · `military`
+
+### `taxonomy.moods`
+
+6 values: `melancholy` · `whimsical` · `cozy` · `tense` · `triumphant` · `mysterious`
