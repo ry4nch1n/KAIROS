@@ -1,17 +1,12 @@
+import type { ECharts, EChartsOption } from "echarts";
 import { useEffect, useRef } from "react";
-import * as echarts from "echarts";
+import { echarts } from "./echartRegistry.ts";
 
 // Resizes via ResizeObserver so charts redraw correctly when their service
 // switches from display:none back to visible.
-export function EChart({
-  option,
-  style,
-}: {
-  option: echarts.EChartsOption;
-  style?: React.CSSProperties;
-}) {
+export function EChart({ option, style }: { option: EChartsOption; style?: React.CSSProperties }) {
   const el = useRef<HTMLDivElement>(null);
-  const chart = useRef<echarts.ECharts | null>(null);
+  const chart = useRef<ECharts | null>(null);
 
   useEffect(() => {
     if (!el.current) return;
