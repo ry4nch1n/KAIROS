@@ -270,7 +270,27 @@ function PitchCard({ p }: { p: Pitch }) {
   );
 }
 
+// Mirrors PitchCard's spine clamp: the summary is clamped to a fixed line count (CSS,
+// scoped under .lib-grid) so its length can't drive card height, and the button pins to
+// the card bottom so CTAs line up across a row. Only a truncated summary gets the soft
+// tail-fade — same measure-and-mark trick PitchCard uses on its .pfield spine.
 function LibCard({ it }: { it: LibraryItem }) {
+  const blurbRef = useRef<HTMLParagraphElement>(null);
+  const mark = () => {
+    const el = blurbRef.current;
+    if (el) el.classList.toggle("is-clamped", el.scrollHeight > el.clientHeight + 1);
+  };
+  // Re-measure after every commit — the card first mounts inside a hidden (display:none)
+  // service panel where the blurb measures 0×0, and only gets real dimensions when the
+  // panel is revealed (which re-renders the card).
+  useLayoutEffect(mark);
+  // A viewport resize reflows the column count and the web-font swap shifts wrap points,
+  // neither of which re-renders the card — cover both explicitly, as PitchCard does.
+  useEffect(() => {
+    window.addEventListener("resize", mark);
+    document.fonts?.ready.then(mark);
+    return () => window.removeEventListener("resize", mark);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   return (
     <article className="bcard pcard">
       {it.imageUrl && (
@@ -288,7 +308,11 @@ function LibCard({ it }: { it: LibraryItem }) {
       </div>
       <h3>{it.title}</h3>
       {it.date && <div className="bmeta">Published {fmtDate(it.date)}</div>}
-      {it.summary && <p className="bblurb">{it.summary}</p>}
+      {it.summary && (
+        <p className="bblurb" ref={blurbRef}>
+          {it.summary}
+        </p>
+      )}
       {it.mediaUrl && (
         <a className="plink" href={it.mediaUrl} target="_blank" rel="noreferrer">
           ▶ Play prototype
@@ -796,7 +820,7 @@ export function Library({ hidden }: { hidden: boolean }) {
                 </div>
               )}
               {shownItems.length > 0 && (
-                <div className="bcard-grid">
+                <div className="bcard-grid lib-grid">
                   {shownItems.map((it) => (
                     <LibCard key={it.id} it={it} />
                   ))}
