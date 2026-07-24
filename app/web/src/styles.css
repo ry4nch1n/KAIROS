@@ -1413,6 +1413,31 @@ button {
   line-height: 1.5;
   margin-top: 5px;
 }
+/* Prototype (Library) grid — standardize card height like the Pitches grid (#91):
+   stretch cards to equal height per row so the Play CTA can pin to the bottom. Scoped
+   to .lib-grid so the pitch/brief grids (which disclose progressively) are untouched. */
+.lib-grid {
+  align-items: stretch;
+}
+/* Clamp the summary to a fixed line count so its length can't drive card height — the
+   same -webkit-box clamp PitchCard uses on its spine .pfield. */
+.lib-grid .bblurb {
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  margin-bottom: 11px;
+}
+/* Only a truncated summary (LibCard marks it is-clamped) gets the soft tail-fade, so the
+   cut reads as "there's more" rather than an abrupt clip — mirrors .pfield.is-clamped. */
+.lib-grid .bblurb.is-clamped {
+  -webkit-mask-image: linear-gradient(to bottom, #000 62%, transparent);
+  mask-image: linear-gradient(to bottom, #000 62%, transparent);
+}
+/* Pin Play prototype to the card bottom so CTAs line up across a row. */
+.lib-grid .plink {
+  margin-top: auto;
+}
 .brel {
   font-size: 12.5px;
   color: var(--text-3);
