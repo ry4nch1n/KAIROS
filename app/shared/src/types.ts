@@ -52,6 +52,13 @@ export interface SteamGenreEconomics {
 // not owners buckets.
 export interface SteamTagEconomics extends SteamGenreEconomics {
   medianVotes: number; // median review count per game — the demand estimator for this tag
+  // Momentum (#114) — the same two signals the store-genre quadrant exposes, at tag grain, so a
+  // sub-genre reads "is this market opening or closing?" identically to a store genre.
+  supplyTrend: SupplyTrend; // new-entrant flow (release_date): "rising" = crowding / door closing
+  supplyRising: boolean; // convenience flag mirroring the store-genre annotations
+  // Median-reviews momentum across snapshot windows. "new" = history too thin to read yet
+  // (the honest state; demand trajectory deepens as game_snapshots accrues), never a fake trend.
+  demandTrajectory: Trajectory;
 }
 
 // Named sub-genre lookup (#113). The ranked lens is a top-30 by TOTAL revenue, which generic

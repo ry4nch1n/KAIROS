@@ -16,6 +16,8 @@ import type {
   SteamNewRelease,
   SteamComparable,
   SteamTagLookup,
+  SupplyTrend,
+  Trajectory,
 } from "shared";
 import { api } from "../lib/api.ts";
 import type { RevenueSeed } from "../lib/steamRevenue.ts";
@@ -769,10 +771,16 @@ function EconTable({
   rows,
   keyLabel = "Genre",
   demand = false,
+  trend = false,
 }: {
-  rows: (SteamGenreEconomics & { medianVotes?: number })[];
+  rows: (SteamGenreEconomics & {
+    medianVotes?: number;
+    supplyTrend?: SupplyTrend;
+    demandTrajectory?: Trajectory;
+  })[];
   keyLabel?: string;
   demand?: boolean;
+  trend?: boolean;
 }) {
   return (
     <table className="dtable">
@@ -799,6 +807,12 @@ function EconTable({
           <th className="r" title={TOTAL_REV_TIP}>
             Total rev proxy
           </th>
+          {trend ? (
+            <>
+              <th title={SUBGENRE_DEMAND_TREND_TIP}>Demand trend</th>
+              <th title={SUPPLY_TIP}>Supply</th>
+            </>
+          ) : null}
         </tr>
       </thead>
       <tbody>
@@ -819,6 +833,20 @@ function EconTable({
             </td>
             <td className="r">{proxy(r.meanRevenuePerGame)}</td>
             <td className="r">{proxy(r.revenueProxy)}</td>
+            {trend ? (
+              <>
+                <td>
+                  <span className={"traj traj-" + (r.demandTrajectory ?? "new")}>
+                    {TRAJ_LABEL[r.demandTrajectory ?? "new"] || r.demandTrajectory}
+                  </span>
+                </td>
+                <td>
+                  <span className={"supply supply-" + (r.supplyTrend ?? "quiet")}>
+                    {SUPPLY_LABEL[r.supplyTrend ?? "quiet"] || r.supplyTrend}
+                  </span>
+                </td>
+              </>
+            ) : null}
           </tr>
         ))}
       </tbody>
@@ -1209,6 +1237,8 @@ const DEMAND_TIP =
   "Median review count per game — a continuous demand signal, unlike owner estimates, which are coarse buckets.";
 const SUBGENRE_TIP =
   "Sub-genres come from community tags, so a game carries several — rows overlap and deliberately do not add up to the catalog. Each row reads as “the market of games carrying this tag”.";
+const SUBGENRE_DEMAND_TREND_TIP =
+  "Later-half vs earlier-half momentum of this sub-genre's median-review series across snapshot windows: rising / plateau / decaying. Reads “new” until enough history accrues to judge — it does not fake a trend from too few captures.";
 
 // Store genres are coarse (Action, Indie, Strategy), so a real market like Deckbuilding is
 // split across several of them and can't be read on its own. The sub-genre lens re-keys the
@@ -1347,7 +1377,12 @@ function GenreEconCard({ data }: { data: SteamOverview }) {
         </>
       )}
       {lens === "tag" ? (
-        <EconTable rows={searching ? (lookup?.rows ?? []) : tagRows} keyLabel="Sub-genre" demand />
+        <EconTable
+          rows={searching ? (lookup?.rows ?? []) : tagRows}
+          keyLabel="Sub-genre"
+          demand
+          trend
+        />
       ) : (
         <EconTable rows={cohort === "indie" ? data.indie : data.all} />
       )}

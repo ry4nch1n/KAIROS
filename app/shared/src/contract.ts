@@ -32,7 +32,12 @@ export const CONTRACT = {
   //      (`revenueBandLowPerGame` / `revenueBandHighPerGame`) plus `estimatorRatio` and
   //      `estimatorsDisagree`, so a single shaky owners bucket can no longer pass as precision.
   //      Additive; read defensively (older payloads simply lack the band).
-  version: 10,
+  // v11: SteamTagEconomics (the sub-genre lens) gained the two momentum signals the store-genre
+  //      quadrant already exposes — `supplyTrend`/`supplyRising` (new-entrant flow from
+  //      release_date, the "door is closing" crowding flag) and `demandTrajectory` (median-reviews
+  //      momentum across snapshot windows, "new" until history deepens) — so a sub-genre reads
+  //      "growing or saturating?" like a store genre (#114). Additive; read defensively.
+  version: 11,
   pitch: {
     // v2: added visual-card fields — setting, artStyle, codeName, headerUrl, shotUrl.
     // v3: rating rework — scoreFields d1Fit/steamCeiling/buildCost → browserFit/steamFit/buildEase.
