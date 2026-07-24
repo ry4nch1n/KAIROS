@@ -1236,6 +1236,14 @@ describe("D16c opportunity score formula is pinned (#12)", () => {
     expect(puzzle.score).toBeCloseTo(-2.0, 5);
     // price is context only: the cheap pair outranks the expensive one purely on demand+quality
     expect(opp[0].genre).toBe("Action");
+    // #87: the exposed components are the score's own intermediates — the hand-computed
+    // z-terms — and they must recombine to the composite (so exposure can't silently drift).
+    expect(action.components).toMatchObject({ demand: 1, quality: 1, supply: 0 });
+    expect(puzzle.components).toMatchObject({ demand: -1, quality: -1, supply: 0 });
+    for (const g of opp) {
+      const sum = g.components.demand + g.components.quality + g.components.supply;
+      expect(Math.abs(sum - g.score)).toBeLessThanOrEqual(0.02); // 2dp rounding on each term
+    }
   });
 });
 

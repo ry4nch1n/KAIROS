@@ -728,6 +728,31 @@ button {
   margin-top: 4px;
   line-height: 1.4;
 }
+.score-breakdown {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px 5px;
+  margin-top: 4px;
+}
+.score-term {
+  font-family: "Fira Code";
+  font-size: 10px;
+  color: var(--text-3);
+  background: var(--surface-2);
+  border: 1px solid var(--border-soft);
+  border-radius: 6px;
+  padding: 1px 6px;
+  white-space: nowrap;
+}
+.score-term b {
+  font-weight: 700;
+}
+.score-term .pos {
+  color: var(--green);
+}
+.score-term .neg {
+  color: var(--red);
+}
 .foot-note {
   text-align: center;
   color: var(--text-3);

@@ -519,6 +519,23 @@ describe("B2 supply velocity — is a genre flooding? (R1.1 + R1.3)", () => {
     for (let i = 1; i < gaps.length; i++)
       expect(gaps[i - 1].score).toBeGreaterThanOrEqual(gaps[i].score);
   });
+
+  it("market gaps expose score components that recombine to the composite (#87)", async () => {
+    const gaps = await q.getMarketGaps(db, "all");
+    expect(gaps.length).toBeGreaterThan(0);
+    for (const g of gaps) {
+      expect(g.components).toMatchObject({
+        demand: expect.any(Number),
+        quality: expect.any(Number),
+        supply: expect.any(Number),
+      });
+      // The three exposed terms ARE the score's own intermediates — they must sum to it
+      // (each term independently rounded to 2dp, so allow ±0.02), so exposure can never
+      // drift from the formula.
+      const sum = g.components.demand + g.components.quality + g.components.supply;
+      expect(Math.abs(sum - g.score)).toBeLessThanOrEqual(0.02);
+    }
+  });
 });
 
 describe("B3 demand/supply quadrant (R1.2)", () => {
