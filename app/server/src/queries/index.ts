@@ -304,7 +304,7 @@ async function genreSupplyTrend(
   const w = `($1::int::text || ' days')::interval`; // trailing window
   const w2 = `(($1::int * 2)::text || ' days')::interval`; // window + the prior window
   const rows = await db.query(
-    `WITH anchor AS (SELECT max(g2.${col}) AS mx FROM games g2 WHERE g2.is_live)
+    `WITH anchor AS (SELECT max(g2.${col}) AS mx FROM games g2 JOIN sources src ON src.id = g2.source_id WHERE g2.is_live ${pf(platform)})
      SELECT ${canonSql("l.genre")} AS genre,
             count(*) FILTER (WHERE g.${col} > (SELECT mx FROM anchor) - ${w})::int AS recent,
             count(*) FILTER (WHERE g.${col} <= (SELECT mx FROM anchor) - ${w}
@@ -331,6 +331,14 @@ function pf(platform: Platform): string {
   // different metric semantics + crawl cadence) and must never feed browser analytics —
   // mixing it corrupts vote-velocity/momentum via cross-source date misalignment.
   return "AND src.name IN ('poki','crazygames')";
+}
+// Data-relative anchor for the 14-day "new" window: the newest first_seen_at WITHIN this
+// platform's OWN live catalog. Must carry the same predicates (g.is_live + pf) as the query
+// it bounds — otherwise one platform's window inherits another source's crawl recency (an
+// unrelated crawler's health, not the market being examined). Still data-relative, not
+// wall-clock, so the read stays deterministic.
+function newAnchor(platform: Platform): string {
+  return `(SELECT max(g2.first_seen_at) FROM games g2 JOIN sources src ON src.id = g2.source_id WHERE g2.is_live ${pf(platform)})`;
 }
 function subtitleFor(platform: Platform): string {
   if (platform === "poki") return "Poki · last 90 days";
@@ -657,7 +665,7 @@ export async function getNewReleases(db: Querier, platform: Platform): Promise<N
   const rows = await db.query(
     `SELECT g.id AS id, g.title AS title, g.url AS url, ${canonSql("l.genre")} AS genre, l.rating AS rating, l.votes AS votes
      FROM games g JOIN sources src ON src.id = g.source_id JOIN v_latest l ON l.game_id = g.id
-     WHERE g.is_live ${pf(platform)} AND g.first_seen_at >= (SELECT max(first_seen_at) FROM games) - interval '14 days'
+     WHERE g.is_live ${pf(platform)} AND g.first_seen_at >= ${newAnchor(platform)} - interval '14 days'
      ORDER BY g.first_seen_at DESC, l.votes DESC NULLS LAST LIMIT 60`,
   );
   // Per-title vote series over the same new-release cohort → age-adjusted votes/day +
@@ -665,7 +673,7 @@ export async function getNewReleases(db: Querier, platform: Platform): Promise<N
   const series = await db.query(
     `SELECT s.game_id AS id, s.captured_at AS d, max(s.votes) AS votes
      FROM game_snapshots s JOIN games g ON g.id = s.game_id JOIN sources src ON src.id = g.source_id
-     WHERE g.is_live ${pf(platform)} AND g.first_seen_at >= (SELECT max(first_seen_at) FROM games) - interval '14 days'
+     WHERE g.is_live ${pf(platform)} AND g.first_seen_at >= ${newAnchor(platform)} - interval '14 days'
        AND s.votes IS NOT NULL
      GROUP BY s.game_id, s.captured_at ORDER BY s.game_id, s.captured_at`,
   );
@@ -774,7 +782,7 @@ async function genreSupplyPressure(
   const rows = await db.query(
     `SELECT ${canonSql("l.genre")} AS genre, count(*)::int AS total,
             count(*) FILTER (
-              WHERE g.first_seen_at >= (SELECT max(first_seen_at) FROM games) - interval '14 days'
+              WHERE g.first_seen_at >= ${newAnchor(platform)} - interval '14 days'
             )::int AS recent
      FROM v_latest l JOIN games g ON g.id = l.game_id JOIN sources src ON src.id = g.source_id
      WHERE g.is_live AND l.genre IS NOT NULL ${pf(platform)}
@@ -872,7 +880,7 @@ async function getKPI(
   );
   const newGames = await db.query(
     `SELECT count(*)::int AS n FROM games g JOIN sources src ON src.id = g.source_id
-     WHERE g.is_live ${pf(platform)} AND g.first_seen_at >= (SELECT max(first_seen_at) FROM games) - interval '14 days'`,
+     WHERE g.is_live ${pf(platform)} AND g.first_seen_at >= ${newAnchor(platform)} - interval '14 days'`,
   );
   const gd = deps?.gd ?? (await genreVotesByDate(db, platform));
   const vol = deps?.vol ?? (await genreCounts(db, platform));
