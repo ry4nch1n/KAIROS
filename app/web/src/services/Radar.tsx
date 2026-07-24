@@ -1074,6 +1074,17 @@ const isRecentRelease = (iso: string | null): boolean => {
   const days = (Date.now() - new Date(iso + "T00:00:00Z").getTime()) / 86400000;
   return days >= 0 && days <= RECENT_DAYS;
 };
+// Team size is hand-curated (no API fills it), while comparables roll by recency, so most
+// rows resolve no size. Render the Team (est.) column only when a meaningful share of the
+// *currently visible* rows carry an estimate — a ~93%-blank column is noise. This self-heals:
+// the Solo-reachable cohort (100% tagged) always shows it, and if curation coverage ever
+// improves the column returns with no code change.
+export const TEAM_COVERAGE_MIN = 0.4;
+export const hasTeamCoverage = (rows: SteamComparable[]): boolean => {
+  if (rows.length === 0) return false;
+  const resolved = rows.filter((c) => c.teamSize != null).length;
+  return resolved / rows.length >= TEAM_COVERAGE_MIN;
+};
 const TEAM_TIP =
   "Team size is not in any Steam/3rd-party API — these are researched estimates (bucket by the team that shipped the studio's breakout). Click for the source.";
 const VELOCITY_TIP =
@@ -1089,13 +1100,14 @@ function ComparablesTable({
   rows: SteamComparable[];
   onProject?: (seed: RevenueSeed) => void;
 }) {
+  const showTeam = hasTeamCoverage(rows);
   return (
     <table className="dtable">
       <thead>
         <tr>
           <th>Game</th>
           <th>Tier</th>
-          <th title={TEAM_TIP}>Team (est.)</th>
+          {showTeam && <th title={TEAM_TIP}>Team (est.)</th>}
           <th>Genre</th>
           <th className="r">Released</th>
           <th className="r">Rating</th>
@@ -1122,23 +1134,25 @@ function ComparablesTable({
               <td>
                 <span className={"tier-chip " + tm.cls}>{tm.label}</span>
               </td>
-              <td>
-                {ts && meta ? (
-                  <a
-                    className={"est-chip " + meta.cls}
-                    href={ts.source}
-                    target="_blank"
-                    rel="noreferrer"
-                    title={`${ts.headcount} · ${ts.confidence} confidence · estimated`}
-                  >
-                    {meta.label} · est.
-                  </a>
-                ) : (
-                  <span className="est-chip est-unknown" title="Team size not researched yet">
-                    —
-                  </span>
-                )}
-              </td>
+              {showTeam && (
+                <td>
+                  {ts && meta ? (
+                    <a
+                      className={"est-chip " + meta.cls}
+                      href={ts.source}
+                      target="_blank"
+                      rel="noreferrer"
+                      title={`${ts.headcount} · ${ts.confidence} confidence · estimated`}
+                    >
+                      {meta.label} · est.
+                    </a>
+                  ) : (
+                    <span className="est-chip est-unknown" title="Team size not researched yet">
+                      —
+                    </span>
+                  )}
+                </td>
+              )}
               <td>{c.genre}</td>
               <td className="r">
                 {c.releaseDate ? c.releaseDate.slice(0, 4) : "—"}
