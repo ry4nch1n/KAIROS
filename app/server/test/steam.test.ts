@@ -506,6 +506,39 @@ describe("D10c getSteamTagEconomics (sub-genre lens, #90)", () => {
     expect(Array.isArray(ov.tagEconomics)).toBe(true);
     expect(ov.tagEconomics.find((r) => r.genre === "Deckbuilding")!.games).toBe(3);
   });
+
+  // #114 — a sub-genre must carry the same momentum signals a store genre does, so "is this
+  // market growing or saturating?" is answerable at tag grain.
+  it("carries supply-trend + demand-trajectory momentum fields", async () => {
+    const db = await freshMemoryDb();
+    await seedTagged(db);
+    const deck = (await q.getSteamTagEconomics(db, { minSupply: 3 })).find(
+      (r) => r.genre === "Deckbuilding",
+    )!;
+    // Supply is the load-bearing signal — derives from release_date, present immediately. All
+    // three seeded titles release on the anchor date → three recent entrants, none prior.
+    expect(deck.supplyTrend).toBe("rising");
+    expect(deck.supplyRising).toBe(true);
+    // Demand trajectory is thin by construction: a single crawl = one snapshot = one series
+    // point, which reads "new" (honest), not a confident trend fabricated from too little data.
+    expect(deck.demandTrajectory).toBe("new");
+  });
+
+  it("demand trajectory deepens to a trend once snapshot history accrues", async () => {
+    const db = await freshMemoryDb();
+    // Same three-title Deckbuilding market, but crawled twice at different dates with rising
+    // review counts — two captures is still only a plateau read, never an over-confident "rising".
+    const base = (id: string, votes: number) =>
+      steamGame({ sourceGameId: id, genre: "Strategy", tags: ["Deckbuilding"], votes });
+    const day1 = [base("V1", 500), base("V2", 400), base("V3", 300)];
+    const day2 = [base("V1", 900), base("V2", 800), base("V3", 700)];
+    await loadGames(db, "steam", STEAM_BASE_URL, day1, "2026-06-01T00:00:00.000Z");
+    await loadGames(db, "steam", STEAM_BASE_URL, day2, "2026-06-15T00:00:00.000Z");
+    const deck = (await q.getSteamTagEconomics(db, { minSupply: 3 })).find(
+      (r) => r.genre === "Deckbuilding",
+    )!;
+    expect(deck.demandTrajectory).toBe("plateau"); // 2 points → plateau, not a fabricated "rising"
+  });
 });
 
 describe("D10d getSteamTagLookup — named sub-genre lookup (#113)", () => {
@@ -549,6 +582,10 @@ describe("D10d getSteamTagLookup — named sub-genre lookup (#113)", () => {
     // Curation filtering kept — a lookup is not a back door around the floors.
     const curated = await q.getSteamTagLookup(db, "popular"); // 3 games, but a curation label
     expect([...curated.rows, ...curated.thin]).toEqual([]);
+    // #114 — a looked-up sub-genre carries the same momentum fields as a ranked one, so trends
+    // work for a SPECIFIC named market (the whole point of the #113→#114 pair), not only top-30.
+    expect(found.rows[0].supplyTrend).toBe("rising");
+    expect(found.rows[0].demandTrajectory).toBe("new");
   });
 
   it("takes comma-separated tags, and refuses a query too short to name a market", async () => {

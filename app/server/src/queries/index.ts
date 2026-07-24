@@ -1282,11 +1282,20 @@ export async function getSteamTagEconomics(
      ORDER BY rev_cents DESC`,
     params.length ? params : undefined,
   );
+  // Momentum signals at tag grain (#114) — the same two the store-genre quadrant exposes, so a
+  // sub-genre row reads identically to a store-genre row. Both are single set-based queries
+  // scoped by the SAME cohort + name filters as the rows above, so the lookup path stays cheap
+  // (only the matched tags are computed) and the ranked path computes over the indie cohort.
+  const [supply, demand] = await Promise.all([
+    tagSupplyTrend(db, tierFilter, matchFilter, params),
+    tagDemandTrajectory(db, tierFilter, matchFilter, params),
+  ]);
   return rows
     .filter((r) => !isCurationTag(r.tag))
     .slice(0, opts?.limit ?? TAG_ECON_LIMIT)
     .map((r) => {
       const medRev = Math.round(num(r.med_rev_cents) / 100);
+      const sup = supply.get(r.tag);
       return {
         genre: r.tag, // same row shape as the store-genre table, keyed on the tag
         games: num(r.games),
@@ -1298,9 +1307,98 @@ export async function getSteamTagEconomics(
         medianRevenuePerGame: medRev,
         meanRevenuePerGame: num(r.games) ? Math.round(num(r.rev_cents) / 100 / num(r.games)) : 0,
         conversion: conversionFor(r.tag),
+        // Supply is the load-bearing signal — it derives from release_date, present on every
+        // crawled Steam title, so it reads immediately. Demand trajectory depends on snapshot
+        // history accumulating; it stays "new" (honest, not a fake trend) until the series
+        // deepens — the identical treatment the store-genre lens uses for thin history.
+        supplyTrend: sup?.trend ?? "quiet",
+        supplyRising: sup?.trend === "rising",
+        demandTrajectory: demand.get(r.tag) ?? "new",
         ...econBandFields(medRev, r.med_rev_bl_cents),
       };
     });
+}
+
+// Per-tag new-entrant counts over the trailing window vs. the prior window (#114) — the same
+// crowding signal `genreSupplyTrend` computes for store genres, re-keyed on SteamSpy tags via
+// the game_tags join. One set-based query, window-bucketed by date arithmetic anchored to the
+// data's newest release_date (clock-independent), NOT per-tag round-trips. Scoped by the caller's
+// cohort (tierFilter) + name (matchFilter) so it stays aligned with the rows it annotates.
+async function tagSupplyTrend(
+  db: Querier,
+  tierFilter: string,
+  matchFilter: string,
+  params: string[],
+  windowDays = 30,
+): Promise<Map<string, SupplyInfo>> {
+  const p = params.length + 1; // window param sits after the match params ($1…$n)
+  const w = `($${p}::int::text || ' days')::interval`;
+  const w2 = `(($${p}::int * 2)::text || ' days')::interval`;
+  const rows = await db.query(
+    `WITH anchor AS (
+        SELECT max(g2.release_date) AS mx FROM games g2
+        JOIN sources s2 ON s2.id = g2.source_id
+        WHERE g2.is_live AND s2.name = 'steam')
+     SELECT ${canonSql("t.name")} AS tag,
+            count(*) FILTER (WHERE g.release_date > (SELECT mx FROM anchor) - ${w})::int AS recent,
+            count(*) FILTER (WHERE g.release_date <= (SELECT mx FROM anchor) - ${w}
+                              AND g.release_date >  (SELECT mx FROM anchor) - ${w2})::int AS prior
+     FROM v_latest l
+     JOIN games g ON g.id = l.game_id
+     JOIN sources src ON src.id = g.source_id
+     JOIN game_tags gt ON gt.game_id = g.id
+     JOIN tags t ON t.id = gt.tag_id
+     WHERE g.is_live AND src.name = 'steam' AND g.release_date IS NOT NULL ${tierFilter} ${matchFilter}
+     GROUP BY ${canonSql("t.name")}`,
+    [...params, windowDays],
+  );
+  const m = new Map<string, SupplyInfo>();
+  for (const r of rows) {
+    const recent = num(r.recent),
+      prior = num(r.prior);
+    m.set(r.tag, { recent, prior, trend: classifySupply(recent, prior) });
+  }
+  return m;
+}
+
+// Per-tag demand trajectory (#114) — median REVIEWS across snapshot capture windows, reusing
+// `classifyTrajectory` exactly as the genre lens does. Mirrors `genreVotesByDate` but keyed on
+// tag (game_snapshots carries no tag, so it joins game_tags). Returns "new" for any tag whose
+// series is too short to read (<2 captures) — the same honest insufficient-data state the genre
+// lens surfaces, never a confident line drawn through two points.
+async function tagDemandTrajectory(
+  db: Querier,
+  tierFilter: string,
+  matchFilter: string,
+  params: string[],
+): Promise<Map<string, Trajectory>> {
+  const rows = await db.query(
+    `SELECT ${canonSql("t.name")} AS tag, s.captured_at AS d,
+            percentile_cont(0.5) WITHIN GROUP (ORDER BY s.votes) AS med
+     FROM game_snapshots s
+     JOIN games g ON g.id = s.game_id
+     JOIN sources src ON src.id = g.source_id
+     JOIN v_latest l ON l.game_id = g.id
+     JOIN game_tags gt ON gt.game_id = g.id
+     JOIN tags t ON t.id = gt.tag_id
+     WHERE g.is_live AND src.name = 'steam' AND s.votes IS NOT NULL ${tierFilter} ${matchFilter}
+     GROUP BY ${canonSql("t.name")}, s.captured_at`,
+    params.length ? params : undefined,
+  );
+  const times = [...new Set(rows.map((r) => new Date(r.d).getTime()))].sort((a, b) => a - b);
+  const idx = new Map(times.map((t, i) => [t, i]));
+  const daySpan = times.length > 1 ? (times[times.length - 1] - times[0]) / 86400000 : 0;
+  const byTag: Record<string, number[]> = {};
+  for (const r of rows) {
+    const tag = r.tag as string;
+    if (!byTag[tag]) byTag[tag] = new Array(times.length).fill(0);
+    byTag[tag][idx.get(new Date(r.d).getTime())!] = num(r.med);
+  }
+  const m = new Map<string, Trajectory>();
+  for (const tag of Object.keys(byTag)) {
+    m.set(tag, classifyTrajectory(byTag[tag], daySpan).trajectory);
+  }
+  return m;
 }
 
 // Named sub-genre lookup (#113). The ranked lens can only ever show the 30 biggest tags by
