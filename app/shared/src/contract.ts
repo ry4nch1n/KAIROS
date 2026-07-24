@@ -41,7 +41,13 @@ export const CONTRACT = {
   //      signed z-score contributions (demand / quality / supply) that already sum to the
   //      composite `score`, surfaced so the ranking stops being a black box (#87). No formula
   //      change: the components ARE the score's existing intermediates. Additive; read defensively.
-  version: 12,
+  // v13: taxonomy grew to hold two standing steering flags it couldn't express (#88). Added the
+  //      `fairytale` world to taxonomy.settings, and a new `moods` axis (melancholy, whimsical,
+  //      cozy, …) so TONE becomes a matchable dimension separate from the setting/world axis —
+  //      "fairy-tale" is a world, "melancholy" is a mood, and collapsing both into settings was
+  //      the gap. Taxonomy-only; founderFit scoring wiring is a deliberate follow-up. See
+  //      taxonomy.version below (bumped to 3). Additive; read defensively.
+  version: 13,
   pitch: {
     // v2: added visual-card fields — setting, artStyle, codeName, headerUrl, shotUrl.
     // v3: rating rework — scoreFields d1Fit/steamCeiling/buildCost → browserFit/steamFit/buildEase.
@@ -116,9 +122,17 @@ export const CONTRACT = {
     // at a genre × setting intersection a genre-only view is blind to. Derived server-side by
     // mapping setting-bearing tags into these buckets; the curated per-tag mapping + a full
     // genre × setting matrix are the residual design work (this is the tag-facet first slice).
-    version: 2,
+    // v3: two additions for the standing steering flags the enum couldn't express (#88).
+    // Added `fairytale` to `settings` (a WORLD — fairy-tale / storybook). Added `moods` — a
+    // lightweight TONE axis, orthogonal to the world axis, so a mood like melancholy becomes
+    // matchable on its own (a setting says WHERE, a mood says how it FEELS). Note: `cozy` here
+    // is a mood and is a DIFFERENT axis from the `cozy-craft` loop family (a mechanic tag) — the
+    // collision is intentional, they live on separate axes. Taxonomy-only; scoring wiring is a
+    // deliberate follow-up.
+    version: 3,
     settings: [
       "fantasy",
+      "fairytale",
       "sci-fi",
       "space",
       "cyberpunk",
@@ -130,6 +144,9 @@ export const CONTRACT = {
       "western",
       "military",
     ],
+    // Tone/mood axis — orthogonal to `settings` (the world). Kept lightweight; generic tone
+    // words, not personal data. A matchable dimension the setting/world list can't express.
+    moods: ["melancholy", "whimsical", "cozy", "tense", "triumphant", "mysterious"],
   },
 } as const;
 

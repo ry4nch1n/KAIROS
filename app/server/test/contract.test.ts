@@ -106,6 +106,25 @@ describe("C2c setting/theme taxonomy (#25)", () => {
   });
 });
 
+describe("C2c2 taxonomy v3 — fairytale setting + mood/tone axis (#88)", () => {
+  it("bumped both versions and added the fairytale world + a non-empty moods axis", () => {
+    expect(CONTRACT.taxonomy.version).toBeGreaterThanOrEqual(3);
+    expect(CONTRACT.version).toBeGreaterThanOrEqual(13);
+    // the fairy-tale WORLD now has a home on the settings axis
+    expect(CONTRACT.taxonomy.settings).toContain("fairytale");
+    // a lightweight TONE axis, separate from the world axis
+    expect(CONTRACT.taxonomy.moods.length).toBeGreaterThan(0);
+    expect(CONTRACT.taxonomy.moods).toContain("melancholy");
+    expect(CONTRACT.taxonomy.moods).toContain("whimsical");
+    expect(CONTRACT.taxonomy.moods).toContain("cozy");
+  });
+  it("keeps settings and moods as distinct axes (mood ⊄ settings)", () => {
+    // `cozy` is a mood here, NOT a setting — the axes must not be conflated
+    expect(CONTRACT.taxonomy.settings as readonly string[]).not.toContain("cozy");
+    expect(CONTRACT.taxonomy.moods as readonly string[]).not.toContain("fairytale");
+  });
+});
+
 describe("C2d pitch v6 — `validated` status", () => {
   it("bumped both versions and added `validated` to the status vocabulary", () => {
     expect(CONTRACT.pitch.version).toBeGreaterThanOrEqual(6);
