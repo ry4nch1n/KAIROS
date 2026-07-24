@@ -7,6 +7,27 @@ async function one(db: Querier, sql: string, params: unknown[]) {
   return (await db.query(sql, params))[0];
 }
 
+/**
+ * Monotonic run counter for a source, read from the existing `crawls` table (#99).
+ *
+ * Feeds `rotatingWindow` so each run sweeps a different slice of a portal's sitemap. Uses
+ * only rows that already exist — no schema change — and is deliberately forgiving: a fresh
+ * DB (no `crawls` yet) or a read failure simply yields rotation 0, i.e. today's behaviour.
+ */
+export async function crawlRotation(db: Querier, sourceName: string): Promise<number> {
+  try {
+    const row = await one(
+      db,
+      `SELECT count(*)::int AS n FROM crawls c JOIN sources s ON s.id = c.source_id WHERE s.name = $1`,
+      [sourceName],
+    );
+    return Number(row?.n ?? 0) || 0;
+  } catch (e) {
+    console.warn(`  crawl rotation lookup failed for ${sourceName}: ${String(e)}`);
+    return 0;
+  }
+}
+
 export async function loadGames(
   db: Querier,
   sourceName: string,

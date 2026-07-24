@@ -1,10 +1,23 @@
 // Poki adapter. Data lives in `window.INITIAL_STATE` (RTK Query cache) ->
 // state.api.queries["getGame(...)"].data. Rating is already 0-5. Poki exposes a
 // developer name (CrazyGames doesn't); engine signal is weak (file.render_type).
-import { type RawGame, type SourceAdapter, politeFetch } from "./base.ts";
+import {
+  type ListOptions,
+  type RawGame,
+  type SourceAdapter,
+  fetchDiscoverySeed,
+  linkExtractor,
+  mergeDiscovery,
+  politeFetch,
+  rotatingWindow,
+} from "./base.ts";
 
 const BASE = "https://poki.com";
 const IMG = "https://img.poki-cdn.com/cdn-cgi/image/width=1200,f=auto/";
+
+// Recency seed: the portal's own "new games" listing, on a host we already crawl.
+const NEW_URL = `${BASE}/en/new`;
+const newGameLinks = linkExtractor(BASE, "/en/g/");
 
 // Extract the balanced {...} object assigned to window.INITIAL_STATE.
 // Brace-counts while skipping braces that appear inside string literals — the
@@ -44,10 +57,12 @@ export const poki: SourceAdapter = {
   name: "poki",
   baseUrl: BASE,
 
-  async listGameUrls(limit = 50): Promise<string[]> {
+  // Same selection change as CrazyGames (#99) — see crawler/base.ts for the shared helpers.
+  async listGameUrls(limit = 50, opts: ListOptions = {}): Promise<string[]> {
     const xml = await politeFetch(`${BASE}/en/sitemaps/games.xml`);
-    const urls = [...xml.matchAll(/<loc>([^<]*\/en\/g\/[^<]+)<\/loc>/g)].map((m) => m[1]);
-    return urls.slice(0, limit);
+    const all = [...xml.matchAll(/<loc>([^<]*\/en\/g\/[^<]+)<\/loc>/g)].map((m) => m[1]);
+    const seed = await fetchDiscoverySeed("poki", NEW_URL, newGameLinks);
+    return mergeDiscovery(seed, rotatingWindow(all, limit, opts.rotation ?? 0), limit);
   },
 
   parseGame(html: string, url: string): RawGame {
