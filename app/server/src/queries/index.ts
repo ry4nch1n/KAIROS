@@ -27,6 +27,7 @@ import type {
   ScaleTierRow,
   SteamGenreEconomics,
   SteamTagEconomics,
+  SteamTagLookup,
   SteamCohort,
   SteamComparable,
   SteamOverview,
@@ -1221,14 +1222,46 @@ export async function getSteamGenreEconomics(
 // SteamSpy bucket midpoint whose lowest bucket collapses to 10,000 and flattens the axis.
 const TAG_ECON_MIN_SUPPLY = 3; // below this a "market" is noise, not a market
 const TAG_ECON_LIMIT = 30;
+// Lookup guardrails (#113). The ranked list is a top-30 BY TOTAL revenue, so generic
+// high-volume tags (Action, Singleplayer, 2D) own it and a niche-but-real market is
+// structurally unreachable. `parseTagQuery` turns free user text into bounded, safe LIKE
+// terms: length-capped, term-capped, wildcard-stripped (so `%` can't widen the match), and
+// >= 2 chars so a one-letter query can't sweep the whole tag table.
+const TAG_QUERY_MAX_LEN = 60;
+const TAG_QUERY_MAX_TERMS = 5;
+const TAG_QUERY_MIN_TERM = 2;
+export function parseTagQuery(raw: unknown): string[] {
+  if (raw == null) return [];
+  const terms = String(raw)
+    .slice(0, TAG_QUERY_MAX_LEN)
+    .split(",")
+    .map((t) =>
+      t
+        .replace(/[%_\\]/g, "") // LIKE metacharacters are not user syntax here
+        .trim()
+        .replace(/\s+/g, " ")
+        .toLowerCase(),
+    )
+    .filter((t) => t.length >= TAG_QUERY_MIN_TERM);
+  return [...new Set(terms)].slice(0, TAG_QUERY_MAX_TERMS);
+}
+
 export async function getSteamTagEconomics(
   db: Querier,
-  opts?: { cohort?: SteamCohort; minSupply?: number; limit?: number },
+  opts?: { cohort?: SteamCohort; minSupply?: number; limit?: number; match?: string[] },
 ): Promise<SteamTagEconomics[]> {
   const cohort = opts?.cohort ?? "indie";
   const minSupply = opts?.minSupply ?? TAG_ECON_MIN_SUPPLY;
   const tierFilter =
     cohort === "indie" ? "AND (l.scale_tier IS NULL OR l.scale_tier <> 'aaa')" : "";
+  // Named-tag path: match the canonical tag name case-insensitively, as a substring, so a
+  // user typing "deckbuild" reaches "Deckbuilding". Values are PARAMETERS ($1…$n) — never
+  // interpolated — and the placeholder count comes from code, not from the input.
+  const match = opts?.match ?? [];
+  const params = match.map((t) => `%${t}%`);
+  const matchFilter = match.length
+    ? `AND (${match.map((_, i) => `lower(${canonSql("t.name")}) LIKE $${i + 1}`).join(" OR ")})`
+    : "";
   const rows = await db.query(
     `SELECT ${canonSql("t.name")} AS tag, count(*)::int AS games,
             percentile_cont(0.5) WITHIN GROUP (ORDER BY l.price_cents)::float AS med_price,
@@ -1244,9 +1277,10 @@ export async function getSteamTagEconomics(
      JOIN sources src ON src.id = g.source_id
      JOIN game_tags gt ON gt.game_id = g.id
      JOIN tags t ON t.id = gt.tag_id
-     WHERE g.is_live AND src.name = 'steam' ${tierFilter}
+     WHERE g.is_live AND src.name = 'steam' ${tierFilter} ${matchFilter}
      GROUP BY ${canonSql("t.name")} HAVING count(*) >= ${Number(minSupply) | 0}
      ORDER BY rev_cents DESC`,
+    params.length ? params : undefined,
   );
   return rows
     .filter((r) => !isCurationTag(r.tag))
@@ -1267,6 +1301,42 @@ export async function getSteamTagEconomics(
         ...econBandFields(medRev, r.med_rev_bl_cents),
       };
     });
+}
+
+// Named sub-genre lookup (#113). The ranked lens can only ever show the 30 biggest tags by
+// TOTAL revenue, which generic labels win by construction — so a specific market was not
+// merely hard to find, it was unreachable. This path asks for tags BY NAME and bypasses the
+// rank cut, while keeping the two quality floors identical to the ranked path: curation tags
+// are still dropped, and the supply floor still applies. A match that exists but is too thin
+// is reported as `thin` rather than silently missing — "2 titles, below the floor" is a real
+// answer about a market; an empty list looks like a bug.
+export async function getSteamTagLookup(
+  db: Querier,
+  rawQuery: unknown,
+  opts?: { cohort?: SteamCohort; minSupply?: number; limit?: number },
+): Promise<SteamTagLookup> {
+  const terms = parseTagQuery(rawQuery);
+  const minSupply = opts?.minSupply ?? TAG_ECON_MIN_SUPPLY;
+  const limit = opts?.limit ?? TAG_ECON_LIMIT;
+  const base = { query: terms.join(", "), minSupply, rows: [], thin: [] } as SteamTagLookup;
+  if (!terms.length) return base;
+  // One pass with the floor lowered to 1, then partition in JS — the floor still governs what
+  // counts as a market, it just also lets us NAME the too-thin matches. Bounded by the term
+  // cap and the fetch limit, so a broad query can't return the whole tag table.
+  const all = await getSteamTagEconomics(db, {
+    cohort: opts?.cohort,
+    minSupply: 1,
+    limit: limit * 2,
+    match: terms,
+  });
+  return {
+    ...base,
+    rows: all.filter((r) => r.games >= minSupply).slice(0, limit),
+    thin: all
+      .filter((r) => r.games < minSupply)
+      .slice(0, limit)
+      .map((r) => ({ tag: r.genre, games: r.games })),
+  };
 }
 
 // Indie-tier rated games — the realistic "comparables" peer set, focused on RECENT releases:

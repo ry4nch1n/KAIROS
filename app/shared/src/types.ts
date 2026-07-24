@@ -54,6 +54,18 @@ export interface SteamTagEconomics extends SteamGenreEconomics {
   medianVotes: number; // median review count per game — the demand estimator for this tag
 }
 
+// Named sub-genre lookup (#113). The ranked lens is a top-30 by TOTAL revenue, which generic
+// tags win by construction, so a specific market had to become addressable by name. `rows`
+// are matches that clear the supply floor; `thin` names matches that exist but are too small
+// to read as a market — an explicit "2 titles, below the floor" beats an empty result, which
+// is indistinguishable from a broken query.
+export interface SteamTagLookup {
+  query: string; // normalized terms actually searched (echoed back, may be "")
+  minSupply: number; // the supply floor applied — same one the ranked lens uses
+  rows: SteamTagEconomics[];
+  thin: { tag: string; games: number }[];
+}
+
 // Curated, researched team-size estimate (see server data/teamSize.ts). solo=1–2, small=3–10,
 // mid=11–30, large=30+. Always rendered as "est." with its source — never as fact.
 export type TeamSizeBucket = "solo" | "small" | "mid" | "large";
