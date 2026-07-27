@@ -97,6 +97,9 @@ export default async (req: Request) => {
     if (path === "/genres") return json(await q.getGenres(db, platform), 200, "daily");
     if (path === "/developers") return json(await q.getDevelopers(db, platform), 200, "daily");
     if (path === "/new-releases") return json(await q.getNewReleases(db, platform), 200, "daily");
+    // Loop-family market rollup (#108) — crawl-derived like the rest, keyed on ?platform=.
+    if (path === "/loop-family-market")
+      return json(await q.getLoopFamilyMarket(db, platform), 200, "daily");
     if (req.method === "POST" && path === "/brief/steering") {
       if (!isAuthorized(req.headers)) return json(unauthorizedBody(), UNAUTHORIZED_STATUS);
       const body = await req.json();

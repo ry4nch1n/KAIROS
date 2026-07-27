@@ -72,6 +72,14 @@ export function createApp(db: Querier) {
   app.get("/api/new-releases", async (req, res) =>
     res.json(await q.getNewReleases(db, parsePlatform(req.query.platform))),
   );
+  // Market rolled up by loop family instead of raw genre (#108).
+  app.get("/api/loop-family-market", async (req, res) => {
+    try {
+      res.json(await q.getLoopFamilyMarket(db, parsePlatform(req.query.platform)));
+    } catch (e) {
+      res.status(500).json({ error: String(e) });
+    }
+  });
 
   app.get("/api/brief/editions", async (_req, res) => {
     res.json(await q.getBriefEditions(db));

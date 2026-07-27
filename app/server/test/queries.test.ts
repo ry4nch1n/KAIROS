@@ -2,6 +2,10 @@ import { describe, it, expect, beforeAll } from "vitest";
 import { freshMemoryDb, applySchema, type Querier } from "../src/db/db.ts";
 import { seed } from "../src/db/seed.ts";
 import * as q from "../src/queries/index.ts";
+import { loopFamilyFor, MAPPED_FAMILIES } from "../src/data/loopFamilyMap.ts";
+// Contract runtime values by RELATIVE path — never the bare "shared" specifier (which breaks the
+// Netlify bundle); matches how queries/index.ts imports CONTRACT.
+import { CONTRACT } from "../../shared/src/contract.ts";
 
 let db: Querier;
 
@@ -612,5 +616,53 @@ describe("library_items.pitch_slug backfill", () => {
     const card = (await q.libraryItems(fresh)).find((c) => c.title === "Off-Host Toy");
     expect(card?.pitchSlug).toBeNull();
     expect(card?.status).toBe("prototyping");
+  });
+});
+
+describe("#108 loop-family map", () => {
+  const families = new Set<string>(CONTRACT.pitch.loopFamilies as readonly string[]);
+
+  it("every mapped family is a live contract loopFamilies value (rename ⇒ CI fails here)", () => {
+    expect(MAPPED_FAMILIES.length).toBeGreaterThan(0);
+    for (const f of MAPPED_FAMILIES) expect(families.has(f)).toBe(true);
+  });
+
+  it("pins genre default + genre × tag override + unmapped fallthrough", () => {
+    expect(loopFamilyFor("Idle")).toBe("idle-tycoon"); // genre default, case-insensitive
+    expect(loopFamilyFor("Cooking")).toBe("cozy-craft");
+    expect(loopFamilyFor("Strategy")).toBeNull(); // no genre claim; the tag routes it
+    expect(loopFamilyFor("Strategy", "tower-defense")).toBe("wave-defense-prep");
+    expect(loopFamilyFor("Shooter")).toBeNull(); // unmapped never force-fits
+    expect(loopFamilyFor("nope", "nonsense")).toBeNull();
+  });
+});
+
+describe("#108 getLoopFamilyMarket", () => {
+  it("rolls the browser market up by family, distinct-counted, with uncovered families", async () => {
+    const m = await q.getLoopFamilyMarket(db, "all");
+    expect(m.platform).toBe("all");
+    const families = new Set<string>(CONTRACT.pitch.loopFamilies as readonly string[]);
+    const covered = new Set(m.rows.map((r) => r.family));
+
+    // Every emitted + uncovered family is real; covered ∪ uncovered partitions the universe.
+    for (const r of m.rows) expect(families.has(r.family)).toBe(true);
+    for (const f of m.uncovered) expect(families.has(f) && !covered.has(f)).toBe(true);
+    expect(covered.size + m.uncovered.length).toBe(families.size);
+    expect(covered.size).toBeGreaterThan(0);
+
+    for (const r of m.rows) {
+      expect(r.supplyN).toBeGreaterThan(0);
+      expect(r.genres.length).toBeGreaterThan(0);
+      expect(["rising", "steady", "cooling", "quiet"]).toContain(r.supplyTrend);
+    }
+
+    // Genre-grain counting: a family's supply equals the games in its genres — no tag double-count.
+    const genres = await q.getGenres(db, "all");
+    const bySupply = new Map(genres.map((g) => [g.genre, g.games]));
+    for (const r of m.rows)
+      expect(r.supplyN).toBe(r.genres.reduce((a, g) => a + (bySupply.get(g) ?? 0), 0));
+
+    // A Steam-only family is uncovered on the browser platform.
+    expect(m.uncovered).toContain("contained-systemic");
   });
 });
