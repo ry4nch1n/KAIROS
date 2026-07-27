@@ -1728,24 +1728,54 @@ export async function getSteamDevelopers(db: Querier): Promise<SteamDeveloperRow
 }
 
 // Recent Steam releases (indie cohort) by release date.
+// Steam shows no OVERALL review score until a title clears ~10 reviews (#109). Below this a
+// fresh launch has rating=NULL and reads as "quiet" — the modal indie outcome (most launches
+// land here), not a survivor. Surfacing votes + reviews/day + this flag is how New Releases
+// stops hiding the failure baseline the survivor-only Comparables view deletes.
+export const STEAM_SCORE_THRESHOLD_VOTES = 10;
+export function newReleaseTraction(
+  votes: number | null,
+  releaseDate: string | null,
+  now: number = Date.now(),
+): {
+  daysSinceRelease: number | null;
+  reviewsPerDay: number | null;
+  belowScoreThreshold: boolean;
+} {
+  const v = votes ?? 0;
+  const belowScoreThreshold = v < STEAM_SCORE_THRESHOLD_VOTES;
+  if (!releaseDate) return { daysSinceRelease: null, reviewsPerDay: null, belowScoreThreshold };
+  const days = Math.floor((now - new Date(`${releaseDate}T00:00:00Z`).getTime()) / 86400000);
+  const daysSinceRelease = days >= 0 ? days : null;
+  const reviewsPerDay =
+    daysSinceRelease == null ? null : +(v / Math.max(daysSinceRelease, 1)).toFixed(2);
+  return { daysSinceRelease, reviewsPerDay, belowScoreThreshold };
+}
+
 export async function getSteamNewReleases(db: Querier): Promise<SteamNewRelease[]> {
   const rows = await db.query(
-    `SELECT g.title, ${canonSql("l.genre")} AS genre, l.scale_tier AS tier, l.rating, l.owners_est AS owners, l.price_cents AS price, g.release_date
+    `SELECT g.title, ${canonSql("l.genre")} AS genre, l.scale_tier AS tier, l.rating, l.votes, l.owners_est AS owners, l.price_cents AS price, g.release_date
      FROM v_latest l JOIN games g ON g.id = l.game_id JOIN sources src ON src.id = g.source_id
      WHERE g.is_live AND src.name = 'steam' AND g.release_date IS NOT NULL
        AND (l.scale_tier IS NULL OR l.scale_tier <> 'aaa')
      ORDER BY g.release_date DESC LIMIT 40`,
   );
-  return rows.map((r) => ({
-    title: r.title,
-    genre: r.genre ?? "—",
-    tier: r.tier ?? "—",
-    rating: r.rating == null ? null : +Number(r.rating).toFixed(2),
-    owners: r.owners == null ? null : num(r.owners),
-    priceCents: r.price == null ? null : num(r.price),
-    releaseDate:
-      r.release_date == null ? null : new Date(r.release_date).toISOString().slice(0, 10),
-  }));
+  return rows.map((r) => {
+    const releaseDate =
+      r.release_date == null ? null : new Date(r.release_date).toISOString().slice(0, 10);
+    const votes = r.votes == null ? null : num(r.votes);
+    return {
+      title: r.title,
+      genre: r.genre ?? "—",
+      tier: r.tier ?? "—",
+      rating: r.rating == null ? null : +Number(r.rating).toFixed(2),
+      votes,
+      owners: r.owners == null ? null : num(r.owners),
+      priceCents: r.price == null ? null : num(r.price),
+      releaseDate,
+      ...newReleaseTraction(votes, releaseDate),
+    };
+  });
 }
 
 async function steamGapExamples(db: Querier): Promise<Map<string, string[]>> {
@@ -1860,6 +1890,19 @@ export async function getSteamOverview(db: Querier): Promise<SteamOverview> {
      WHERE g.is_live AND src.name = 'steam'`,
     )
   )[0];
+  // Quiet-launch baseline (#109): of tracked non-AAA titles released in the last 90 days, the
+  // share still below the review-score threshold (votes < 10 → Steam shows no score yet). This
+  // is the failure floor — the denominator the survivor-only Comparables view makes invisible.
+  const quiet = (
+    await db.query(
+      `SELECT count(*) FILTER (WHERE coalesce(l.votes, 0) < ${STEAM_SCORE_THRESHOLD_VOTES})::int AS quiet,
+              count(*)::int AS n
+       FROM v_latest l JOIN games g ON g.id = l.game_id JOIN sources src ON src.id = g.source_id
+       WHERE g.is_live AND src.name = 'steam' AND (l.scale_tier IS NULL OR l.scale_tier <> 'aaa')
+         AND g.release_date IS NOT NULL
+         AND g.release_date >= CURRENT_DATE - INTERVAL '90 days'`,
+    )
+  )[0];
   return {
     kpi: {
       games,
@@ -1867,6 +1910,8 @@ export async function getSteamOverview(db: Querier): Promise<SteamOverview> {
       aaa,
       ratedPct: num(agg.n) ? Math.round((num(agg.r) / num(agg.n)) * 100) : 0,
       indieMedianPriceCents: Math.round(num(agg.indie_med_price)),
+      quietLaunchPct: num(quiet.n) ? Math.round((num(quiet.quiet) / num(quiet.n)) * 100) : 0,
+      quietLaunchSample: num(quiet.n),
     },
     read: composeSteamRead({ opportunity, indie }),
     tiers,

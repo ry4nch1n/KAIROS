@@ -1089,6 +1089,8 @@ function DevTable({ rows }: { rows: SteamDeveloperRow[] }) {
   );
 }
 
+const REVIEWS_TIP =
+  "Review count = launch traction the rating hides. Steam shows no overall score until ~10 reviews, so a “quiet” row (below that) is a launch that landed at near-zero visibility — the modal indie outcome, not an error (#109).";
 function NewReleasesTable({ rows }: { rows: SteamNewRelease[] }) {
   return (
     <table className="dtable">
@@ -1098,6 +1100,12 @@ function NewReleasesTable({ rows }: { rows: SteamNewRelease[] }) {
           <th className="r">Released</th>
           <th>Genre</th>
           <th className="r">Rating</th>
+          <th className="r" title={REVIEWS_TIP}>
+            Reviews
+          </th>
+          <th className="r" title="Reviews per day since launch — traction rate, not a total.">
+            Rev/day
+          </th>
           <th className="r" title={OWNERS_TIP}>
             Owners
           </th>
@@ -1111,6 +1119,15 @@ function NewReleasesTable({ rows }: { rows: SteamNewRelease[] }) {
             <td className="r">{r.releaseDate ?? "—"}</td>
             <td>{r.genre}</td>
             <td className="r">{rate(r.rating)}</td>
+            <td className="r">
+              {r.votes == null ? "—" : fmt(r.votes)}
+              {r.belowScoreThreshold ? (
+                <span className="traj traj-decaying" style={{ marginLeft: 6 }} title={REVIEWS_TIP}>
+                  quiet
+                </span>
+              ) : null}
+            </td>
+            <td className="r">{r.reviewsPerDay == null ? "—" : r.reviewsPerDay.toFixed(2)}</td>
             <td className="r">{fmtOwners(r.owners)}</td>
             <td className="r">{money(r.priceCents)}</td>
           </tr>
@@ -1329,6 +1346,18 @@ function SteamKpis({ data }: { data: SteamOverview }) {
         <div className="label">{I.money}Indie median price</div>
         <div className="val num">{money(data.kpi.indieMedianPriceCents)}</div>
         <span className="delta flat num">what indies charge</span>
+      </div>
+      <div className="kpi">
+        <div
+          className="label"
+          title="Share of tracked non-AAA titles released in the last 90 days still under ~10 reviews (Steam shows no overall score yet). The failure floor — what a competent-but-quiet launch actually looks like (#109)."
+        >
+          {I.releases}Quiet launches
+        </div>
+        <div className="val num">{data.kpi.quietLaunchPct}%</div>
+        <span className="delta flat num">
+          below score threshold · {fmt(data.kpi.quietLaunchSample)} in 90d
+        </span>
       </div>
     </div>
   );
