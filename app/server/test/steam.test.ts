@@ -1308,3 +1308,102 @@ describe("D17 getSteamGenreQuadrant demand axis (issue #89)", () => {
     expect(pts.every((p) => p.appetite !== 10_000)).toBe(true);
   });
 });
+
+describe("D-fail newReleaseTraction (failure baseline, #109)", () => {
+  const DAY = 86400000;
+  it("flags below-score launches and computes reviews/day from launch age", () => {
+    const now = new Date("2026-07-27T00:00:00Z").getTime();
+    // 3 reviews, launched 10 days ago → quiet (no Steam score yet), 0.30 reviews/day.
+    const quiet = q.newReleaseTraction(3, "2026-07-17", now);
+    expect(quiet.belowScoreThreshold).toBe(true);
+    expect(quiet.daysSinceRelease).toBe(10);
+    expect(quiet.reviewsPerDay).toBe(0.3);
+    // 500 reviews, 10 days → over the threshold, a real velocity.
+    const loud = q.newReleaseTraction(500, "2026-07-17", now);
+    expect(loud.belowScoreThreshold).toBe(false);
+    expect(loud.reviewsPerDay).toBe(50);
+  });
+  it("threshold is votes<10 and null votes count as quiet", () => {
+    const now = Date.now();
+    expect(q.newReleaseTraction(9, "2020-01-01", now).belowScoreThreshold).toBe(true);
+    expect(q.newReleaseTraction(10, "2020-01-01", now).belowScoreThreshold).toBe(false);
+    const noDate = q.newReleaseTraction(null, null, now);
+    expect(noDate.belowScoreThreshold).toBe(true);
+    expect(noDate.reviewsPerDay).toBeNull();
+    expect(noDate.daysSinceRelease).toBeNull();
+  });
+  it("clamps day-0 launches so reviews/day never divides by zero", () => {
+    const now = new Date("2026-07-27T00:00:00Z").getTime();
+    const t = q.newReleaseTraction(4, "2026-07-27", now);
+    expect(t.daysSinceRelease).toBe(0);
+    expect(t.reviewsPerDay).toBe(4); // divided by max(days,1), not 0
+  });
+});
+
+describe("D-fail Steam failure baseline in payloads (#109)", () => {
+  const recentIso = (daysAgo: number) =>
+    new Date(Date.now() - daysAgo * 86400000).toISOString().slice(0, 10);
+  async function seedRecent(db: Querier) {
+    await loadGames(
+      db,
+      "steam",
+      STEAM_BASE_URL,
+      [
+        // recent non-AAA quiet launch (3 reviews, no score)
+        steamGame({
+          sourceGameId: "N1",
+          scaleTier: "small_indie",
+          votes: 3,
+          rating: null,
+          releaseDate: recentIso(10),
+        }),
+        // recent non-AAA that cleared the threshold
+        steamGame({
+          sourceGameId: "N2",
+          scaleTier: "small_indie",
+          votes: 400,
+          rating: 4.3,
+          releaseDate: recentIso(20),
+        }),
+        // recent AAA — excluded from the non-AAA quiet-launch baseline
+        steamGame({
+          sourceGameId: "N3",
+          scaleTier: "aaa",
+          votes: 2,
+          rating: null,
+          releaseDate: recentIso(5),
+        }),
+        // old non-AAA quiet — outside the 90-day window, excluded
+        steamGame({
+          sourceGameId: "N4",
+          scaleTier: "small_indie",
+          votes: 1,
+          rating: null,
+          releaseDate: "2020-01-01",
+        }),
+      ],
+      "2026-06-30T00:00:00.000Z",
+    );
+  }
+  it("getSteamNewReleases carries votes + traction + belowScoreThreshold", async () => {
+    const db = await freshMemoryDb();
+    await seedRecent(db);
+    const rows = await q.getSteamNewReleases(db);
+    const n1 = rows.find((r) => r.title === "Game N1")!;
+    expect(n1.votes).toBe(3);
+    expect(n1.belowScoreThreshold).toBe(true);
+    expect(n1.daysSinceRelease).toBeGreaterThanOrEqual(9);
+    expect(n1.reviewsPerDay).not.toBeNull();
+    const n2 = rows.find((r) => r.title === "Game N2")!;
+    expect(n2.votes).toBe(400);
+    expect(n2.belowScoreThreshold).toBe(false);
+  });
+  it("getSteamOverview quiet-launch KPI = share of last-90d non-AAA still below the score threshold", async () => {
+    const db = await freshMemoryDb();
+    await seedRecent(db);
+    const ov = await q.getSteamOverview(db);
+    // Denominator: only N1 + N2 (recent, non-AAA). N1 is quiet → 1 of 2 = 50%.
+    expect(ov.kpi.quietLaunchSample).toBe(2);
+    expect(ov.kpi.quietLaunchPct).toBe(50);
+  });
+});

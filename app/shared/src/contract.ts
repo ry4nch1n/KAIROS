@@ -47,7 +47,13 @@ export const CONTRACT = {
   //      "fairy-tale" is a world, "melancholy" is a mood, and collapsing both into settings was
   //      the gap. Taxonomy-only; founderFit scoring wiring is a deliberate follow-up. See
   //      taxonomy.version below (bumped to 3). Additive; read defensively.
-  version: 13,
+  // v14: SteamOverview stops showing only survivors (#109). `SteamNewRelease` gained traction —
+  //      `votes`, `daysSinceRelease`, `reviewsPerDay`, and `belowScoreThreshold` (votes < 10 →
+  //      Steam shows no overall score yet, a quiet launch). The SteamOverview KPI block gained a
+  //      quiet-launch baseline — `quietLaunchPct` / `quietLaunchSample` (share of last-90-day
+  //      non-AAA releases still below that threshold), the failure floor the Comparables owners
+  //      floor deliberately hides. Comparables stay survivors on purpose. Additive; read defensively.
+  version: 14,
   pitch: {
     // v2: added visual-card fields — setting, artStyle, codeName, headerUrl, shotUrl.
     // v3: rating rework — scoreFields d1Fit/steamCeiling/buildCost → browserFit/steamFit/buildEase.

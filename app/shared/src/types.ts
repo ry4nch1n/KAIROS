@@ -151,9 +151,13 @@ export interface SteamNewRelease {
   genre: string;
   tier: string;
   rating: number | null;
+  votes: number | null; // review count — the traction the rating hides (#109)
   owners: number | null;
   priceCents: number | null;
   releaseDate: string | null;
+  daysSinceRelease: number | null; // age in days; null if release_date is missing/future
+  reviewsPerDay: number | null; // votes / days-since-launch — launch traction rate
+  belowScoreThreshold: boolean; // votes < 10 → Steam shows no overall score yet (a quiet launch)
 }
 
 export interface SteamOverview {
@@ -163,6 +167,8 @@ export interface SteamOverview {
     aaa: number;
     ratedPct: number;
     indieMedianPriceCents: number;
+    quietLaunchPct: number; // share of last-90-day non-AAA releases still below the score threshold (#109)
+    quietLaunchSample: number; // denominator — # of last-90-day non-AAA releases the share is over
   };
   // "This week's read" — see Overview.read; Steam flavor (opportunity, per-game economics, top-heavy warning).
   read: string[];
