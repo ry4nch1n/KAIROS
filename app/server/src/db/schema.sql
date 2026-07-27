@@ -26,6 +26,11 @@ CREATE TABLE IF NOT EXISTS games (
   is_live        BOOLEAN DEFAULT TRUE,
   UNIQUE (source_id, source_game_id)
 );
+-- Platform-filtered reads (getOverview, Steam analytics, comparables) all hit the
+-- `source_id = ? AND is_live` predicate; index it explicitly. Additive + idempotent.
+-- (No companion tags(name) index: tags.name is already TEXT UNIQUE NOT NULL above,
+-- so its unique constraint provides the index the tag-glossary/frequency lookups need.)
+CREATE INDEX IF NOT EXISTS idx_games_source_live ON games (source_id, is_live);
 
 CREATE TABLE IF NOT EXISTS crawls (
   id          BIGSERIAL PRIMARY KEY,
