@@ -53,7 +53,14 @@ export const CONTRACT = {
   //      quiet-launch baseline — `quietLaunchPct` / `quietLaunchSample` (share of last-90-day
   //      non-AAA releases still below that threshold), the failure floor the Comparables owners
   //      floor deliberately hides. Comparables stay survivors on purpose. Additive; read defensively.
-  version: 14,
+  // v15: AI-content disclosure capture (#110). Steam's "AI Generated Content Disclosure" block is
+  //      store-page-only (absent from the 3 JSON endpoints), so it's fetched separately and gated
+  //      to the recent non-AAA cohort (released < 120d, tier != aaa) for crawl-budget politeness.
+  //      `SteamComparable` gained `aiDisclosure` (tri-state: true=discloses / false=checked & absent /
+  //      null=not checked or fetch failed). The SteamOverview KPI block gained `aiDisclosurePct` /
+  //      `aiDisclosureSample` — of checked last-90-day non-AAA releases, the share disclosing AI
+  //      content, over the count actually checked. Additive; read defensively.
+  version: 15,
   pitch: {
     // v2: added visual-card fields — setting, artStyle, codeName, headerUrl, shotUrl.
     // v3: rating rework — scoreFields d1Fit/steamCeiling/buildCost → browserFit/steamFit/buildEase.

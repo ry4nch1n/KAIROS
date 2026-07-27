@@ -161,6 +161,82 @@ export function parseReleaseDate(s: string | null | undefined): string | null {
   return null;
 }
 
+// ── AI-content disclosure (#110) ───────────────────────────────────────────
+// The "AI Generated Content Disclosure" block is server-rendered raw HTML on the STORE PAGE
+// (not in any of the 3 JSON endpoints the crawler joins), so it's parsed + fetched separately.
+// Two verified landmines: (1) the block's <div id="game_area_content_descriptors"> id is REUSED
+// on the sibling "Mature Content Description" block, so we anchor on the <h2> heading text and
+// stop at the block's closing </div> — never select by id, or the mature-content note bleeds in;
+// (2) the note is the <i>…</i> inside the block, whitespace-collapsed.
+
+/**
+ * Parse the AI-disclosure block out of a Steam store page's HTML. Pure + unit-tested.
+ * Absent heading → { aiDisclosure:false, aiDisclosureNote:null }. Present but no <i> note →
+ * { true, null }. Anchors on the heading text and stops at the enclosing block's </div> so the
+ * duplicate-id "Mature Content Description" sibling can never contaminate the note.
+ */
+export function parseAiDisclosure(html: string): {
+  aiDisclosure: boolean;
+  aiDisclosureNote: string | null;
+} {
+  const h = html ?? "";
+  const heading = /<h2>\s*AI Generated Content Disclosure\s*<\/h2>/i.exec(h);
+  if (!heading) return { aiDisclosure: false, aiDisclosureNote: null };
+  // Scope to the block: from the heading up to the FIRST closing </div>, so a following block
+  // (e.g. the mature-content sibling that shares the id) is out of range.
+  const after = h.slice(heading.index + heading[0].length);
+  const block = after.slice(0, after.search(/<\/div>/i));
+  const note = /<i>([\s\S]*?)<\/i>/i.exec(block);
+  if (!note) return { aiDisclosure: true, aiDisclosureNote: null };
+  const text = note[1]
+    .replace(/<[^>]*>/g, "") // strip any nested tags
+    .replace(/\s+/g, " ")
+    .trim();
+  return { aiDisclosure: true, aiDisclosureNote: text || null };
+}
+
+// Gate: bound the 4th (store-page) fetch to the RECENT NON-AAA cohort — the cohort where the
+// crawl budget can afford an extra request and where AI-disclosure demand-contamination actually
+// matters. AAA titles are excluded from every indie benchmark anyway; old titles predate the
+// disclosure requirement, so checking them is pure fetch waste.
+export const STEAM_AI_DISCLOSURE_MAX_AGE_DAYS = Number(process.env.STEAM_AI_MAX_AGE_DAYS) || 120;
+
+/** True iff `g` is a non-AAA title released within `maxAgeDays` of `nowMs` (not future by >1 day). */
+export function wantsAiDisclosure(
+  g: RawGame,
+  nowMs: number,
+  maxAgeDays = STEAM_AI_DISCLOSURE_MAX_AGE_DAYS,
+): boolean {
+  if (g.scaleTier === "aaa") return false;
+  if (!g.releaseDate) return false;
+  const rel = new Date(`${g.releaseDate}T00:00:00Z`).getTime();
+  if (Number.isNaN(rel)) return false;
+  const ageDays = (nowMs - rel) / 86400000;
+  if (ageDays > maxAgeDays) return false; // too old
+  if (ageDays < -1) return false; // future-dated by more than a day
+  return true;
+}
+
+/**
+ * Fetch + parse the AI-disclosure block for one appid from its store page. Returns null on ANY
+ * failure (age-gate, network, timeout) — "unknown", never a crawl-breaking throw. The birthtime
+ * cookie clears Steam's age-gate so mature titles return the real store HTML (200).
+ */
+export async function fetchAiDisclosure(
+  appid: number,
+): Promise<{ aiDisclosure: boolean; aiDisclosureNote: string | null } | null> {
+  try {
+    const html = await politeFetch(`${STORE}/app/${appid}/?cc=us&l=english`, 8000, {
+      Cookie:
+        "birthtime=0; wants_mature_content=1; lastagecheckage=1-January-1970; Steam_Language=english",
+    });
+    return parseAiDisclosure(html);
+  } catch (e) {
+    console.warn(`  ai-disclosure ${appid} failed:`, String(e));
+    return null;
+  }
+}
+
 /** Top-N SteamSpy tags by weight (the rich genre-like signal). */
 function topTags(tags: Record<string, number> | undefined, n = 10): string[] {
   if (!tags || typeof tags !== "object") return [];
@@ -353,7 +429,16 @@ export async function fetchSteamGame(appid: number): Promise<RawGame | null> {
   } catch (e) {
     console.warn(`  steamspy ${appid} failed:`, String(e));
   }
-  return parseSteamGame(appid, entry.data, reviews?.query_summary ?? {}, steamspy);
+  const g = parseSteamGame(appid, entry.data, reviews?.query_summary ?? {}, steamspy);
+  // 4th fetch (#110), gated to the recent non-AAA cohort so the crawl budget isn't blown on the
+  // whole seed. Tri-state: true=discloses, false=checked & absent, null=fetch failed. Outside the
+  // cohort we leave both null — "not checked" is honestly distinct from "checked & absent".
+  if (wantsAiDisclosure(g, Date.now())) {
+    const d = await fetchAiDisclosure(appid);
+    g.aiDisclosure = d ? d.aiDisclosure : null;
+    g.aiDisclosureNote = d?.aiDisclosureNote ?? null;
+  }
+  return g;
 }
 
 export const STEAM_BASE_URL = STORE;

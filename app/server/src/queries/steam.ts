@@ -491,7 +491,7 @@ async function reviewVelocities(db: Querier, ids: number[]): Promise<Map<number,
 export async function getSteamComparables(db: Querier, limit = 12): Promise<SteamComparable[]> {
   const rows = await db.query(
     `SELECT g.id AS id, g.title, l.scale_tier AS tier, ${canonSql("l.genre")} AS genre, l.rating, l.votes,
-            l.owners_est AS owners, l.price_cents AS price, g.developer, g.release_date
+            l.owners_est AS owners, l.price_cents AS price, g.developer, g.release_date, l.ai_disclosure
      FROM v_latest l JOIN games g ON g.id = l.game_id JOIN sources src ON src.id = g.source_id
      WHERE g.is_live AND src.name = 'steam' AND l.rating IS NOT NULL
        AND (l.scale_tier IS NULL OR l.scale_tier <> 'aaa')
@@ -518,6 +518,9 @@ export async function getSteamComparables(db: Querier, limit = 12): Promise<Stea
       developer: r.developer ?? null,
       releaseDate:
         r.release_date == null ? null : new Date(r.release_date).toISOString().slice(0, 10),
+      // Tri-state (#110): true = discloses AI content, false = checked & doesn't, null = not
+      // checked (outside the gated recent-non-AAA fetch cohort) or the store-page fetch failed.
+      aiDisclosure: r.ai_disclosure == null ? null : Boolean(r.ai_disclosure),
       teamSize: ts
         ? {
             bucket: ts.bucket,
@@ -781,6 +784,20 @@ export async function getSteamOverview(db: Querier): Promise<SteamOverview> {
          AND g.release_date >= CURRENT_DATE - INTERVAL '90 days'`,
     )
   )[0];
+  // AI-disclosure share (#110): of tracked non-AAA titles released in the last 90 days for which
+  // we HAVE a non-null ai_disclosure reading (the gated store-page fetch cohort), the share that
+  // disclose AI-generated content. `sample` is the denominator — the count we actually checked, so
+  // an unknown-heavy crawl reads as a small sample rather than a fake 0%.
+  const ai = (
+    await db.query(
+      `SELECT count(*) FILTER (WHERE l.ai_disclosure)::int AS disclosed,
+              count(*) FILTER (WHERE l.ai_disclosure IS NOT NULL)::int AS n
+       FROM v_latest l JOIN games g ON g.id = l.game_id JOIN sources src ON src.id = g.source_id
+       WHERE g.is_live AND src.name = 'steam' AND (l.scale_tier IS NULL OR l.scale_tier <> 'aaa')
+         AND g.release_date IS NOT NULL
+         AND g.release_date >= CURRENT_DATE - INTERVAL '90 days'`,
+    )
+  )[0];
   return {
     kpi: {
       games,
@@ -790,6 +807,8 @@ export async function getSteamOverview(db: Querier): Promise<SteamOverview> {
       indieMedianPriceCents: Math.round(num(agg.indie_med_price)),
       quietLaunchPct: num(quiet.n) ? Math.round((num(quiet.quiet) / num(quiet.n)) * 100) : 0,
       quietLaunchSample: num(quiet.n),
+      aiDisclosurePct: num(ai.n) ? Math.round((num(ai.disclosed) / num(ai.n)) * 100) : null,
+      aiDisclosureSample: num(ai.n),
     },
     read: composeSteamRead({ opportunity, indie }),
     tiers,

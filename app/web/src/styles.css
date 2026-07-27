@@ -2515,6 +2515,17 @@ a.conv-chip:hover {
   border-radius: 5px;
   padding: 0 5px;
 }
+.ai-chip {
+  font-family: "Fira Code";
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  color: var(--ink-2, #4b5563);
+  background: var(--surface-2, #eef1f5);
+  border: 1px solid var(--border, #d5dae1);
+  border-radius: 5px;
+  padding: 0 5px;
+}
 .prov-receipt {
   margin-left: 2px;
   font-family: "Fira Code";

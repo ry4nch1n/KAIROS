@@ -101,8 +101,9 @@ export async function loadGames(
 
       const before = await db.query(
         `INSERT INTO game_snapshots(game_id, crawl_id, captured_at, rating, votes, plays, featured, genre,
-           price_cents, discount_pct, owners_est, ccu, median_playtime_min, metacritic, scale_tier)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+           price_cents, discount_pct, owners_est, ccu, median_playtime_min, metacritic, scale_tier,
+           ai_disclosure, ai_disclosure_note)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
          ON CONFLICT (game_id, crawl_id) DO NOTHING RETURNING id`,
         [
           gameId,
@@ -120,6 +121,8 @@ export async function loadGames(
           r.medianPlaytimeMin ?? null,
           r.metacritic ?? null,
           r.scaleTier ?? null,
+          r.aiDisclosure ?? null,
+          s(r.aiDisclosureNote),
         ],
       );
       if (before.length) inserted++;

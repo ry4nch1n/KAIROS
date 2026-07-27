@@ -69,6 +69,8 @@ erDiagram
     int median_playtime_min
     int metacritic
     text scale_tier
+    boolean ai_disclosure
+    text ai_disclosure_note
   }
   tags {
     serial id
@@ -194,6 +196,8 @@ erDiagram
 | `median_playtime_min` | `INT` |  |
 | `metacritic` | `INT` |  |
 | `scale_tier` | `TEXT` |  |
+| `ai_disclosure` | `BOOLEAN` |  |
+| `ai_disclosure_note` | `TEXT` |  |
 
 ### `tags`
 
