@@ -115,6 +115,37 @@ test.describe("mobile — layout fits at 375px", () => {
     await assertFits(page, panel("revenue"), "revenue/steam (unity)");
   });
 
+  // The outer rail becomes a fixed bottom tab bar on mobile (the four service tabs).
+  // A `100vh`-sized shell on iOS Safari / Android Chrome is the LARGE viewport (address
+  // bar hidden), so a `bottom:0` fixed bar can render below the visible fold — the tabs
+  // become unreachable. Playwright auto-scrolls before a click, which masks an off-screen
+  // bar, so a clickability check alone missed this. Measure the rail's box against the
+  // viewport on every service: its bottom must be within the viewport and its top ≥ 0.
+  for (const svc of PANELS) {
+    test(`${svc}: bottom tab bar stays within the viewport`, async ({ page }) => {
+      await page.goto("/");
+      await page.getByRole("button", { name: NAV[svc], exact: true }).click();
+      await expect(page.locator(panel(svc))).toBeVisible();
+      await settle(page);
+
+      const viewportH = page.viewportSize()?.height ?? 812;
+      const rail = page.locator(".rail");
+      await expect(rail).toBeVisible();
+      const box = await rail.boundingBox();
+      expect(box, `${svc}: .rail has no bounding box`).not.toBeNull();
+      // top within the viewport (not pushed above the fold)…
+      expect(box!.y, `${svc}: rail top is above the viewport (${box!.y}px)`).toBeGreaterThanOrEqual(
+        0,
+      );
+      // …and its bottom edge on-screen (allow 1px for sub-pixel rounding).
+      const bottom = box!.y + box!.height;
+      expect(
+        bottom,
+        `${svc}: rail bottom (${bottom}px) is below the ${viewportH}px viewport — the fixed tab bar is off-screen`,
+      ).toBeLessThanOrEqual(viewportH + 1);
+    });
+  }
+
   test("a wide Radar data table scrolls in-container, not the page", async ({ page }) => {
     await page.goto("/");
     // On mobile the sub-nav lives in a drawer — open it, jump to a table-heavy view.
