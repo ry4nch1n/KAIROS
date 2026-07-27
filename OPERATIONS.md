@@ -171,7 +171,7 @@ cd app && STEAM_VALIDATE_LIMIT=18 npx tsx server/scripts/validate-steam.ts
 
 - No API keys. Three free endpoints per app (appdetails + appreviews + SteamSpy), throttled ~1.5s/app.
 - **Seed is indie-aware** (`mergeSeeds` round-robins SteamSpy `tag=Indie` + `top100in2weeks` + storefront featured) so the sample isn't all-AAA.
-- **SteamSpy rate limits:** the `all` endpoint is 1 req/min — *not used*; only `top100in2weeks` + per-app `appdetails` (fine). Keep `CRAWL_LIMIT` modest to stay polite and inside the GitHub Actions free budget (private repo) — Steam adds ~10–15 min/day at ~150 apps.
+- **SteamSpy rate limits:** the `all` endpoint is 1 req/min — *not used*; only `top100in2weeks` + per-app `appdetails` (fine). Keep `CRAWL_LIMIT` modest to stay polite toward SteamSpy/Steam — the repo is **public**, so GitHub Actions minutes are free and unmetered (the real limiter is upstream rate limits, not the runner budget). Steam adds ~10–15 min/day at ~150 apps.
 - Schema migration is additive + idempotent: `npm run db:migrate` (or the seed/crawl applies schema locally) adds the new columns on existing Neon without data loss.
 
 ### Phase 2 — viewing Steam analytics in the app
