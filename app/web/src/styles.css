@@ -52,7 +52,7 @@ button {
 .shell {
   display: grid;
   grid-template-columns: 64px 1fr;
-  min-height: 100vh;
+  min-height: 100dvh;
 }
 .rail {
   background: linear-gradient(180deg, #101a2e, #0c1320);
@@ -63,7 +63,7 @@ button {
   gap: 6px;
   position: sticky;
   top: 0;
-  height: 100vh;
+  height: 100dvh;
 }
 .rail-logo {
   width: 40px;
@@ -165,7 +165,7 @@ button {
 .service {
   display: grid;
   grid-template-columns: 232px 1fr;
-  min-height: 100vh;
+  min-height: 100dvh;
 }
 .service[hidden] {
   display: none;
@@ -177,7 +177,7 @@ button {
   padding: 22px 14px;
   position: sticky;
   top: 0;
-  height: 100vh;
+  height: 100dvh;
   display: flex;
   flex-direction: column;
   gap: 6px;
