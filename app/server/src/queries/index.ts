@@ -43,6 +43,7 @@ import type {
 import { assertPitchInput, validateBriefPayload, CONTRACT } from "../../../shared/src/contract.ts";
 import { teamSizeFor } from "../data/teamSize.ts";
 import { conversionFor } from "../data/genreConversion.ts";
+import { loopFamilyFor } from "../data/loopFamilyMap.ts";
 
 const fmtDate = (d: any) => new Date(d).toISOString().slice(5, 10); // "MM-DD"
 
@@ -603,6 +604,100 @@ export async function getMarketGaps(db: Querier, platform: Platform): Promise<Ma
     }))
     .sort((a, b) => b.score - a.score)
     .slice(0, 6);
+}
+
+// Loop-family market read (#108). Re-keys the SAME crawl aggregation onto the plan's loop families
+// (CONTRACT.pitch.loopFamilies) via the curated map, so a family's supply, demand, supply trend,
+// and no-coverage set become answerable. The fold runs in JS (the DB doesn't hold the map). Each
+// GENRE goes to exactly ONE family (a game has one genre → no tag double-count): its genre-level
+// default, else its dominant genre × tag entry — so broad genres (Strategy, Shooter) get
+// disambiguated by tag while a clean default (Idle, Cooking) is never yanked off by a minority tag.
+// Payload types live here (not shared/types.ts) to fit the file cap; additive, read defensively —
+// no contract bump (this CONSUMES the enum, it doesn't change it).
+export interface LoopFamilyMarketRow {
+  family: string; // a CONTRACT.pitch.loopFamilies value
+  supplyN: number; // distinct games (genre grain — no tag double-count)
+  appetite: number; // supply-weighted median votes/reviews
+  supplyTrend: SupplyTrend;
+  genres: string[]; // mapped genres that fed this family
+}
+export interface LoopFamilyMarket {
+  platform: Platform;
+  subtitle: string;
+  rows: LoopFamilyMarketRow[]; // covered families, sorted by supply-weighted demand
+  uncovered: string[]; // loopFamilies values no mapped row hit
+}
+export async function getLoopFamilyMarket(
+  db: Querier,
+  platform: Platform,
+): Promise<LoopFamilyMarket> {
+  const [genreRows, pairRows, supply] = await Promise.all([
+    // Per-genre spine: distinct games (supply) + median votes (demand).
+    db.query(
+      `SELECT ${canonSql("l.genre")} AS genre, count(DISTINCT g.id)::int AS supply_n,
+              percentile_cont(0.5) WITHIN GROUP (ORDER BY l.votes)::float AS appetite
+       FROM v_latest l JOIN games g ON g.id = l.game_id JOIN sources src ON src.id = g.source_id
+       WHERE g.is_live AND l.genre IS NOT NULL ${pf(platform)}
+       GROUP BY ${canonSql("l.genre")}`,
+    ),
+    // Genre × tag distinct-game counts — only to pick each genre's family (dominant mapped tag).
+    db.query(
+      `SELECT ${canonSql("l.genre")} AS genre, ${canonSql("t.name")} AS tag,
+              count(DISTINCT g.id)::int AS pair_n
+       FROM v_latest l
+       JOIN games g ON g.id = l.game_id
+       JOIN sources src ON src.id = g.source_id
+       JOIN game_tags gt ON gt.game_id = g.id
+       JOIN tags t ON t.id = gt.tag_id
+       WHERE g.is_live AND l.genre IS NOT NULL ${pf(platform)}
+       GROUP BY ${canonSql("l.genre")}, ${canonSql("t.name")}`,
+    ),
+    genreSupplyTrend(db, platform),
+  ]);
+
+  // Genre-level default per genre (null = the map makes no genre-level claim).
+  const genreDefault = new Map<string, string | null>();
+  for (const r of genreRows) genreDefault.set(r.genre, loopFamilyFor(r.genre));
+  // For genres with NO default, the family of their dominant mapped tag; a genre WITH one keeps it.
+  const bestPair = new Map<string, { family: string; n: number }>();
+  for (const r of pairRows) {
+    if (genreDefault.get(r.genre)) continue;
+    const fam = loopFamilyFor(r.genre, r.tag);
+    if (!fam) continue;
+    const cur = bestPair.get(r.genre);
+    if (!cur || num(r.pair_n) > cur.n) bestPair.set(r.genre, { family: fam, n: num(r.pair_n) });
+  }
+  // acc.weighted = Σ appetite·supply → a supply-weighted family demand.
+  type Acc = { supplyN: number; weighted: number; recent: number; prior: number; genres: string[] };
+  const fams = new Map<string, Acc>();
+  for (const r of genreRows) {
+    const family = genreDefault.get(r.genre) ?? bestPair.get(r.genre)?.family ?? null;
+    if (!family) continue;
+    const sup = num(r.supply_n);
+    const acc = fams.get(family) ?? { supplyN: 0, weighted: 0, recent: 0, prior: 0, genres: [] };
+    acc.supplyN += sup;
+    acc.weighted += num(r.appetite) * sup;
+    const st = supply.get(r.genre);
+    acc.recent += st?.recent ?? 0;
+    acc.prior += st?.prior ?? 0;
+    acc.genres.push(r.genre);
+    fams.set(family, acc);
+  }
+
+  const rows = [...fams.entries()]
+    .map(([family, a]) => ({
+      family,
+      supplyN: a.supplyN,
+      appetite: a.supplyN ? Math.round(a.weighted / a.supplyN) : 0,
+      supplyTrend: classifySupply(a.recent, a.prior),
+      genres: a.genres.sort(),
+    }))
+    .sort((x, y) => y.appetite * y.supplyN - x.appetite * x.supplyN || y.supplyN - x.supplyN);
+
+  // Contract families no mapped row reached — the whitespace signal.
+  const covered = new Set(rows.map((r) => r.family));
+  const uncovered = CONTRACT.pitch.loopFamilies.filter((f) => !covered.has(f));
+  return { platform, subtitle: subtitleFor(platform), rows, uncovered };
 }
 
 export async function getGenres(db: Querier, platform: Platform): Promise<GenreRow[]> {

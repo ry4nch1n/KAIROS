@@ -428,6 +428,69 @@ function GapList({ gaps }: { gaps: Overview["gaps"] }) {
   );
 }
 
+// Loop-family market rollup (#108) — the crawled market re-keyed onto the plan's loop families,
+// beside Market Gaps. Local mirror of the server shape; `.dtable` scrolls in its own container.
+interface LoopFamilyMarketData {
+  rows: { family: string; supplyN: number; appetite: number; supplyTrend: SupplyTrend }[];
+  uncovered: string[];
+}
+function LoopFamilyMarketCard({ platform }: { platform: Platform }) {
+  const [data, setData] = useState<LoopFamilyMarketData | null>(null);
+  useEffect(() => {
+    let on = true;
+    setData(null);
+    fetch(`/api/loop-family-market?platform=${platform}`)
+      .then((r) => (r.ok ? (r.json() as Promise<LoopFamilyMarketData>) : null))
+      .then((d) => on && d && setData(d))
+      .catch(() => {});
+    return () => {
+      on = false;
+    };
+  }, [platform]);
+  if (!data) return <Skel h={200} />;
+  return (
+    <div className="card">
+      {head(I.gaps, "Market by loop family", "the crawled market spoken in the plan's families")}
+      {data.rows.length ? (
+        <table className="dtable">
+          <thead>
+            <tr>
+              <th>Loop family</th>
+              <th className="r">Supply</th>
+              <th className="r" title="Supply-weighted median votes/reviews">
+                Appetite
+              </th>
+              <th title={SUPPLY_TIP}>Supply trend</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.rows.map((r) => (
+              <tr key={r.family}>
+                <td className="gname">{r.family}</td>
+                <td className="r">{fmt(r.supplyN)}</td>
+                <td className="r">{fmt(r.appetite)}</td>
+                <td>
+                  <span className={"supply supply-" + r.supplyTrend}>
+                    {SUPPLY_LABEL[r.supplyTrend] || r.supplyTrend}
+                  </span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      ) : (
+        <p className="view-head">No mapped market coverage on this platform yet.</p>
+      )}
+      {data.uncovered.length > 0 && (
+        <p className="view-head" style={{ marginTop: 10 }}>
+          <b>No market coverage:</b> {data.uncovered.join(" · ")} — the whitespace the plan is
+          narrowing on (or a gap in the map).
+        </p>
+      )}
+    </div>
+  );
+}
+
 function GenresView({ rows }: { rows: GenreRow[] }) {
   const max = Math.max(1, ...rows.map((r) => r.games));
   return (
@@ -1718,10 +1781,13 @@ export function Radar({
               {view === "new-releases" && (extra ? <NewReleasesView rows={extra} /> : <Skel />)}
               {view === "market-gaps" &&
                 (ov ? (
-                  <div className="card">
-                    {head(I.gaps, "Market Gaps", "ranked by opportunity score")}
-                    <GapList gaps={ov.gaps} />
-                  </div>
+                  <>
+                    <div className="card">
+                      {head(I.gaps, "Market Gaps", "ranked by opportunity score")}
+                      <GapList gaps={ov.gaps} />
+                    </div>
+                    <LoopFamilyMarketCard platform={platform} />
+                  </>
                 ) : (
                   <Skel />
                 ))}
