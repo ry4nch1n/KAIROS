@@ -24,6 +24,12 @@ export interface RawGame {
   medianPlaytimeMin?: number | null;
   metacritic?: number | null;
   scaleTier?: string | null; // 'hobby' | 'small_indie' | 'est_indie' | 'aaa'
+  // AI-content disclosure (#110). Tri-state: true = the store page carries the AI Generated
+  // Content Disclosure block, false = checked and absent, null/undefined = not checked (out of
+  // the gated cohort) or the store-page fetch failed. Store-page-only — absent from the 3 JSON
+  // endpoints, so it's fetched separately and only for the recent non-AAA cohort.
+  aiDisclosure?: boolean | null;
+  aiDisclosureNote?: string | null; // the developer's <i>…</i> note, when present
 }
 
 /** Per-run selection inputs for {@link SourceAdapter.listGameUrls}. */
@@ -55,11 +61,18 @@ const UA = "KAIROS-GameRadar/0.1 (+market-intel; contact: solo-dev) Mozilla/5.0 
 // and blow the crawl's Actions-minute budget — it fails fast and the run proceeds.
 const DEFAULT_TIMEOUT_MS = 8000;
 
-export async function politeFetch(url: string, timeoutMs = DEFAULT_TIMEOUT_MS): Promise<string> {
+export async function politeFetch(
+  url: string,
+  timeoutMs = DEFAULT_TIMEOUT_MS,
+  extraHeaders?: Record<string, string>,
+): Promise<string> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
-    const res = await fetch(url, { headers: { "User-Agent": UA }, signal: ctrl.signal });
+    const res = await fetch(url, {
+      headers: { "User-Agent": UA, ...extraHeaders },
+      signal: ctrl.signal,
+    });
     if (!res.ok) throw new Error(`fetch ${url} -> ${res.status}`);
     return await res.text(); // awaited inside the try so a hung body read is bounded too
   } catch (e: any) {

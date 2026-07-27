@@ -99,6 +99,10 @@ export interface SteamComparable {
   // wishlist velocity (wishlist counts aren't acquirable). null when the snapshot history
   // can't support a rate (<2 points in the window), never a misleading 0.
   reviewVelocity: number | null;
+  // AI-content disclosure (#110). Tri-state: true = the store page carries the AI Generated
+  // Content Disclosure block, false = checked and absent, null = not checked (outside the gated
+  // recent-non-AAA fetch cohort) or the store-page fetch failed.
+  aiDisclosure: boolean | null;
 }
 
 // Signed contributions that make the composite opportunity `score` legible (#87). Each
@@ -169,6 +173,8 @@ export interface SteamOverview {
     indieMedianPriceCents: number;
     quietLaunchPct: number; // share of last-90-day non-AAA releases still below the score threshold (#109)
     quietLaunchSample: number; // denominator — # of last-90-day non-AAA releases the share is over
+    aiDisclosurePct: number | null; // #110: of checked last-90-day non-AAA releases, share disclosing AI content (null when none checked)
+    aiDisclosureSample: number; // denominator — # of last-90-day non-AAA releases we have a non-null reading for
   };
   // "This week's read" — see Overview.read; Steam flavor (opportunity, per-game economics, top-heavy warning).
   read: string[];

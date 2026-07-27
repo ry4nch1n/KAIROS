@@ -1170,6 +1170,9 @@ const TEAM_TIP =
 const VELOCITY_TIP =
   "Reviews gained per day over the trailing 30-day snapshot window — the public leading-indicator proxy for wishlist velocity (wishlist counts aren't acquirable). Total reviews/owners lag a launch by months; this doesn't. — = not enough snapshot history yet.";
 
+const AI_DISCLOSURE_TIP =
+  "Whether the store page carries Steam's AI Generated Content Disclosure. AI = discloses AI-generated content · — = checked, none disclosed · ? = not checked (only recent non-AAA titles are checked). #110";
+
 const PROJECT_TIP =
   "Load this game into the Revenue model as an anchor — its price prefills the calculator and its real outcome (owners × price) shows beside your projection.";
 
@@ -1191,6 +1194,9 @@ function ComparablesTable({
           <th>Genre</th>
           <th className="r">Released</th>
           <th className="r">Rating</th>
+          <th className="r" title={AI_DISCLOSURE_TIP}>
+            AI
+          </th>
           <th className="r">Reviews</th>
           <th className="r" title={VELOCITY_TIP}>
             Rev./day
@@ -1246,6 +1252,22 @@ function ComparablesTable({
                 )}
               </td>
               <td className="r">{rate(c.rating)}</td>
+              <td className="r">
+                {c.aiDisclosure === true ? (
+                  <span
+                    className="ai-chip"
+                    title="Store page carries an AI Generated Content Disclosure"
+                  >
+                    AI
+                  </span>
+                ) : c.aiDisclosure === false ? (
+                  <span style={{ color: "var(--ink-3, #6b7280)" }}>—</span>
+                ) : (
+                  <span style={{ color: "var(--ink-3, #6b7280)" }} title="Not checked">
+                    ?
+                  </span>
+                )}
+              </td>
               <td className="r">{c.votes == null ? "—" : fmt(c.votes)}</td>
               <td className="r">{c.reviewVelocity == null ? "—" : fmt(c.reviewVelocity)}</td>
               <td className="r">{fmtOwners(c.owners)}</td>
@@ -1357,6 +1379,20 @@ function SteamKpis({ data }: { data: SteamOverview }) {
         <div className="val num">{data.kpi.quietLaunchPct}%</div>
         <span className="delta flat num">
           below score threshold · {fmt(data.kpi.quietLaunchSample)} in 90d
+        </span>
+      </div>
+      <div className="kpi">
+        <div
+          className="label"
+          title="Share of checked non-AAA titles released in the last 90 days whose store page carries Steam's AI Generated Content Disclosure. Only recent non-AAA titles are checked, so this reads over the sample we actually fetched (#110)."
+        >
+          {I.gems}AI disclosed
+        </div>
+        <div className="val num">
+          {data.kpi.aiDisclosurePct == null ? "—" : `${data.kpi.aiDisclosurePct}%`}
+        </div>
+        <span className="delta flat num">
+          disclose AI content · {fmt(data.kpi.aiDisclosureSample)} checked in 90d
         </span>
       </div>
     </div>
