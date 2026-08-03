@@ -45,6 +45,29 @@ export const MAPPED_FAMILIES: readonly LoopFamily[] = [
   ...new Set<LoopFamily>([...Object.values(GENRE), ...TAG_FAMILIES]),
 ];
 
+// Free-text vocabulary: every genre key plus every genre × tag TAG key standing alone — a
+// deliberate widening for callers holding only LABELS (the News Brief's items, #12a). One
+// vocabulary, no second table; ambiguity still resolves to null.
+const words = (s: string | null | undefined) =>
+  normalizeKey(s)
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+const TEXT_KEYS: [string, LoopFamily][] = [
+  ...Object.entries(GENRE),
+  ...Object.values(GENRE_TAG).flatMap((m) => Object.entries(m)),
+].map(([k, f]) => [words(k), f as LoopFamily]);
+
+/** Loop family implied by an item's LABEL fields (its own classification, not prose commentary).
+ *  Whole-word match, plural tolerated. Exactly one family → that family; no match, or two
+ *  families disagreeing → null: no claim, never force-fit. */
+export function loopFamilyFromLabels(labels: (string | null | undefined)[]): LoopFamily | null {
+  const hay = ` ${labels.map(words).filter(Boolean).join(" ")} `;
+  const hits = new Set<LoopFamily>();
+  for (const [k, f] of TEXT_KEYS)
+    if (hay.includes(` ${k} `) || hay.includes(` ${k}s `)) hits.add(f);
+  return hits.size === 1 ? [...hits][0] : null;
+}
+
 /** Loop family for a genre (and optional tag), or null when nothing is curated. A genre × tag
  *  entry wins over the genre-level fallback; an unmapped key is null, never guessed. */
 export function loopFamilyFor(

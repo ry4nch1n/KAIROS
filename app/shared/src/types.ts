@@ -387,8 +387,27 @@ export interface BriefPayload {
   reference_shelf?: string;
   founder_take?: string[];
 }
+// Demand tracker (#12a) — the edition's item-shaped signals (new_notable + browser) rolled up by
+// LOOP FAMILY. Derived server-side; the stored payload is unchanged, so no contract bump (this
+// CONSUMES the loopFamilies taxonomy, same as #108).
+export interface BriefFamilyRow {
+  family: string | null; // a CONTRACT.pitch.loopFamilies value; null = unclassified
+  signals: number; // items tagged to this family in THIS edition
+  titles: string[]; // up to 3 item names — which signals rolled up here
+  // Only when items carried parseable same-unit counts ("12k wishlists") — ratings/% never do:
+  magnitude?: { value: number; unit: string; sampled: number }; // sampled = how many contributed
+  direction?: "up" | "down" | "flat"; // vs the previous edition — omitted when there is none
+}
+export interface BriefDemandTracker {
+  rows: BriefFamilyRow[]; // classified first (signals desc), unclassified last
+  tagged: number; // items the map could place, of `total` scanned
+  total: number;
+  comparedTo?: string; // edition date `direction` compares against
+}
+
 export interface BriefEdition extends BriefEditionMeta {
   payload: BriefPayload;
+  tracker?: BriefDemandTracker;
 }
 
 // Current "Standing Flags" (interests) steering the brief — curated on Notion,
