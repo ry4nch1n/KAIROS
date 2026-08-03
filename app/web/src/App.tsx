@@ -1,7 +1,8 @@
-import { lazy, Suspense, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { Rail, type Service } from "./components/Rail.tsx";
 import { Radar } from "./services/Radar.tsx";
 import { addActivated, INITIAL_ACTIVATED } from "./lib/activated.ts";
+import { parseServiceHash, writeServiceHash } from "./lib/hashRoute.ts";
 import type { RevenueSeed } from "./lib/steamRevenue.ts";
 
 // Radar is the default tab: eager-imported so it paints immediately, no Suspense.
@@ -25,18 +26,36 @@ function PanelSkeleton() {
 }
 
 export default function App() {
-  const [svc, setSvc] = useState<Service>("radar");
+  // The fronted panel is addressable: `#brief`, `#library`, … so a view is
+  // bookmarkable and survives a refresh. No router — just `location.hash` read on
+  // mount and written on switch. An empty/unknown fragment resolves to Radar, so a
+  // plain visit to `/` is unchanged. See lib/hashRoute.ts.
+  const [svc, setSvc] = useState<Service>(() => parseServiceHash(globalThis.location?.hash));
   // Cross-panel hand-off: "project from this comparable" in Radar seeds the Revenue
   // calculator and fronts it — the one link on the gap → comparable → projection path.
   const [revSeed, setRevSeed] = useState<RevenueSeed | null>(null);
   // Panels that have ever been fronted. A panel mounts lazily on first activation and
   // stays mounted (hidden) thereafter, so in-panel state survives tab switches and the
-  // skeleton only ever shows on the first open. See lib/activated.ts.
-  const [activated, setActivated] = useState<Set<Service>>(() => new Set(INITIAL_ACTIVATED));
+  // skeleton only ever shows on the first open. See lib/activated.ts. A deep-linked
+  // panel counts as activated from first paint, so it mounts without a rail click.
+  const [activated, setActivated] = useState<Set<Service>>(() =>
+    addActivated(new Set(INITIAL_ACTIVATED), svc),
+  );
   const select = (next: Service) => {
     setActivated((prev) => addActivated(prev, next));
     setSvc(next);
+    writeServiceHash(next);
   };
+  // Browser back/forward (and a hand-edited fragment) move between panels.
+  useEffect(() => {
+    const onHashChange = () => {
+      const next = parseServiceHash(globalThis.location?.hash);
+      setActivated((prev) => addActivated(prev, next));
+      setSvc(next);
+    };
+    globalThis.addEventListener("hashchange", onHashChange);
+    return () => globalThis.removeEventListener("hashchange", onHashChange);
+  }, []);
   return (
     <div className="shell">
       <Rail active={svc} onSelect={select} />
