@@ -1,10 +1,7 @@
 import { useEffect, useState } from "react";
 import { useDrawer, NavToggle, NavScrim, DrawerClose } from "../components/MobileNav.tsx";
 import {
-  GENRE_PRESETS,
-  dailyRevenue,
-  monthlyRevenue,
-  payoutMultiplier,
+  DAYS_PER_MONTH,
   targetBandUsd,
   verdict,
   monthsOfTarget,
@@ -23,7 +20,45 @@ import {
   type RevenueSeed,
 } from "../lib/steamRevenue.ts";
 
+import {
+  BROWSER_AD_DEFAULTS,
+  HINTS,
+  browserAdProjection,
+  type BrowserAdInputs,
+} from "../lib/browserAds.ts";
+
 const usd = (n: number) => "$" + Math.round(n).toLocaleString("en-US");
+const eur = (n: number) => "€" + Math.round(n).toLocaleString("en-US");
+
+/** One editable assumption. `src` names the published basis, so a modelled input is never
+ *  misread as observed data. */
+type Field = { label: string; v: number; set: (n: number) => void; step: number; src?: string };
+function Num(f: Field) {
+  return (
+    <label className="rev-field">
+      <span>{f.label}</span>
+      <input
+        type="number"
+        min={0}
+        step={f.step}
+        value={f.v}
+        onChange={(e) => f.set(Math.max(0, +e.target.value))}
+      />
+      {f.src && <small className="kpi-note">assumed · {f.src}</small>}
+    </label>
+  );
+}
+
+// In the order they compose: audience → engagement → portal terms.
+const AD_FIELDS: [keyof BrowserAdInputs, string, number][] = [
+  ["newPlayersPerDay", "New players/day from the portal", 100],
+  ["d1Retention", "Next-day retention", 0.01],
+  ["sessionsPerUser", "Sessions per player per day", 0.1],
+  ["adsPerSession", "Ads shown per session", 0.1],
+  ["ecpmUsd", "Gross eCPM (USD per 1,000 ads)", 0.25],
+  ["revShare", "Developer rev-share", 0.05],
+  ["eurPerUsd", "EUR per USD", 0.01],
+];
 const sgd = (n: number) => "SGD " + Math.round(n).toLocaleString("en-US");
 const pct = (n: number) => Math.round(n * 100) + "%";
 const fmtOwners = (n: number | null) =>
@@ -119,15 +154,14 @@ function BrowserPanel({
   setTarget: (t: TargetBand | null) => void;
 }) {
   const drawer = useDrawer();
-  const [genre, setGenre] = useState(GENRE_PRESETS[1].id); // Automation/Logistics
-  const [dau, setDau] = useState(900);
-  const [arpdau, setArpdau] = useState(GENRE_PRESETS[1].arpdau);
-  const [directShare, setDirectShare] = useState(1);
+  const [ads, setAds] = useState<BrowserAdInputs>(BROWSER_AD_DEFAULTS);
   const [rate, setRate] = useState(DEFAULT_SGD_PER_USD);
+  const set = (k: keyof BrowserAdInputs) => (n: number) => setAds((a) => ({ ...a, [k]: n }));
 
-  const inputs = { dau, arpdau, directShare };
-  const daily = dailyRevenue(inputs);
-  const monthly = monthlyRevenue(inputs);
+  const p = browserAdProjection(ads);
+  const monthly = p.netUsdPerDay * DAYS_PER_MONTH;
+  // The premium route at its own defaults, so the two routes can be weighed side by side.
+  const steamNet = steamProjection({ ...STEAM_DEFAULTS, engineId: "godot" }).netUsd;
   const band = target ? targetBandUsd(rate, target) : null;
   const VERDICT_COPY: Record<string, { label: string; cls: string }> = {
     "no-target": { label: "No target set", cls: "none" },
@@ -136,7 +170,6 @@ function BrowserPanel({
     above: { label: "Clears the target", cls: "above" },
   };
   const v = VERDICT_COPY[verdict(monthly, rate, target)];
-  const mult = payoutMultiplier(directShare);
   const monthlySgd = monthly * rate;
   const pctToGoal = band ? Math.min(999, Math.round((monthly / band.low) * 100)) : null;
 
@@ -149,12 +182,6 @@ function BrowserPanel({
       return;
     }
     setTarget({ low: target.low, high: Math.max(target.low, v) });
-  };
-
-  const pickGenre = (id: string) => {
-    setGenre(id);
-    const g = GENRE_PRESETS.find((p) => p.id === id);
-    if (g) setArpdau(g.arpdau);
   };
 
   return (
@@ -170,22 +197,10 @@ function BrowserPanel({
           <b>Revenue Model</b>
           <span>browser income dial</span>
         </div>
-        <div className="nav-label">Genre ARPDAU preset</div>
-        {GENRE_PRESETS.map((g) => (
-          <a
-            className={"nav-item" + (g.id === genre ? " active" : "")}
-            key={g.id}
-            onClick={() => pickGenre(g.id)}
-          >
-            {g.label}
-            <span className="badge" style={{ background: "var(--primary)" }}>
-              ${g.arpdau.toFixed(2)}
-            </span>
-          </a>
-        ))}
         <div className="side-foot">
-          Poki payout · direct 100% / platform-sourced 50-50 · target set on the widget, stored in
-          this browser only
+          Every field here is an <b>assumption</b>, not a measurement, and shows the published range
+          it came from. Poki publishes its split (100% on traffic you bring, 50-50 on traffic it
+          sends); CrazyGames publishes no rate, so 40–60% is a developer report, not a rate card.
         </div>
       </aside>
       <NavScrim open={drawer.open} onClose={drawer.closeDrawer} />
@@ -205,7 +220,8 @@ function BrowserPanel({
               <div className="label">Monthly revenue (USD)</div>
               <div className="kpi-big">{usd(monthly)}</div>
               <div className="kpi-sub">
-                ≈ SGD {Math.round(monthlySgd).toLocaleString("en-US")} · {usd(daily)}/day
+                ≈ SGD {Math.round(monthlySgd).toLocaleString("en-US")} · {eur(p.netEurPerDay)}/day
+                <span className="kpi-note">projected from assumptions, not measured</span>
               </div>
             </div>
             <div className="kpi">
@@ -251,53 +267,39 @@ function BrowserPanel({
             </div>
           </div>
 
-          <div className="rev-panel">
-            <label className="rev-field">
-              <span>Daily active users (DAU)</span>
-              <input
-                type="number"
-                min={0}
-                value={dau}
-                onChange={(e) => setDau(Math.max(0, +e.target.value))}
-              />
-            </label>
-            <label className="rev-field">
-              <span>ARPDAU (USD) — {GENRE_PRESETS.find((g) => g.id === genre)?.label}</span>
-              <input
-                type="number"
-                min={0}
-                step={0.01}
-                value={arpdau}
-                onChange={(e) => setArpdau(Math.max(0, +e.target.value))}
-              />
-            </label>
-            <label className="rev-field">
-              <span>
-                Direct traffic share — {Math.round(directShare * 100)}% (payout ×{mult.toFixed(2)})
+          <div className="rev-band" role="group" aria-label="Route comparison">
+            <div className="band-tile band-base">
+              <span className="band-label">Ad-funded route · per year</span>
+              <b className="band-net">{usd(p.netUsdPerYear)}</b>
+              <span className="band-sub">
+                {eur(p.netEurPerDay)}/day, recurring while traffic lasts
               </span>
-              <input
-                type="range"
-                min={0}
-                max={1}
-                step={0.05}
-                value={directShare}
-                onChange={(e) => setDirectShare(+e.target.value)}
-              />
-            </label>
-            <label className="rev-field">
-              <span>FX rate (SGD per USD)</span>
-              <input
-                type="number"
-                min={0.5}
-                step={0.01}
-                value={rate}
-                onChange={(e) => setRate(Math.max(0.5, +e.target.value))}
-              />
-            </label>
+            </div>
+            <div className="band-tile band-opt">
+              <span className="band-label">Premium route · lifetime net</span>
+              <b className="band-net">{usd(steamNet)}</b>
+              <span className="band-sub">one-off, at the Steam tab's default assumptions</span>
+            </div>
+            <p className="band-note">
+              Not like for like: ad income is a <b>recurring yearly rate</b> that decays with
+              traffic; a premium launch is a <b>one-off lifetime total</b>. Both are projections
+              from assumptions — neither is measured.
+            </p>
+          </div>
+
+          <div className="rev-panel">
+            {AD_FIELDS.map(([k, label, step]) => (
+              <Num key={k} label={label} v={ads[k]} set={set(k)} step={step} src={HINTS[k]} />
+            ))}
+            {/* targetBandUsd falls back to the default rate if this is cleared to 0 */}
+            <Num label="FX rate (SGD per USD)" v={rate} step={0.01} set={setRate} />
             <p className="rev-note">
-              Direct players (your own traffic) keep 100% of ad revenue; players the platform sends
-              you are a 50-50 split — so the traffic mix moves income as much as the audience size
-              does.
+              {Math.round(p.dau).toLocaleString("en-US")} DAU ×{" "}
+              {Math.round(p.sessionsPerDay).toLocaleString("en-US")} sessions/day →{" "}
+              <b>{eur(p.netEurPerDay)}</b> net/day, a developer RPM of ${p.netRpmUsd.toFixed(2)} per
+              1,000 sessions. Published portal reports land near €1.2–$3.3 RPM, and one solo dev's
+              fourth browser game reported ≈€31/day after three that failed —{" "}
+              <b>the realistic end, not the starting point</b>.
             </p>
           </div>
         </div>
