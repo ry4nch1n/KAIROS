@@ -8,6 +8,7 @@ import { type RawGame, politeFetch, sleep } from "./base.ts";
 
 const STORE = "https://store.steampowered.com";
 const STEAMSPY = "https://steamspy.com/api.php";
+const COMMUNITY = "https://steamcommunity.com";
 
 // ── pure transforms ─────────────────────────────────────────────────────────
 
@@ -215,6 +216,59 @@ export function wantsAiDisclosure(
   if (ageDays > maxAgeDays) return false; // too old
   if (ageDays < -1) return false; // future-dated by more than a day
   return true;
+}
+
+// ── Follower counts (#54) ───────────────────────────────────────────────────
+// Followers are the closest public proxy to wishlists, and they are NOT in any endpoint we
+// already fetch (not in appdetails, not in the store-page HTML #110 downloads, and the
+// community hub is a JS-rendered React app). They ARE in the app's community-group member
+// list: following a game on Steam = joining its app group, so the group's member count IS
+// the follower count. `&p=99999` clamps to the last page and omits the member rows —
+// ~42 KB becomes ~1.1 KB of server-rendered XML with named elements (steadier than a scrape).
+//
+// HONEST CAVEAT: following is a PRE-PURCHASE action. For recent small indies followers run
+// ~10x reviews, but Balatro sits at 0.71x — once a game converts its audience the counter
+// stops tracking demand. Read it as a leading indicator pre-release/early-life and a lagging
+// vanity number afterwards.
+
+/**
+ * Follower count from a `memberslistxml` response. Pure + unit-tested. Returns null — never 0 —
+ * for anything that isn't a real group document.
+ *
+ * Two landmines this exists to survive:
+ *  1. There are TWO <memberCount> elements. The one inside <groupDetails> is the follower
+ *     number that matches third-party trackers; the top-level one is 2–9% higher (it counts
+ *     limited/banned accounts). Scope to <groupDetails> or the number is quietly wrong.
+ *  2. Apps with no community group (DLC, bogus appids, Spacewar 480) return a ~23 KB HTML
+ *     "Steam Community :: Error" page at HTTP 200 — the status code cannot be trusted, so
+ *     require the XML envelope. Absence maps to null ("unknown"), never 0.
+ */
+export function parseFollowerCount(xml: string | null | undefined): number | null {
+  const s = xml ?? "";
+  if (!/<memberList>/i.test(s)) return null; // HTML error page served at 200
+  const details = /<groupDetails>([\s\S]*?)<\/groupDetails>/i.exec(s);
+  if (!details) return null;
+  const m = /<memberCount>(\d+)<\/memberCount>/i.exec(details[1]);
+  if (!m) return null;
+  const n = Number(m[1]);
+  return Number.isFinite(n) ? n : null;
+}
+
+/**
+ * Fetch one app's follower count. Returns null on ANY failure — "unknown", never a
+ * crawl-breaking throw. Different host from the store endpoints, so it adds zero pressure to
+ * the throttle-prone store.steampowered.com; ~1.1 KB and a sub-second median, which the
+ * existing 1.5s per-game sleep largely absorbs.
+ */
+export async function fetchFollowers(appid: number): Promise<number | null> {
+  try {
+    return parseFollowerCount(
+      await politeFetch(`${COMMUNITY}/games/${appid}/memberslistxml/?xml=1&p=99999`, 6000),
+    );
+  } catch (e) {
+    console.warn(`  followers ${appid} failed:`, String(e));
+    return null;
+  }
 }
 
 /**
@@ -438,6 +492,10 @@ export async function fetchSteamGame(appid: number): Promise<RawGame | null> {
     g.aiDisclosure = d ? d.aiDisclosure : null;
     g.aiDisclosureNote = d?.aiDisclosureNote ?? null;
   }
+  // 5th fetch (#54), gated on tier ONLY — deliberately NOT riding the AI-disclosure cohort.
+  // Different host, ~1/170th the bytes, and followers matter for the whole non-AAA set, not
+  // just the <=120-day slice; AAA stays excluded because it's out of every indie benchmark.
+  if (g.scaleTier !== "aaa") g.followers = await fetchFollowers(appid);
   return g;
 }
 

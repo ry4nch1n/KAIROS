@@ -37,6 +37,11 @@ export interface RawGame {
   // endpoints, so it's fetched separately and only for the recent non-AAA cohort.
   aiDisclosure?: boolean | null;
   aiDisclosureNote?: string | null; // the developer's <i>…</i> note, when present
+  // Follower count (#54) — the app community group's member count, the closest public proxy to
+  // wishlists. null/undefined = NOT MEASURED (out of the non-AAA gate, no community group, or the
+  // fetch failed), never a measured 0. Append-only snapshots make the delta a velocity series;
+  // following is reversible and accounts get deleted, so that series is only NEAR-monotonic.
+  followers?: number | null;
 }
 
 /** Per-run selection inputs for {@link SourceAdapter.listGameUrls}. */

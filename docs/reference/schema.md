@@ -71,6 +71,7 @@ erDiagram
     text scale_tier
     boolean ai_disclosure
     text ai_disclosure_note
+    bigint followers
   }
   tags {
     serial id
@@ -198,6 +199,7 @@ erDiagram
 | `scale_tier` | `TEXT` |  |
 | `ai_disclosure` | `BOOLEAN` |  |
 | `ai_disclosure_note` | `TEXT` |  |
+| `followers` | `BIGINT` |  |
 
 ### `tags`
 
