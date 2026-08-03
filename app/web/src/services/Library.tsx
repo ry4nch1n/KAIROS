@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useDrawer, NavToggle, NavScrim, DrawerClose } from "../components/MobileNav.tsx";
-import type { LibraryItem, Pitch } from "shared";
+import type { LibraryItem, Pitch, PrototypeVerdict } from "shared";
 import { api } from "../lib/api.ts";
 import { routeLean } from "../lib/routeLean.ts";
 import { loopFamilyCoverage } from "../lib/loopFamily.ts";
@@ -80,7 +80,53 @@ function Dots({ n, of = 3 }: { n: number | null; of?: number }) {
 // height; the wordier fields + the in-game shot live behind "Read full pitch" so a
 // long pitch can't bloat the grid row. Missing spine fields keep a muted placeholder
 // so rows still line up. (Scores are unchanged here — the rating rework is Phase 2.)
-function PitchCard({ p }: { p: Pitch }) {
+// ── Kill-gate verdict (#55) ──
+// Recorded on the prototype CARD (that is what was played) but it is the evidence behind the
+// linked PITCH's status, so the pitch surface shows it too — the two collections join on
+// `pitchSlug`, newest verdict winning when a concept was tested more than once.
+export function verdictsBySlug(items: LibraryItem[]): Record<string, PrototypeVerdict> {
+  const out: Record<string, PrototypeVerdict> = {};
+  for (const it of items) {
+    if (!it.pitchSlug || !it.verdict) continue;
+    const prev = out[it.pitchSlug];
+    if (!prev || it.verdict.recordedAt > prev.recordedAt) out[it.pitchSlug] = it.verdict;
+  }
+  return out;
+}
+
+// A null verdict yields NO chips — the caller renders "not play-tested yet" instead. An untested
+// prototype must never render as a failed one, so absence gets its own words, not a row of ✗.
+export function verdictChips(v: PrototypeVerdict | null): { label: string; ok: boolean }[] {
+  if (!v) return [];
+  const tri = (b: boolean | null, yes: string, no: string, unasked: string) =>
+    b === null ? { label: unasked, ok: false } : { label: b ? yes : no, ok: b };
+  return [
+    tri(v.goalGrasped, "goal grasped ≤30s", "goal unclear at 30s", "30s goal: not asked"),
+    tri(v.secondRun, "played a second run", "no second run", "second run: not asked"),
+    v.moment
+      ? { label: "moment: " + v.moment, ok: true }
+      : { label: "no compelling moment named", ok: false },
+  ];
+}
+
+function VerdictLine({ v }: { v: PrototypeVerdict | null }) {
+  const chips = verdictChips(v);
+  const tip = v
+    ? "Kill-gate play-test · " + v.recordedAt.slice(0, 10) + (v.source ? " · " + v.source : "")
+    : "No play-test on record — untested is not the same as failed.";
+  return (
+    <div className="pscope" title={tip}>
+      {chips.length === 0 && <span className="pscope-chip">○ not play-tested yet</span>}
+      {chips.map((c) => (
+        <span key={c.label} className={"pscope-chip" + (c.ok ? " clock" : "")}>
+          {c.ok ? "✓" : "✗"} {c.label}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function PitchCard({ p, verdict }: { p: Pitch; verdict: PrototypeVerdict | null }) {
   const [open, setOpen] = useState(false);
   // Spine fields clamp to 2 lines. A hard mid-word ellipsis reads as "cut off
   // abruptly", so we soft-fade the tail instead — but only on fields that are
@@ -190,6 +236,9 @@ function PitchCard({ p }: { p: Pitch }) {
           )}
         </div>
       )}
+      {/* The evidence behind the status chip above — skipped for paper pitches, where
+          `proposed` already says "unprototyped". */}
+      {(verdict || p.status !== "proposed") && <VerdictLine v={verdict} />}
       <div className={"pfields" + (open ? " open" : "")} ref={fieldsRef}>
         {spine.map(([label, val, cls]) => (
           <div key={label} className={"pfield" + (cls ? " " + cls : "")}>
@@ -313,6 +362,8 @@ function LibCard({ it }: { it: LibraryItem }) {
           {it.summary}
         </p>
       )}
+      {/* Prototype cards carry the verdict that was recorded against this exact build. */}
+      {it.kind === "prototype" && <VerdictLine v={it.verdict} />}
       {it.mediaUrl && (
         <a className="plink" href={it.mediaUrl} target="_blank" rel="noreferrer">
           ▶ Play prototype
@@ -696,6 +747,9 @@ export function Library({ hidden }: { hidden: boolean }) {
       .finally(() => setLoaded(true));
   }, []);
 
+  // Play-test evidence lives on the prototype cards; the pitch cards read it through pitchSlug.
+  const verdicts = useMemo(() => verdictsBySlug(items), [items]);
+
   const counts = useMemo(() => {
     const c: Record<string, number> = { pitch: pitches.length };
     for (const it of items) c[it.kind] = (c[it.kind] || 0) + 1;
@@ -815,7 +869,7 @@ export function Library({ hidden }: { hidden: boolean }) {
               {active === "pitch" && shownPitches.length > 0 && (
                 <div className="bcard-grid">
                   {shownPitches.map((p) => (
-                    <PitchCard key={p.slug} p={p} />
+                    <PitchCard key={p.slug} p={p} verdict={verdicts[p.slug] ?? null} />
                   ))}
                 </div>
               )}

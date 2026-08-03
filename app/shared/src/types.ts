@@ -479,6 +479,18 @@ export interface NewRelease {
   trajectory: Trajectory;
 }
 
+// The 10-day kill-gate verdict on a played prototype (#55) — recorded against the build that was
+// tested, surfaced on the linked pitch as the evidence behind its status. A verdict object means
+// the build WAS play-tested; `null` means not yet tested, never the same claim as a failed test
+// (`goalGrasped: false`). Each answer is itself tri-state — `null` = that question wasn't asked.
+export interface PrototypeVerdict {
+  goalGrasped: boolean | null; // did a first-time player grasp the goal in ≤30s?
+  secondRun: boolean | null; // did they start a second run unprompted?
+  moment: string | null; // the compelling moment, named — free text (unnamed = the loop has none yet)
+  recordedAt: string; // ISO timestamp — the provenance that makes this evidence, not opinion
+  source: string | null; // who/what recorded it, e.g. "human play-test · 3 first-timers"
+}
+
 export interface LibraryItem {
   id: number;
   kind: string;
@@ -493,6 +505,7 @@ export interface LibraryItem {
   mediaUrl: string | null; // playable/asset link (e.g. a hosted prototype)
   imageUrl: string | null; // poster/thumbnail shown on the card
   date: string | null; // YYYY-MM-DD — e.g. a prototype's publish date
+  verdict: PrototypeVerdict | null; // null = not yet play-tested (absence is never a claim)
 }
 
 // Input for publishing/upserting a library item (token-gated POST /api/library).
@@ -510,6 +523,12 @@ export interface LibraryItemInput {
   status?: string | null;
   pitchSlug?: string | null; // link to the pitch this card tests; omit to keep an existing link
   date?: string | null; // YYYY-MM-DD publish date (becomes created_at)
+  // Kill-gate verdict (#55), posted by the prototype routine AFTER testing. Omit it and any
+  // recorded verdict survives — re-posting card metadata must not erase evidence.
+  verdict?: Partial<PrototypeVerdict> | null;
+  // EXPLICIT status flip of the linked pitch, applied in the same call as the evidence for it.
+  // Never inferred from the verdict; reversible by posting a different status.
+  pitchStatus?: string | null;
 }
 
 // A game-concept pitch — the Library "Pitches" collection. Dated + classified so
