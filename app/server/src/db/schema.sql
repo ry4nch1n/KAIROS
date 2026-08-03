@@ -64,6 +64,7 @@ CREATE TABLE IF NOT EXISTS game_snapshots (
   scale_tier          TEXT,     -- 'hobby' | 'small_indie' | 'est_indie' | 'aaa'
   ai_disclosure       BOOLEAN,  -- #110: store-page AI Generated Content Disclosure present? (null = not checked)
   ai_disclosure_note  TEXT,     -- the developer's disclosure note, when present
+  followers           BIGINT,   -- #54: app community-group members = Steam followers (null = not measured, never 0)
   UNIQUE (game_id, crawl_id)
 );
 CREATE INDEX IF NOT EXISTS idx_snap_game_time ON game_snapshots (game_id, captured_at DESC);
@@ -79,6 +80,7 @@ ALTER TABLE game_snapshots ADD COLUMN IF NOT EXISTS metacritic          INT;
 ALTER TABLE game_snapshots ADD COLUMN IF NOT EXISTS scale_tier          TEXT;
 ALTER TABLE game_snapshots ADD COLUMN IF NOT EXISTS ai_disclosure       BOOLEAN;
 ALTER TABLE game_snapshots ADD COLUMN IF NOT EXISTS ai_disclosure_note  TEXT;
+ALTER TABLE game_snapshots ADD COLUMN IF NOT EXISTS followers           BIGINT;
 
 CREATE TABLE IF NOT EXISTS tags (
   id   SERIAL PRIMARY KEY,
