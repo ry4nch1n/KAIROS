@@ -14,6 +14,13 @@ export interface RawGame {
   rating: number | null; // normalized 0-5
   votes: number | null;
   featured: boolean;
+  // ── Portal promotion (#56). Optional: a source that exposes no such signal leaves them
+  // undefined and the loader writes NULL — "not measured", distinct from a measured false.
+  // Read the captured value narrowly: portal shelves are personalized by region and device,
+  // so it means "promoted to an anonymous desktop visitor from the runner's region that day"
+  // (the payloads literally carry the caller's geo — SG locally, US from CI).
+  homepagePosition?: number | null; // 1-based rank on the portal's homepage shelf
+  trending?: boolean | null; // portal's own trending flag, where one exists
   // ── Phase 2: Steam / PC fields (optional; null/undefined for browser sources) ──
   releaseDate?: string | null; // ISO YYYY-MM-DD
   plays?: number | null; // owners estimate (also mirrored to owners_est)
