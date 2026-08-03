@@ -34,6 +34,26 @@ import {
 } from "./shared.ts";
 import { getBriefSteering } from "./library.ts";
 
+// ── Unreleased titles (#54 part 2) ──────────────────────────────────────────────────────
+// The crawl now seeds Steam's "Popular Upcoming" shelf, because followers — a PRE-purchase
+// signal — only carry information a review count doesn't for a game that has no reviews yet.
+// Every analytic below describes RELEASED titles: medians of price/rating/owners, revenue
+// proxies, supply trends, comparables. An unshipped title has no reviews, no owners and no
+// release date, so mixing it in would drag every median toward zero and inflate every supply
+// count with games that haven't competed for a customer yet.
+//
+// So: unreleased is EXCLUDED from all of them, at ingestion-honest cost — release_date stays
+// NULL (never a faked or announced date), which already excludes it from the date-filtered
+// queries (comparables, new releases, supply trends, the 90-day quiet-launch/AI-share KPIs);
+// this predicate covers the ones that aggregate without a date filter. `IS NOT TRUE` is
+// null-safe, so browser rows (which never measure it) are unaffected.
+//
+// Upcoming titles are therefore not yet SHOWN anywhere — deliberately. Excluding them is the
+// honest half; a dedicated, clearly-labelled Upcoming surface (with follower velocity, which
+// needs >=2 snapshots carrying `followers` before it can render anything but "—") is the
+// follow-up. Absence is never a claim: no table implies "released" while holding one of these.
+export const RELEASED_ONLY = "AND l.coming_soon IS NOT TRUE";
+
 /** Pure composition — exported for tests. Steam flavor of the read. */
 export function composeSteamRead(args: {
   opportunity: SteamGap[];
@@ -86,7 +106,7 @@ export async function getSteamGenreQuadrant(db: Querier): Promise<QuadrantPoint[
      FROM v_latest l JOIN games g ON g.id = l.game_id JOIN sources src ON src.id = g.source_id
      WHERE g.is_live AND src.name = 'steam' AND l.genre IS NOT NULL AND l.owners_est IS NOT NULL
        AND l.votes IS NOT NULL
-       AND (l.scale_tier IS NULL OR l.scale_tier <> 'aaa')
+       AND (l.scale_tier IS NULL OR l.scale_tier <> 'aaa') ${RELEASED_ONLY}
      GROUP BY ${canonSql("l.genre")} HAVING count(*) >= 2`,
   );
   return rows.map((r) => ({
@@ -108,7 +128,7 @@ export async function getScaleTierBreakdown(
   const rows = await db.query(
     `SELECT l.scale_tier AS tier, count(*)::int AS games
      FROM v_latest l JOIN games g ON g.id = l.game_id JOIN sources src ON src.id = g.source_id
-     WHERE g.is_live AND l.scale_tier IS NOT NULL ${pf(platform)}
+     WHERE g.is_live AND l.scale_tier IS NOT NULL ${pf(platform)} ${RELEASED_ONLY}
      GROUP BY l.scale_tier ORDER BY games DESC`,
   );
   return rows.map((r) => ({ tier: r.tier, games: num(r.games) }));
@@ -181,7 +201,7 @@ export async function getSteamGenreEconomics(
               ORDER BY coalesce(l.owners_est, 0) * coalesce(l.price_cents, 0))::float AS med_rev_cents,
             ${BOXLEITER_MED_SQL} AS med_rev_bl_cents
      FROM v_latest l JOIN games g ON g.id = l.game_id JOIN sources src ON src.id = g.source_id
-     WHERE g.is_live AND src.name = 'steam' AND l.genre IS NOT NULL ${tierFilter}
+     WHERE g.is_live AND src.name = 'steam' AND l.genre IS NOT NULL ${tierFilter} ${RELEASED_ONLY}
      GROUP BY ${canonSql("l.genre")} ORDER BY total_owners DESC`,
   );
   // Per-game reads (#24): free/unpriced games count as $0 in the median (coalesce above)
@@ -268,7 +288,7 @@ export async function getSteamTagEconomics(
      JOIN sources src ON src.id = g.source_id
      JOIN game_tags gt ON gt.game_id = g.id
      JOIN tags t ON t.id = gt.tag_id
-     WHERE g.is_live AND src.name = 'steam' ${tierFilter} ${matchFilter}
+     WHERE g.is_live AND src.name = 'steam' ${tierFilter} ${matchFilter} ${RELEASED_ONLY}
      GROUP BY ${canonSql("t.name")} HAVING count(*) >= ${Number(minSupply) | 0}
      ORDER BY rev_cents DESC`,
     params.length ? params : undefined,
@@ -372,7 +392,7 @@ async function tagDemandTrajectory(
      JOIN v_latest l ON l.game_id = g.id
      JOIN game_tags gt ON gt.game_id = g.id
      JOIN tags t ON t.id = gt.tag_id
-     WHERE g.is_live AND src.name = 'steam' AND s.votes IS NOT NULL ${tierFilter} ${matchFilter}
+     WHERE g.is_live AND src.name = 'steam' AND s.votes IS NOT NULL ${tierFilter} ${matchFilter} ${RELEASED_ONLY}
      GROUP BY ${canonSql("t.name")}, s.captured_at`,
     params.length ? params : undefined,
   );
@@ -585,7 +605,7 @@ export async function getSteamPricing(db: Querier): Promise<SteamPriceBand[]> {
             coalesce(sum(l.owners_est), 0)::float AS total_owners,
             coalesce(sum(l.owners_est * l.price_cents), 0)::float AS rev_cents
      FROM v_latest l JOIN games g ON g.id = l.game_id JOIN sources src ON src.id = g.source_id
-     WHERE g.is_live AND src.name = 'steam' AND (l.scale_tier IS NULL OR l.scale_tier <> 'aaa')
+     WHERE g.is_live AND src.name = 'steam' AND (l.scale_tier IS NULL OR l.scale_tier <> 'aaa') ${RELEASED_ONLY}
      GROUP BY band`,
   );
   const by = new Map(rows.map((r) => [r.band, r]));
@@ -610,7 +630,7 @@ export async function getSteamOwnership(db: Querier): Promise<SteamOwnershipRow[
             coalesce(sum(l.ccu), 0)::int AS ccu,
             percentile_cont(0.5) WITHIN GROUP (ORDER BY l.median_playtime_min)::float AS med_play
      FROM v_latest l JOIN games g ON g.id = l.game_id JOIN sources src ON src.id = g.source_id
-     WHERE g.is_live AND src.name = 'steam' AND l.genre IS NOT NULL AND (l.scale_tier IS NULL OR l.scale_tier <> 'aaa')
+     WHERE g.is_live AND src.name = 'steam' AND l.genre IS NOT NULL AND (l.scale_tier IS NULL OR l.scale_tier <> 'aaa') ${RELEASED_ONLY}
      GROUP BY ${canonSql("l.genre")} ORDER BY total_owners DESC`,
   );
   return rows.map((r) => ({
@@ -631,7 +651,7 @@ export async function getSteamDevelopers(db: Querier): Promise<SteamDeveloperRow
             mode() WITHIN GROUP (ORDER BY ${canonSql("l.genre")}) AS top_genre
      FROM v_latest l JOIN games g ON g.id = l.game_id JOIN sources src ON src.id = g.source_id
      WHERE g.is_live AND src.name = 'steam' AND g.developer IS NOT NULL AND g.developer <> ''
-       AND (l.scale_tier IS NULL OR l.scale_tier <> 'aaa')
+       AND (l.scale_tier IS NULL OR l.scale_tier <> 'aaa') ${RELEASED_ONLY}
      GROUP BY g.developer ORDER BY owners DESC, games DESC LIMIT 40`,
   );
   return rows.map((r) => ({
@@ -702,7 +722,7 @@ async function steamGapExamples(db: Querier): Promise<Map<string, string[]>> {
        FROM v_latest l JOIN games g ON g.id = l.game_id JOIN sources src ON src.id = g.source_id
        JOIN game_tags gt ON gt.game_id = g.id JOIN tags t ON t.id = gt.tag_id
        WHERE g.is_live AND src.name = 'steam' AND l.genre IS NOT NULL AND (l.scale_tier IS NULL OR l.scale_tier <> 'aaa')
-         AND lower(${canonSql("t.name")}) <> lower(${canonSql("l.genre")})
+         AND lower(${canonSql("t.name")}) <> lower(${canonSql("l.genre")}) ${RELEASED_ONLY}
      ) x WHERE rn <= 3`,
   );
   const m = new Map<string, string[]>();
@@ -731,7 +751,7 @@ export async function getSteamOpportunity(db: Querier): Promise<SteamGap[]> {
        FROM v_latest l JOIN games g ON g.id = l.game_id JOIN sources src ON src.id = g.source_id
        JOIN game_tags gt ON gt.game_id = g.id JOIN tags t ON t.id = gt.tag_id
        WHERE g.is_live AND src.name = 'steam' AND l.genre IS NOT NULL AND (l.scale_tier IS NULL OR l.scale_tier <> 'aaa')
-         AND lower(${canonSql("t.name")}) <> lower(${canonSql("l.genre")})
+         AND lower(${canonSql("t.name")}) <> lower(${canonSql("l.genre")}) ${RELEASED_ONLY}
        GROUP BY ${canonSql("l.genre")}, ${canonSql("t.name")} HAVING count(DISTINCT g.id) >= 2`,
     ),
     steamGapExamples(db),
@@ -807,7 +827,7 @@ export async function getSteamOverview(db: Querier): Promise<SteamOverview> {
               WHERE l.price_cents IS NOT NULL AND (l.scale_tier IS NULL OR l.scale_tier <> 'aaa')
             )::float AS indie_med_price
      FROM v_latest l JOIN games g ON g.id = l.game_id JOIN sources src ON src.id = g.source_id
-     WHERE g.is_live AND src.name = 'steam'`,
+     WHERE g.is_live AND src.name = 'steam' ${RELEASED_ONLY}`,
     )
   )[0];
   // Quiet-launch baseline (#109): of tracked non-AAA titles released in the last 90 days, the

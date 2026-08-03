@@ -300,6 +300,20 @@ function topTags(tags: Record<string, number> | undefined, n = 10): string[] {
     .map(([name]) => name);
 }
 
+/**
+ * True iff the store says this title has NOT shipped yet (#54 part 2).
+ *
+ * `release_date.coming_soon` is the ONLY trustworthy marker. The sibling `date` string is
+ * unreliable in both directions: it is often a real, PARSEABLE future date ("Aug 6, 2026") —
+ * which `parseReleaseDate` would happily turn into a release_date that then sorts ahead of
+ * every shipped game in every `ORDER BY release_date DESC` — and just as often a date-less
+ * placeholder ("Coming soon", "Q1 2026") that parses to null and is indistinguishable from a
+ * date-parser regression. Read the flag, never the string.
+ */
+export function isComingSoon(appData: any): boolean {
+  return appData?.release_date?.coming_soon === true;
+}
+
 /** Join the three endpoints' payloads for one appid into a normalized RawGame. */
 export function parseSteamGame(
   appid: number | string,
@@ -316,6 +330,7 @@ export function parseSteamGame(
   const majorBacked = isMajorBacked(developers, publishers);
   const price = appData?.price_overview;
   const tags = topTags(steamspy?.tags);
+  const comingSoon = isComingSoon(appData);
 
   return {
     sourceGameId: String(appid),
@@ -332,7 +347,11 @@ export function parseSteamGame(
     rating: normalizeSteamRating(positive, totalReviews),
     votes: totalReviews || null,
     featured: false,
-    releaseDate: parseReleaseDate(appData?.release_date?.date),
+    // An unreleased title HAS no release date — the store's future "date" is an announced
+    // intention, not a fact, and faking it into release_date would put unshipped games at the
+    // top of every recency ordering. Honest NULL; it fills in on the crawl after launch
+    // (the loader COALESCEs a newly-present date over the null).
+    releaseDate: comingSoon ? null : parseReleaseDate(appData?.release_date?.date),
     plays: owners,
     ownersEst: owners,
     priceCents: appData?.is_free ? 0 : (price?.final ?? null),
@@ -340,7 +359,13 @@ export function parseSteamGame(
     ccu: steamspy?.ccu != null ? Number(steamspy.ccu) : null,
     medianPlaytimeMin: steamspy?.median_forever != null ? Number(steamspy.median_forever) : null,
     metacritic: appData?.metacritic?.score ?? null,
-    scaleTier: classifyScaleTier({ reviews: totalReviews, owners, selfPublished, majorBacked }),
+    // Scale is a MEASURED OUTCOME (reviews, owners). An unreleased title has neither, so
+    // classifying it would report "hobby" for every unshipped game — a claim from absence.
+    // null = not measured, which is also what keeps it out of the tier breakdown.
+    scaleTier: comingSoon
+      ? null
+      : classifyScaleTier({ reviews: totalReviews, owners, selfPublished, majorBacked }),
+    comingSoon,
   };
 }
 
@@ -415,7 +440,12 @@ export function mergeSeeds(lists: number[][], limit: number): number[] {
 export async function seedAppIds(limit = SEED_LIMIT_DEFAULT): Promise<number[]> {
   const fetchIds = async (label: string, fn: () => Promise<number[]>): Promise<number[]> => {
     try {
-      return (await fn()).filter((n) => Number.isFinite(n) && n > 0);
+      const ids = (await fn()).filter((n) => Number.isFinite(n) && n > 0);
+      // A seed that 200s but parses to nothing is the silent failure mode (#138): the crawl
+      // stays "green" on a narrower seed and nobody notices for weeks. A layout/param change
+      // must be as loud as a throw — same degradation (other seeds carry the run), but visible.
+      if (!ids.length) console.warn(`seed ${label} yielded 0 appids — other seeds only`);
+      return ids;
     } catch (e) {
       console.warn(`seed ${label} failed:`, String(e));
       return [];
@@ -453,9 +483,25 @@ export async function seedAppIds(limit = SEED_LIMIT_DEFAULT): Promise<number[]> 
     }
     return ids;
   });
+  // (4) UNRELEASED demand — Steam's own "Popular Upcoming" shelf, Indie-tagged (#54 part 2).
+  // This is what makes follower counts new information rather than a restatement of reviews:
+  // on released titles followers track reviews (~10x) and say little the review count doesn't,
+  // but a coming-soon title has NO reviews and NO owners, so followers are the only demand
+  // number it has. `popularcomingsoon` (not the plain `comingsoon` filter) is load-bearing —
+  // unsorted coming-soon is ~6.5k shovelware; the popularity-ranked shelf returns titles with
+  // real dynamic range (hundreds to tens of thousands of followers). Verified 200 + 100 appids.
+  const upcoming = await fetchIds("search popularcomingsoon Indie", async () => {
+    const url =
+      `${STORE}/search/results/?query&start=0&count=100&filter=popularcomingsoon` +
+      `&tags=492&category1=998&supportedlang=english&infinite=1&json=1&cc=us&l=english`;
+    const j = JSON.parse(await politeFetch(url));
+    return parseSearchAppids(j?.results_html ?? "");
+  });
   // Canon first (recognizable benchmarks always present) → recent top-sellers (the recency
-  // focus) → trending/featured for demand context → owners-ranked indie breadth last.
-  return mergeSeeds([INDIE_CANON, recent, trending, featured, indie], limit);
+  // focus) → upcoming (the pre-release demand stream) → trending/featured for demand context
+  // → owners-ranked indie breadth last. Round-robin, so upcoming takes ~1/6 of the SAME
+  // CRAWL_LIMIT rather than raising it — the budget is politeness toward Steam, not minutes.
+  return mergeSeeds([INDIE_CANON, recent, upcoming, trending, featured, indie], limit);
 }
 
 /** Store appdetails URL. l=english fixes locale leakage (genres came back as e.g. "Ação");
@@ -495,7 +541,9 @@ export async function fetchSteamGame(appid: number): Promise<RawGame | null> {
   // 5th fetch (#54), gated on tier ONLY — deliberately NOT riding the AI-disclosure cohort.
   // Different host, ~1/170th the bytes, and followers matter for the whole non-AAA set, not
   // just the <=120-day slice; AAA stays excluded because it's out of every indie benchmark.
-  if (g.scaleTier !== "aaa") g.followers = await fetchFollowers(appid);
+  // Unreleased titles are ALWAYS fetched regardless of tier: followers are the only demand
+  // signal they have, so skipping them would defeat the coming-soon stream's whole purpose.
+  if (g.comingSoon || g.scaleTier !== "aaa") g.followers = await fetchFollowers(appid);
   return g;
 }
 

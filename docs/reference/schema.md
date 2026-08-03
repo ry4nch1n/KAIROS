@@ -72,6 +72,7 @@ erDiagram
     boolean ai_disclosure
     text ai_disclosure_note
     bigint followers
+    boolean coming_soon
   }
   tags {
     serial id
@@ -200,6 +201,7 @@ erDiagram
 | `ai_disclosure` | `BOOLEAN` |  |
 | `ai_disclosure_note` | `TEXT` |  |
 | `followers` | `BIGINT` |  |
+| `coming_soon` | `BOOLEAN` |  |
 
 ### `tags`
 

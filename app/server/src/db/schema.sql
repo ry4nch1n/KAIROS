@@ -65,6 +65,7 @@ CREATE TABLE IF NOT EXISTS game_snapshots (
   ai_disclosure       BOOLEAN,  -- #110: store-page AI Generated Content Disclosure present? (null = not checked)
   ai_disclosure_note  TEXT,     -- the developer's disclosure note, when present
   followers           BIGINT,   -- #54: app community-group members = Steam followers (null = not measured, never 0)
+  coming_soon         BOOLEAN,  -- #54: store says UNRELEASED (null = not measured; excluded from every market analytic)
   UNIQUE (game_id, crawl_id)
 );
 CREATE INDEX IF NOT EXISTS idx_snap_game_time ON game_snapshots (game_id, captured_at DESC);
@@ -81,6 +82,7 @@ ALTER TABLE game_snapshots ADD COLUMN IF NOT EXISTS scale_tier          TEXT;
 ALTER TABLE game_snapshots ADD COLUMN IF NOT EXISTS ai_disclosure       BOOLEAN;
 ALTER TABLE game_snapshots ADD COLUMN IF NOT EXISTS ai_disclosure_note  TEXT;
 ALTER TABLE game_snapshots ADD COLUMN IF NOT EXISTS followers           BIGINT;
+ALTER TABLE game_snapshots ADD COLUMN IF NOT EXISTS coming_soon         BOOLEAN;
 
 CREATE TABLE IF NOT EXISTS tags (
   id   SERIAL PRIMARY KEY,

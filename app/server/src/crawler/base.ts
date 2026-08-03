@@ -42,6 +42,12 @@ export interface RawGame {
   // fetch failed), never a measured 0. Append-only snapshots make the delta a velocity series;
   // following is reversible and accounts get deleted, so that series is only NEAR-monotonic.
   followers?: number | null;
+  // Unreleased / "coming soon" (#54 part 2). TRUE means the store says the title has NOT shipped:
+  // it has no reviews, no owners and no release date, so it is EXCLUDED from every market
+  // analytic (which all describe released titles). Its followers are the point — that is the one
+  // pre-purchase demand number an unshipped game has. null/undefined = not measured (browser
+  // sources), which reads the same as false everywhere via `IS NOT TRUE`.
+  comingSoon?: boolean | null;
 }
 
 /** Per-run selection inputs for {@link SourceAdapter.listGameUrls}. */
