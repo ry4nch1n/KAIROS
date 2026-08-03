@@ -491,8 +491,25 @@ async function reviewVelocities(db: Querier, ids: number[]): Promise<Map<number,
   return out;
 }
 
+// Team-size tie-break (#9). The comparables window is only the ~12–14 newest qualifying titles, so
+// as the set rotates daily toward brand-new unknown studios, team-size coverage collapses to ~0 —
+// not because the data is missing, but because the researched studios fell out of the window.
+// Fix WITHOUT abandoning recency: bucket candidates into coarse recency BANDS (calendar quarters)
+// and re-order only WITHIN a band. Bands sort newest-first, so a stale title can never leapfrog a
+// fresher one from a newer band; a resolved team size only breaks ties among comparably-recent
+// candidates. Remaining keys (owners desc, then id asc) make the order fully deterministic.
+const COMPARABLE_BAND_POOL = 4; // candidates fetched per output slot, so a band's resolved rows are reachable
+
+/** Coarse recency band (calendar quarter, newest sorts highest as a string). Null dates sort last. */
+export function recencyBand(releaseDate: string | Date | null | undefined): string {
+  if (!releaseDate) return "0000-Q0";
+  const d = new Date(releaseDate);
+  if (Number.isNaN(d.getTime())) return "0000-Q0";
+  return `${d.getUTCFullYear()}-Q${Math.floor(d.getUTCMonth() / 3) + 1}`;
+}
+
 export async function getSteamComparables(db: Querier, limit = 12): Promise<SteamComparable[]> {
-  const rows = await db.query(
+  const candidates = await db.query(
     `SELECT g.id AS id, g.title, l.scale_tier AS tier, ${canonSql("l.genre")} AS genre, l.rating, l.votes,
             l.owners_est AS owners, l.price_cents AS price, g.developer, g.release_date, l.ai_disclosure
      FROM v_latest l JOIN games g ON g.id = l.game_id JOIN sources src ON src.id = g.source_id
@@ -502,8 +519,23 @@ export async function getSteamComparables(db: Querier, limit = 12): Promise<Stea
        AND g.release_date >= (date_trunc('year', CURRENT_DATE) - INTERVAL '${COMPARABLE_RECENCY_YEARS} years')
      ORDER BY g.release_date DESC NULLS LAST, l.owners_est DESC NULLS LAST
      LIMIT $1`,
-    [limit],
+    [limit * COMPARABLE_BAND_POOL],
   );
+  // teamSizeFor is a TS lookup (not SQL), so the tie-break has to run here, over a pool wider than
+  // the output — hence the over-fetch above. Bands still gate everything: only intra-band order moves.
+  const rows = candidates
+    .slice()
+    .sort((a, b) => {
+      const band = recencyBand(b.release_date).localeCompare(recencyBand(a.release_date));
+      if (band !== 0) return band;
+      const resolved = (teamSizeFor(a.developer) ? 0 : 1) - (teamSizeFor(b.developer) ? 0 : 1);
+      if (resolved !== 0) return resolved;
+      const owners =
+        (b.owners == null ? -1 : num(b.owners)) - (a.owners == null ? -1 : num(a.owners));
+      if (owners !== 0) return owners;
+      return num(a.id) - num(b.id);
+    })
+    .slice(0, limit);
   const velocities = await reviewVelocities(
     db,
     rows.map((r) => num(r.id)),
