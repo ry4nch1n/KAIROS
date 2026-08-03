@@ -1755,6 +1755,15 @@ button {
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
   }
+  /* …and the card holding one has to be allowed to shrink. A grid item's implicit
+     `min-width: auto` is its min-content size, which a `max-content` table inflates
+     to the full table width — the track (and the page) then blow past 375px and the
+     `max-width: 100%` above never binds. Only tables inside a .grid hit this, so the
+     symptom is view-specific (Steam Overview's two-up cards, not the full-width
+     explorer tables). See #135. */
+  .grid > * {
+    min-width: 0;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
