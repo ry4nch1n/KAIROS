@@ -39,8 +39,11 @@ const fmt = (n: number) => n.toLocaleString("en-US");
 const MIN_TREND_DAYS = 5;
 // Platforms grouped by category to reflect the hierarchy: "All Browser" aggregates its
 // children (CrazyGames + Poki); Steam is the PC surface (an "all PC" of one, for now).
-// CrazyGames is listed before Poki by preference.
-const PLATFORM_GROUPS: { group: string; items: { id: Platform; label: string }[] }[] = [
+// PC/Steam leads because Steam is the primary market Radar is read for (#135) — it is
+// both the default platform and the first selectable option. CrazyGames before Poki
+// by preference.
+export const PLATFORM_GROUPS: { group: string; items: { id: Platform; label: string }[] }[] = [
+  { group: "PC", items: [{ id: "steam", label: "Steam" }] },
   {
     group: "Browser",
     items: [
@@ -49,8 +52,11 @@ const PLATFORM_GROUPS: { group: string; items: { id: Platform; label: string }[]
       { id: "poki", label: "Poki" },
     ],
   },
-  { group: "PC", items: [{ id: "steam", label: "Steam" }] },
 ];
+
+// The platform Radar opens on. Exported so the selector's contract (default +
+// ordering) is pinned by a test rather than living only in a useState call.
+export const DEFAULT_PLATFORM: Platform = "steam";
 
 // ── Steam formatting helpers ──
 const fmtOwners = (n: number | null) =>
@@ -1655,7 +1661,7 @@ export function Radar({
   onProject?: (seed: RevenueSeed) => void;
 }) {
   const drawer = useDrawer();
-  const [platform, setPlatform] = useState<Platform>("all");
+  const [platform, setPlatform] = useState<Platform>(DEFAULT_PLATFORM);
   const [view, setView] = useState<View>("overview");
   const [steamView, setSteamView] = useState<SteamSection>("overview");
   const [ov, setOv] = useState<Overview | null>(null);

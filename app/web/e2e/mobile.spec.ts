@@ -149,8 +149,12 @@ test.describe("mobile — layout fits at 375px", () => {
   test("a wide Radar data table scrolls in-container, not the page", async ({ page }) => {
     await page.goto("/");
     // On mobile the sub-nav lives in a drawer — open it, jump to a table-heavy view.
+    // Radar opens on Steam (#135), so the drawer lists the Steam sections: "Studios &
+    // Releases" carries the widest table in the app (Recent releases, 8 columns), which
+    // is the strongest version of this check.
+    const SECTION = "Studios & Releases";
     await page.locator(`${panel("radar")} .nav-toggle`).click();
-    await page.locator(`${panel("radar")} .nav-item`, { hasText: "Genre Explorer" }).click();
+    await page.locator(`${panel("radar")} .nav-item`, { hasText: SECTION }).click();
     await expect(page.locator(`${panel("radar")} .dtable`).first()).toBeVisible({
       timeout: 15_000,
     });
@@ -158,7 +162,7 @@ test.describe("mobile — layout fits at 375px", () => {
     const over = await pageOverflow(page);
     expect(
       over,
-      `Genre Explorer spilled to the page (${over}px) instead of scrolling in its box`,
+      `${SECTION} spilled to the page (${over}px) instead of scrolling in its box`,
     ).toBeLessThanOrEqual(1);
   });
 });

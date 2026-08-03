@@ -7,9 +7,15 @@ import { test, expect } from "@playwright/test";
 
 const RADAR = 'section[data-svc="radar"]';
 
+// Radar opens on Steam (#135), so the call that runs on mount is `api.steam()` →
+// GET /api/steam. Both specs below mock *that* endpoint: mocking the platform the
+// panel no longer opens on would leave the failure/delay unreachable and the tests
+// passing for the wrong reason.
+const MOUNT_ENDPOINT = "**/api/steam**";
+
 test.describe("Radar resilience", () => {
-  test("survives an /api/overview 500 without white-screening", async ({ page }) => {
-    await page.route("**/api/overview**", (route) =>
+  test("survives an /api/steam 500 without white-screening", async ({ page }) => {
+    await page.route(MOUNT_ENDPOINT, (route) =>
       route.fulfill({
         status: 500,
         contentType: "application/json",
@@ -34,16 +40,34 @@ test.describe("Radar resilience", () => {
     expect(pageErrors, `unexpected uncaught errors:\n${pageErrors.join("\n")}`).toHaveLength(0);
   });
 
-  test("shows loading skeletons while /api/overview is slow", async ({ page }) => {
-    await page.route("**/api/overview**", async (route) => {
-      // Hold the response so the skeleton state is observable.
-      await new Promise((r) => setTimeout(r, 1500));
+  test("shows loading skeletons while /api/steam is slow", async ({ page }) => {
+    // Hold the response open under test control rather than on a timer. Radar renders
+    // a <Skel/> whenever its data is null, so a skeleton on screen is only evidence of
+    // the *loading* state if the request is provably still in flight — with a fixed
+    // sleep this asserted nothing (it passed even when the mock never fired).
+    let release: () => void = () => {};
+    const held = new Promise<void>((r) => {
+      release = r;
+    });
+    let calls = 0;
+    await page.route(MOUNT_ENDPOINT, async (route) => {
+      calls++;
+      await held;
       await route.continue();
     });
 
     await page.goto("/");
     await expect(page.locator(`${RADAR} .skeleton`).first()).toBeVisible();
-    // …and it resolves to a real chart once the (delayed) data lands.
+    // (React StrictMode double-invokes effects in dev, so the count is ≥1, not ==1.)
+    expect(
+      calls,
+      "Radar never called the endpoint it is supposed to load on mount",
+    ).toBeGreaterThan(0);
+
+    release();
+    // …and it resolves to a real chart once the (delayed) data lands — the skeleton
+    // is a transient loading state, not something the panel is stuck in.
     await expect(page.locator(`${RADAR} canvas`).first()).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator(`${RADAR} .skeleton`)).toHaveCount(0);
   });
 });
