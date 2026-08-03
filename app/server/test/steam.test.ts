@@ -916,6 +916,63 @@ describe("D12b getSteamComparables prefers recent releases", () => {
   });
 });
 
+describe("D12d team-size tie-break within the recency band (#9)", () => {
+  const band = (title: string, releaseDate: string, developer: string, ownersEst: number) =>
+    steamGame({
+      sourceGameId: title,
+      title,
+      developer,
+      genre: "Action",
+      scaleTier: "small_indie",
+      releaseDate,
+      ownersEst,
+      rating: 4.2,
+      votes: 2_000,
+    });
+
+  it("prefers a resolved team size among comparably-recent titles", async () => {
+    const db = await freshMemoryDb();
+    await loadGames(
+      db,
+      "steam",
+      STEAM_BASE_URL,
+      [
+        // same quarter (2025-Q1); the unknown studio is the newer of the two
+        band("Unknown Studio Game", "2025-03-01", "Nobody Ever Heard Of Us", 90_000),
+        band("Solo Studio Game", "2025-01-15", "Slavic Magic", 80_000),
+      ],
+      "2026-06-30T00:00:00.000Z",
+    );
+    const c = await q.getSteamComparables(db, 1);
+    expect(c.map((x) => x.title)).toEqual(["Solo Studio Game"]);
+    expect(c[0].teamSize?.bucket).toBe("solo");
+  });
+
+  it("never lets a stale title leapfrog a much fresher one", async () => {
+    const db = await freshMemoryDb();
+    await loadGames(
+      db,
+      "steam",
+      STEAM_BASE_URL,
+      [
+        band("Fresh Unknown", "2026-05-01", "Nobody Ever Heard Of Us", 70_000),
+        band("Stale Researched", "2024-02-01", "Slavic Magic", 900_000),
+      ],
+      "2026-06-30T00:00:00.000Z",
+    );
+    const c = await q.getSteamComparables(db, 2);
+    expect(c.map((x) => x.title)).toEqual(["Fresh Unknown", "Stale Researched"]);
+    // and the ordering is stable across repeated calls (deterministic keys)
+    expect((await q.getSteamComparables(db, 2)).map((x) => x.title)).toEqual(c.map((x) => x.title));
+  });
+
+  it("recencyBand buckets by calendar quarter, nulls last", () => {
+    expect(q.recencyBand("2025-03-31")).toBe("2025-Q1");
+    expect(q.recencyBand("2025-04-01")).toBe("2025-Q2");
+    expect(q.recencyBand(null) < q.recencyBand("2015-01-01")).toBe(true);
+  });
+});
+
 describe("D12c review velocity — the wishlist-proxy leading indicator (#11)", () => {
   const DAY = 86400000;
   const t0 = Date.parse("2026-06-01T00:00:00Z");
