@@ -113,6 +113,24 @@ export interface ScoreComponents {
   demand: number; // z(demand) — higher appetite/owners lifts the score
   quality: number; // z(quality ceiling: P90 rating)
   supply: number; // −z(supply: # games) — more competitors lowers the score
+  // Steering lift (#12b): +weight per standing flag this market matches, ONLY on a matched row
+  // (absent → the score is exactly the market-data one). Never negative — steering promotes.
+  steering?: number;
+}
+
+// Why a row was steered (#12b) — which constraint moved it, and by how much.
+export interface SteeringMatch {
+  flags: string[]; // the standing flags (verbatim) this market matched
+  delta: number; // score added = weight × flags.length
+}
+
+// What steering did to a whole ranking (#12b). `unmatched` is the honest half.
+export interface SteeringLens {
+  flags: string[]; // all standing flags in play
+  applied: string[]; // flags that matched at least one market
+  unmatched: string[]; // flags that matched nothing in this ranking
+  steered: number; // # of ranked rows that got a lift
+  weight: number; // score added per matching flag
 }
 
 export interface SteamGap {
@@ -125,6 +143,7 @@ export interface SteamGap {
   medianPriceCents: number; // monetization
   score: number;
   components: ScoreComponents; // the score's breakdown (#87) — sums to `score`
+  steering?: SteeringMatch; // set only when a standing flag matched this market (#12b)
   examples: string[];
   supplyRising: boolean; // genre accreting recent releases fast (R1.3 annotation)
 }
@@ -183,7 +202,8 @@ export interface SteamOverview {
   all: SteamGenreEconomics[]; // all tiers incl. AAA (demand-context view)
   tagEconomics: SteamTagEconomics[]; // sub-genre lens — indie cohort, keyed on SteamSpy tags
   comparables: SteamComparable[];
-  opportunity: SteamGap[];
+  opportunity: SteamGap[]; // steered by the standing flags when any are set (#12b)
+  steering?: SteeringLens; // what steering did to `opportunity` — absent when no flags are set
   quadrant: QuadrantPoint[];
   pricing: SteamPriceBand[];
   ownership: SteamOwnershipRow[];

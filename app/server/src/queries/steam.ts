@@ -28,8 +28,11 @@ import {
   classifyTrajectory,
   classifySupply,
   genreSupplyTrend,
+  steerRow,
+  steeringLens,
   type SupplyInfo,
 } from "./shared.ts";
+import { getBriefSteering } from "./library.ts";
 
 /** Pure composition — exported for tests. Steam flavor of the read. */
 export function composeSteamRead(args: {
@@ -683,6 +686,9 @@ async function steamGapExamples(db: Querier): Promise<Map<string, string[]>> {
 // Steam opportunity: indie genre×tag with high demand (owners) + quality, low supply, monetizable.
 export async function getSteamOpportunity(db: Querier): Promise<SteamGap[]> {
   const supply = await genreSupplyTrend(db, "steam");
+  // Standing flags add a visible score term BEFORE the sort and the top-8 cut (#12b), so
+  // steering can surface a market the raw score kept off the list. None set → no-op.
+  const { flags } = await getBriefSteering(db);
   const [rows, ex] = await Promise.all([
     db.query(
       `SELECT ${canonSql("l.genre")} AS genre, ${canonSql("t.name")} AS tag,
@@ -727,6 +733,7 @@ export async function getSteamOpportunity(db: Querier): Promise<SteamGap[]> {
       examples: ex.get(`${r.genre} × ${r.tag}`) ?? [],
       supplyRising: supply.get(r.genre)?.trend === "rising",
     }))
+    .map((g) => steerRow(g, flags)) // standing flags re-score the ranking (#12b)
     .sort((a, b) => b.score - a.score)
     .slice(0, 8);
 }
@@ -811,6 +818,9 @@ export async function getSteamOverview(db: Querier): Promise<SteamOverview> {
       aiDisclosureSample: num(ai.n),
     },
     read: composeSteamRead({ opportunity, indie }),
+    // Read over the ranked-AND-cut list, so a flag whose only match fell below the cut reports
+    // as matching nothing you can SEE, rather than as a silent win.
+    steering: steeringLens((await getBriefSteering(db)).flags, opportunity),
     tiers,
     indie,
     all,

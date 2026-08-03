@@ -3,7 +3,15 @@
 // pure code movement) so browser and steam can share these without importing each
 // other (which would be a circular import).
 import type { Querier } from "../db/db.ts";
-import type { Platform, Trajectory, SupplyTrend } from "shared";
+import type {
+  Platform,
+  ScoreComponents,
+  SteeringLens,
+  SteeringMatch,
+  SupplyTrend,
+  Trajectory,
+} from "shared";
+import { loopFamilyFor, loopFamilyFromLabels } from "../data/loopFamilyMap.ts";
 
 export const num = (v: any) => (v === null || v === undefined ? 0 : Number(v));
 
@@ -130,4 +138,84 @@ export async function genreSupplyTrend(
     m.set(r.genre, { recent, prior, trend: classifySupply(recent, prior) });
   }
   return m;
+}
+
+// ── Steering (#12, part (b)) ────────────────────────────────────────────────────────────
+// The "Standing Flags" were a caption: the brief said what you were looking for and the
+// rankings ignored it. Here they become a term in the opportunity score — matched through the
+// curated loop-family map (so "survivors" reaches Action × Survivor-Like without naming it) or
+// as a whole word in the market's labels. Discipline from data/loopFamilyMap.ts: a flag that
+// fits nothing matches nothing; with no flags set the ranking is unchanged.
+/** Score added per matching flag — enough to lift an on-interest market over a marginally
+ *  better one, too small to float a market the data doesn't support (a z-score is ~1.0). */
+export const STEERING_WEIGHT = 0.5;
+
+export interface Steerable {
+  genre: string;
+  tag: string;
+  score: number;
+  components: ScoreComponents;
+  steering?: SteeringMatch;
+}
+
+// Too generic to carry an interest; a flag with no significant word matches by family only.
+const STOP = new Set(["game", "games", "the", "and", "for", "with", "new", "more", "very"]);
+const wordsOf = (s: string) =>
+  String(s ?? "")
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter((w) => w.length >= 4 && !STOP.has(w));
+
+export const activeFlags = (flags: string[]) =>
+  (flags ?? []).filter((f) => typeof f === "string" && f.trim());
+
+/** Flags (verbatim) that match this market. Whole-word, plural-tolerant on the market's own
+ *  genre/tag labels, plus the loop-family route when BOTH sides resolve to the same family. */
+export function matchSteering(flags: string[], m: { genre: string; tag: string }): string[] {
+  const hay = ` ${`${m.genre} ${m.tag}`
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()} `;
+  const family = loopFamilyFor(m.genre, m.tag) ?? loopFamilyFromLabels([m.genre, m.tag]);
+  const out: string[] = [];
+  for (const flag of flags) {
+    if (typeof flag !== "string" || !flag.trim()) continue;
+    const byWord = wordsOf(flag).some(
+      (w) =>
+        hay.includes(` ${w} `) ||
+        hay.includes(` ${w}s `) ||
+        hay.includes(` ${w.replace(/s$/, "")} `),
+    );
+    const byFamily = family != null && loopFamilyFromLabels([flag]) === family;
+    if ((byWord || byFamily) && !out.includes(flag)) out.push(flag);
+  }
+  return out;
+}
+
+/** Re-score ONE ranked market. A no-op when nothing matches (or nothing is set): score,
+ *  components and keys stay exactly as the market data computed them. Slots into the ranking
+ *  chain before its `.sort`, so a lift can push a market above the top-N cut. */
+export function steerRow<T extends Steerable>(row: T, flags: string[]): T {
+  const matched = matchSteering(activeFlags(flags), row);
+  if (!matched.length) return row; // no claim, never force-fit
+  const delta = +(STEERING_WEIGHT * matched.length).toFixed(2);
+  row.score = +(row.score + delta).toFixed(2);
+  row.components = { ...row.components, steering: delta };
+  row.steering = { flags: matched, delta };
+  return row;
+}
+
+/** What steering did to a ranking, for display. Undefined when no flags are set — the honest
+ *  reading of "nothing is steering", not an empty lens implying an inert filter ran. */
+export function steeringLens(flags: string[], rows: Steerable[]): SteeringLens | undefined {
+  const active = activeFlags(flags);
+  if (!active.length) return undefined;
+  const hit = new Set(rows.flatMap((r) => r.steering?.flags ?? []));
+  return {
+    flags: active,
+    applied: active.filter((f) => hit.has(f)),
+    unmatched: active.filter((f) => !hit.has(f)),
+    steered: rows.filter((r) => r.steering).length,
+    weight: STEERING_WEIGHT,
+  };
 }
