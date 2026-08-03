@@ -60,7 +60,13 @@ export const CONTRACT = {
   //      null=not checked or fetch failed). The SteamOverview KPI block gained `aiDisclosurePct` /
   //      `aiDisclosureSample` — of checked last-90-day non-AAA releases, the share disclosing AI
   //      content, over the count actually checked. Additive; read defensively.
-  version: 15,
+  // v16: the standing steering flags stop being a caption and re-score the Steam opportunity
+  //      ranking (#12b). `ScoreComponents` gained an optional `steering` term (+weight per
+  //      matching flag, ONLY on a matched row); `SteamGap` gained `steering` ({flags, delta});
+  //      `SteamOverview` gained `steering` (SteeringLens: flags in play, which applied, which
+  //      matched NOTHING, rows lifted, weight). No flags set → the ranking is identical to v15.
+  //      Browser `Overview.gaps` is NOT steered yet (same helper, follow-up). Additive.
+  version: 16,
   pitch: {
     // v2: added visual-card fields — setting, artStyle, codeName, headerUrl, shotUrl.
     // v3: rating rework — scoreFields d1Fit/steamCeiling/buildCost → browserFit/steamFit/buildEase.

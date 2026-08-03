@@ -10,6 +10,8 @@ import type {
   SteamOverview,
   SteamGenreEconomics,
   SteamGap,
+  SteeringLens,
+  SteeringMatch,
   SteamPriceBand,
   SteamOwnershipRow,
   SteamDeveloperRow,
@@ -387,7 +389,33 @@ function ScoreBreakdown({ c }: { c: ScoreComponents }) {
       {term("demand", c.demand)}
       {term("quality", c.quality)}
       {term("supply", c.supply)}
+      {c.steering !== undefined && term("steering", c.steering)}
     </div>
+  );
+}
+
+/** One sentence saying what the standing flags DID to this ranking — which landed, how many
+ *  markets moved, and which matched nothing here. null when nothing is steering. */
+export function steeringNote(lens?: SteeringLens): string | null {
+  if (!lens || !lens.flags.length) return null;
+  const head = lens.applied.length
+    ? `Steered by ${lens.applied.join(", ")} — ${lens.steered} market${lens.steered === 1 ? "" : "s"} lifted +${lens.weight.toFixed(2)} per matching flag.`
+    : "Standing flags are set but none matched this ranking — the order below is unsteered.";
+  return lens.unmatched.length && lens.applied.length
+    ? `${head} No match here for ${lens.unmatched.join(", ")}.`
+    : head;
+}
+
+/** The "this row was steered" chip — names the flags that moved it. */
+function SteerChip({ s }: { s?: SteeringMatch }) {
+  if (!s) return null;
+  return (
+    <span
+      className="supply-flag"
+      title={`Lifted +${s.delta.toFixed(2)} by standing flags: ${s.flags.join(", ")} — market data alone would rank it lower.`}
+    >
+      steered · {s.flags.join(", ")}
+    </span>
   );
 }
 
@@ -946,7 +974,8 @@ function EconTable({
   );
 }
 
-function OppList({ gaps }: { gaps: SteamGap[] }) {
+function OppList({ gaps, lens }: { gaps: SteamGap[]; lens?: SteeringLens }) {
+  const note = steeringNote(lens);
   if (!gaps.length)
     return (
       <p className="view-head">
@@ -959,6 +988,7 @@ function OppList({ gaps }: { gaps: SteamGap[] }) {
         opportunity = z(demand: median owners) + z(quality ceiling: P90 rating) − z(supply: games) ·
         median price is context, not scored
       </p>
+      {note && <p className="gap-legend">{note}</p>}
       {gaps.map((g, i) => (
         <div className="gap" key={i}>
           <span className="rank num">{i + 1}</span>
@@ -973,6 +1003,7 @@ function OppList({ gaps }: { gaps: SteamGap[] }) {
                 supply rising
               </span>
             )}
+            <SteerChip s={g.steering} />
             <ScoreBreakdown c={g.components} />
           </div>
           <div className="gap-stats num">
@@ -1621,7 +1652,7 @@ function SteamView({
           "Opportunity — what to build next",
           "indie genre × tag: high demand, low supply, monetizable",
         )}
-        <OppList gaps={data.opportunity} />
+        <OppList gaps={data.opportunity} lens={data.steering} />
       </div>
     );
   // overview (default) — KPIs + tier distribution + highlights
@@ -1645,7 +1676,7 @@ function SteamView({
         </div>
         <div className="card">
           {head(I.gaps, "Top opportunities", "indie genre × tag")}
-          <OppList gaps={data.opportunity.slice(0, 4)} />
+          <OppList gaps={data.opportunity.slice(0, 4)} lens={data.steering} />
         </div>
       </div>
     </>
