@@ -9,7 +9,7 @@ import type {
   PitchInput,
   LibraryItemInput,
 } from "shared";
-import { assertPitchInput, validateBriefPayload } from "../../../shared/src/contract.ts";
+import { CONTRACT, assertPitchInput, validateBriefPayload } from "../../../shared/src/contract.ts";
 import { num } from "./shared.ts";
 import { buildDemandTracker } from "./briefFamily.ts";
 
@@ -254,6 +254,9 @@ export async function publishPitch(db: Querier, p: PitchInput): Promise<void> {
 // This lives here rather than inline in the two API entry points on purpose: the SQL used to
 // be duplicated verbatim in app.ts and the Netlify function, and routeParity only diffs route
 // SURFACES, not query bodies — so a join added to one and not the other would drift silently.
+// The kill-gate verdict nests as an object, or is NULL — `verdict_recorded_at` is the
+// tested/untested discriminator on purpose: no recorded_at means NOT TESTED, which must never
+// read as a prototype that was tested and failed its gate.
 export async function libraryItems(db: Querier): Promise<Record<string, any>[]> {
   return db.query(
     `SELECT li.id, li.kind, li.title, li.summary, li.tags,
@@ -261,11 +264,56 @@ export async function libraryItems(db: Querier): Promise<Record<string, any>[]> 
             li.pitch_slug AS "pitchSlug",
             li.media_url  AS "mediaUrl",
             li.image_url  AS "imageUrl",
+            CASE WHEN li.verdict_recorded_at IS NULL THEN NULL ELSE jsonb_build_object(
+              'goalGrasped', li.verdict_goal_grasped, 'secondRun', li.verdict_second_run,
+              'moment', li.verdict_moment, 'source', li.verdict_source,
+              'recordedAt', to_char(li.verdict_recorded_at AT TIME ZONE 'UTC',
+                                    'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')) END AS verdict,
             to_char(li.created_at, 'YYYY-MM-DD') AS date
        FROM library_items li
        LEFT JOIN pitches p ON p.slug = li.pitch_slug
       ORDER BY li.created_at DESC`,
   );
+}
+
+// A verdict is evidence, so it is validated like evidence: answers are booleans (or genuinely
+// unanswered) and at least one must be present — an empty verdict would stamp "tested" on a card
+// nobody played. Throws; the route turns that into a 400.
+function verdictColumns(it: LibraryItemInput): (string | boolean | null)[] | null {
+  const v = it.verdict;
+  if (v == null) return null;
+  const errors: string[] = [];
+  for (const f of ["goalGrasped", "secondRun"] as const)
+    if (v[f] != null && typeof v[f] !== "boolean") errors.push(`verdict.${f} must be a boolean`);
+  if (v.moment != null && typeof v.moment !== "string") errors.push("verdict.moment must be text");
+  if (v.goalGrasped == null && v.secondRun == null && !v.moment)
+    errors.push("verdict must answer at least one kill-gate question");
+  const at = v.recordedAt ? new Date(v.recordedAt) : new Date();
+  if (Number.isNaN(at.getTime())) errors.push("verdict.recordedAt must be an ISO timestamp");
+  if (errors.length) throw new Error(`verdict invalid: ${errors.join("; ")}`);
+  const cols = [v.goalGrasped, v.secondRun, v.moment, at.toISOString(), v.source];
+  return cols.map((x) => x ?? null) as (string | boolean | null)[];
+}
+
+// Apply an EXPLICIT status flip to the pitch this card tests. Never inferred from the verdict's
+// contents: recording what happened and deciding what it means are separate acts, and an auto
+// flip would move the leaderboard as a side effect nobody asked for. Strict — the status must be
+// in the contract, and the card must actually be linked to a pitch.
+async function applyPitchStatus(db: Querier, mediaUrl: string, status: string): Promise<void> {
+  if (!CONTRACT.pitch.statuses.includes(status as any))
+    throw new Error(
+      `unknown pitchStatus "${status}" — expected one of ${CONTRACT.pitch.statuses.join(", ")}`,
+    );
+  const [c] = await db.query(`SELECT pitch_slug FROM library_items WHERE media_url = $1`, [
+    mediaUrl,
+  ]);
+  if (!c?.pitch_slug)
+    throw new Error("pitchStatus requires the card to be linked to a pitch (pitchSlug)");
+  const rows = await db.query(
+    `UPDATE pitches SET status = $2, updated_at = now() WHERE slug = $1 RETURNING slug`,
+    [c.pitch_slug, status],
+  );
+  if (!rows.length) throw new Error(`no pitch with slug "${c.pitch_slug}"`);
 }
 
 // Publish/upsert a library item (e.g. a hosted prototype card). Keyed on media_url —
@@ -281,6 +329,8 @@ export async function publishLibraryItem(db: Querier, it: LibraryItemInput): Pro
     errors.push("date must be YYYY-MM-DD");
   if (it?.tags != null && !Array.isArray(it.tags)) errors.push("tags must be an array of strings");
   if (errors.length) throw new Error(`library item invalid: ${errors.join("; ")}`);
+  // Validate the verdict BEFORE any write, so a malformed one can't half-land on the card.
+  const verdict = verdictColumns(it);
 
   await db.query(
     `INSERT INTO library_items (kind, title, summary, media_url, image_url, tags, status, pitch_slug, created_at)
@@ -318,6 +368,19 @@ export async function publishLibraryItem(db: Querier, it: LibraryItemInput): Pro
       it.pitchSlug ?? null,
     ],
   );
+  // Verdict as its own statement rather than more COALESCEd columns above: a posted verdict
+  // REPLACES the previous one wholesale (it is one test session's answers, not a merge of two),
+  // while a post that omits `verdict` leaves the recorded evidence untouched.
+  if (verdict)
+    await db.query(
+      `UPDATE library_items SET verdict_goal_grasped = $2, verdict_second_run = $3,
+         verdict_moment = $4, verdict_recorded_at = $5::timestamptz, verdict_source = $6
+       WHERE media_url = $1`,
+      [it.mediaUrl, ...verdict],
+    );
+  // The propagation step: evidence recorded on the build becomes the pitch's status, on the
+  // poster's explicit instruction, in the same call that supplied the evidence.
+  if (it.pitchStatus) await applyPitchStatus(db, it.mediaUrl, it.pitchStatus);
 }
 
 // Curation: remove a pitch by slug. Returns true if a row existed. Token-gated at the route.

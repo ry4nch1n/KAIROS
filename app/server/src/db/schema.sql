@@ -143,6 +143,17 @@ ALTER TABLE library_items ADD COLUMN IF NOT EXISTS image_url TEXT;
 -- which is created further down.)
 ALTER TABLE library_items ADD COLUMN IF NOT EXISTS pitch_slug TEXT;
 
+-- Kill-gate play-test verdict (#55) — the three questions the 10-day gate asks. Recorded on the
+-- build artifact because that is what was played; the linked pitch reads it through `pitch_slug`,
+-- which is how a verdict reaches the leaderboard instead of living in someone's head.
+-- `verdict_recorded_at` is the discriminator: NULL = NOT YET TESTED, a different claim from
+-- "tested and the player never came back" (recorded_at set, flags FALSE).
+ALTER TABLE library_items ADD COLUMN IF NOT EXISTS verdict_goal_grasped BOOLEAN;     -- goal grasped ≤30s?
+ALTER TABLE library_items ADD COLUMN IF NOT EXISTS verdict_second_run   BOOLEAN;     -- unprompted second run?
+ALTER TABLE library_items ADD COLUMN IF NOT EXISTS verdict_moment       TEXT;        -- the compelling moment, named
+ALTER TABLE library_items ADD COLUMN IF NOT EXISTS verdict_recorded_at  TIMESTAMPTZ; -- provenance: when (NULL = untested)
+ALTER TABLE library_items ADD COLUMN IF NOT EXISTS verdict_source       TEXT;        -- provenance: who/what tested
+
 -- pitches namespace: game-concept pitches (the Library "Pitches" collection).
 -- Written by the weekly kairos-iterate routine (token-gated POST /api/pitches, upsert on slug).
 -- Dated + classified so future batches stay cleanly grouped and sortable.
