@@ -80,6 +80,15 @@ export const poki: SourceAdapter = {
       }
     }
     if (!g) throw new Error("no getGame data in INITIAL_STATE");
+
+    // Promotion capture (#56) — free, no extra request. Every game page's INITIAL_STATE also
+    // carries a getHomepage(...) query whose `data.games` is the homepage grid as a flat
+    // ORDERED array, and the game object itself carries Poki's own `trending_rank` (absent
+    // when the game isn't trending). Both are personalized by geo/device — see RawGame.
+    const hpKey = Object.keys(queries).find((k) => k.startsWith("getHomepage"));
+    const homeGames: any[] = queries[hpKey ?? ""]?.data?.games ?? [];
+    const hpIndex = g.slug ? homeGames.findIndex((x: any) => x?.slug === g.slug) : -1;
+
     const cats: any[] = Array.isArray(g.categories) ? g.categories : [];
     const up = g.rating?.up_count ?? 0;
     const down = g.rating?.down_count ?? 0;
@@ -97,7 +106,9 @@ export const poki: SourceAdapter = {
       tags: cats.map((c) => c.title).filter(Boolean),
       rating: typeof g.rating?.rating === "number" ? g.rating.rating : null, // already 0-5
       votes: up + down || null,
-      featured: false,
+      featured: hpIndex >= 0,
+      homepagePosition: hpIndex >= 0 ? hpIndex + 1 : null,
+      trending: typeof g.trending_rank === "number",
     };
   },
 };
