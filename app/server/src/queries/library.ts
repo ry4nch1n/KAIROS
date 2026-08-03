@@ -11,6 +11,7 @@ import type {
 } from "shared";
 import { assertPitchInput, validateBriefPayload } from "../../../shared/src/contract.ts";
 import { num } from "./shared.ts";
+import { buildDemandTracker } from "./briefFamily.ts";
 
 // ── Brief ──
 export async function getBriefEditions(db: Querier): Promise<BriefEditionMeta[]> {
@@ -88,6 +89,10 @@ export async function setBriefSteering(db: Querier, flags: string[]): Promise<vo
   );
 }
 
+const parsePayload = (p: any) => (typeof p === "string" ? JSON.parse(p) : p);
+const isoDate = (d: any) =>
+  typeof d === "string" ? d.slice(0, 10) : new Date(d).toISOString().slice(0, 10);
+
 export async function getBriefEdition(
   db: Querier,
   editionDate: string,
@@ -98,8 +103,19 @@ export async function getBriefEdition(
   );
   if (!rows.length) return null;
   const r = rows[0];
-  const payload = typeof r.payload === "string" ? JSON.parse(r.payload) : r.payload;
+  const payload = parsePayload(r.payload);
+  // Previous edition of the same type — the only honest basis for the tracker's direction; absent
+  // (first edition) → buildDemandTracker omits direction rather than inventing "flat".
+  const [pr] = await db.query(
+    `SELECT edition_date, payload FROM brief_editions
+     WHERE brief_type = $1 AND edition_date < $2 ORDER BY edition_date DESC LIMIT 1`,
+    [r.brief_type, editionDate],
+  );
+  const prev = pr
+    ? { payload: parsePayload(pr.payload), editionDate: isoDate(pr.edition_date) }
+    : null;
   return {
+    tracker: buildDemandTracker(payload, prev),
     id: num(r.id),
     editionDate:
       typeof r.edition_date === "string"

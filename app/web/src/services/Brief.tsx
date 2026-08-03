@@ -3,6 +3,7 @@ import { useDrawer, NavToggle, NavScrim, DrawerClose } from "../components/Mobil
 import type { BriefEditionMeta, BriefEdition, BriefNotable, BriefSteering } from "shared";
 import { api } from "../lib/api.ts";
 import { isSameWeek } from "../lib/week.ts";
+import { rowSummary } from "../lib/briefTracker.ts";
 
 function fmt(date: string): string {
   return new Date(date + "T00:00:00Z").toLocaleDateString("en-US", {
@@ -110,6 +111,29 @@ function RichCard({ item, kind }: { item: BriefNotable; kind: "notable" | "brows
         )}
       </div>
     </article>
+  );
+}
+
+// The demand tracker (#12a) — this edition's own signals rolled up by loop family, sitting right
+// above the prose it summarises. Reuses the reference-card grid, already proven at 375px.
+function DemandTracker({ t }: { t: NonNullable<BriefEdition["tracker"]> }) {
+  return (
+    <>
+      <p style={{ fontSize: 13, color: "var(--text-2)", margin: "0 0 4px" }}>
+        {t.total} signals below, grouped by loop family — {t.tagged} placed by the curated map,{" "}
+        {t.total - t.tagged} unclassified (no family claimed)
+        {t.comparedTo ? `; arrows vs the ${fmt(t.comparedTo)} edition` : ""}.
+      </p>
+      <div className="ref-grid">
+        {t.rows.map((r) => (
+          <div className="ref-card" key={r.family ?? "_none"}>
+            <span className="rtag">{r.family ?? "unclassified"}</span>
+            <h4>{rowSummary(r)}</h4>
+            {r.titles.length > 0 && <div className="src">{r.titles.join(" · ")}</div>}
+          </div>
+        ))}
+      </div>
+    </>
   );
 }
 
@@ -248,6 +272,15 @@ export function Brief({ hidden }: { hidden: boolean }) {
                       </div>
                     ))}
                   </div>
+                </>
+              )}
+
+              {ed?.tracker && ed.tracker.rows.length > 0 && (
+                <>
+                  <div className="section-title">
+                    <span className="n">Σ</span>Loop-family demand
+                  </div>
+                  <DemandTracker t={ed.tracker} />
                 </>
               )}
 
