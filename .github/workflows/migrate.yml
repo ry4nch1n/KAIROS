@@ -5,6 +5,11 @@ name: Migrate DB
 on:
   workflow_dispatch: {}
 
+# The failure reporter below opens/updates an issue, so the default token needs issue write.
+permissions:
+  contents: read
+  issues: write
+
 jobs:
   migrate:
     runs-on: ubuntu-latest
@@ -21,3 +26,34 @@ jobs:
         run: npm run db:migrate
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
+      # Failure reporter (#30). This workflow is dispatched by the autonomous implement
+      # routine after a schema change lands, so a failure here means main carries columns
+      # Neon does not have — the deploy that follows would then serve code querying a
+      # missing column. That is worth more than an email nobody opens.
+      - name: Report failure to the issue backlog
+        if: failure()
+        working-directory: .
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          today=$(date -u +%Y-%m-%d)
+          {
+            echo "\`db:migrate\` failed against Neon on ${today}."
+            echo
+            echo "**Run:** ${RUN_URL}"
+            echo
+            echo "The migration is idempotent, so a rerun is safe once the cause is fixed."
+            echo "⚠️ Until it succeeds, \`main\` may carry schema additions Neon does not have — any deploy of that code will query columns that do not exist."
+            echo
+            echo "_Filed automatically by migrate.yml (#30). One issue is reused for repeat failures — close it once a migrate run is green._"
+          } > /tmp/migrate-failure.md
+          existing=$(gh issue list --repo "$GITHUB_REPOSITORY" --label crawl-failure --state open --limit 1 --json number --jq '.[0].number // empty')
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --repo "$GITHUB_REPOSITORY" --body-file /tmp/migrate-failure.md
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" \
+              --title "migrate: schema apply to Neon failed (${today})" \
+              --label crawl-failure --body-file /tmp/migrate-failure.md
+          fi

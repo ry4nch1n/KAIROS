@@ -4,6 +4,12 @@ on:
     - cron: "0 20 * * *" # 20:00 UTC = 04:00 SGT (UTC+8) daily
   workflow_dispatch: {} # lets you trigger a run by hand from the Actions tab
 
+# The failure reporter below opens/updates an issue, so the default token needs issue write.
+# contents:read is the least-privilege default that checkout still needs.
+permissions:
+  contents: read
+  issues: write
+
 # ── Actions budget ──
 # This repo is PUBLIC, so standard GitHub-hosted runners (ubuntu-latest, used here) are FREE
 # and UNMETERED — there is no monthly minute cap. (GitHub's 2,000-min/month Free-tier cap
@@ -28,21 +34,25 @@ jobs:
         with:
           node-version: "22"
       - run: npm install
-      - name: Ensure Neon schema is current (idempotent — adds Phase 2 Steam columns)
+      - id: migrate
+        name: Ensure Neon schema is current (idempotent — adds Phase 2 Steam columns)
         run: npm run db:migrate
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-      - name: Crawl CrazyGames into Neon (append-only snapshot)
+      - id: crazygames
+        name: Crawl CrazyGames into Neon (append-only snapshot)
         run: npm run crawl:crazygames
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           CRAWL_LIMIT: "250"
-      - name: Crawl Poki into Neon (append-only snapshot)
+      - id: poki
+        name: Crawl Poki into Neon (append-only snapshot)
         run: npm run crawl:poki
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           CRAWL_LIMIT: "250"
-      - name: Crawl Steam (PC) into Neon (append-only snapshot)
+      - id: steam
+        name: Crawl Steam (PC) into Neon (append-only snapshot)
         run: npm run crawl:steam
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
@@ -51,7 +61,67 @@ jobs:
       # data (empty indie seed → all-AAA, broken date parser → null dates, collapsed
       # comparables). Append-only load already happened, so this detects rather than prevents —
       # but a red run surfaces the silent-bad-data failure mode that "green crawl" would hide.
-      - name: Steam data-quality gate (recency + accuracy)
+      - id: gate
+        name: Steam data-quality gate (recency + accuracy)
         run: npm run check:steam
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
+      # ── Failure reporter (#30) ─────────────────────────────────────────────
+      # A silent crawl failure can go unnoticed for days: the only prior signal was
+      # GitHub's default workflow-failure email, which is easy to miss. This raises the
+      # failure where the weekly routines already look — the issue backlog.
+      # Deliberately uses the built-in GITHUB_TOKEN, so there is no webhook secret and no
+      # external service to rot. It UPDATES one open issue rather than filing a new one per
+      # run: a crawl that breaks stays broken, and a daily schedule would otherwise open an
+      # issue every day until someone noticed the pile.
+      - name: Report failure to the issue backlog
+        if: failure()
+        working-directory: .
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          F_MIGRATE: ${{ steps.migrate.outcome }}
+          F_CRAZY: ${{ steps.crazygames.outcome }}
+          F_POKI: ${{ steps.poki.outcome }}
+          F_STEAM: ${{ steps.steam.outcome }}
+          F_GATE: ${{ steps.gate.outcome }}
+        run: |
+          today=$(date -u +%Y-%m-%d)
+          # Note: no `cmd && assignment` here. Actions runs bash with -e, and an AND-list
+          # whose test is false exits non-zero — which would fail the reporter itself on
+          # every run where the FIRST step happened to be the green one.
+          {
+            echo "The daily crawl failed on ${today}."
+            echo
+            echo "**Failed step(s):**"
+            any=no
+            for pair in "migrate=${F_MIGRATE}" "crawl:crazygames=${F_CRAZY}" \
+                        "crawl:poki=${F_POKI}" "crawl:steam=${F_STEAM}" "check:steam=${F_GATE}"; do
+              name=${pair%%=*}
+              outcome=${pair##*=}
+              if [ "$outcome" = "failure" ]; then
+                echo "- \`${name}\`"
+                any=yes
+              fi
+            done
+            if [ "$any" = "no" ]; then
+              echo "- _(no step reported failure — the job itself died: cancelled, timed out, or the runner was lost)_"
+            fi
+            echo
+            echo "**Run:** ${RUN_URL}"
+            echo
+            echo "Loads are append-only, so a partial crawl leaves earlier snapshots intact — but this day may be missing or degenerate. If \`check:steam\` is the failing step the data was already written and the gate caught it after the fact, so the bad rows are in the table."
+            echo
+            echo "_Filed automatically by crawl.yml (#30). One issue is reused for repeat failures — close it once the crawl is green again._"
+          } > /tmp/crawl-failure.md
+          existing=$(gh issue list --repo "$GITHUB_REPOSITORY" --label crawl-failure --state open --limit 1 --json number --jq '.[0].number // empty')
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --repo "$GITHUB_REPOSITORY" --body-file /tmp/crawl-failure.md
+            echo "commented on existing #${existing}"
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" \
+              --title "crawl: Daily Crawl failed (${today})" \
+              --label crawl-failure --body-file /tmp/crawl-failure.md
+          fi
+
