@@ -283,7 +283,10 @@ textarea {
   top: 9px;
   width: 4px;
   height: 26px;
-  border-radius: 0 4px 4px 0;
+  /* A capsule cap on a 4px-wide bar. CSS clamps a corner radius to half the box,
+     so --r-pill renders identically to the 4px literal this replaces — the token
+     just says what the shape IS. */
+  border-radius: 0 var(--r-pill) var(--r-pill) 0;
   background: #60a5fa;
 }
 .rail-btn::after {
@@ -2200,7 +2203,7 @@ textarea {
     transform: translateX(-50%);
     width: 22px;
     height: 3px;
-    border-radius: 0 0 4px 4px;
+    border-radius: 0 0 var(--r-pill) var(--r-pill);
   }
 
   /* per-service sub-nav → slide-in drawer */
