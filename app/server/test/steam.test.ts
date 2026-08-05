@@ -324,7 +324,7 @@ function steamGame(o: Partial<RawGame> & { sourceGameId: string }): RawGame {
   return {
     url: `https://store.steampowered.com/app/${o.sourceGameId}`,
     title: o.title ?? `Game ${o.sourceGameId}`,
-    thumbnailUrl: null,
+    thumbnailUrl: o.thumbnailUrl ?? null,
     developer: o.developer ?? "Dev",
     description: null,
     engine: null,
@@ -865,6 +865,64 @@ describe("D12 getSteamComparables", () => {
     expect(c.every((r) => r.tier !== "aaa")).toBe(true); // AAA excluded
     expect(c.every((r) => r.rating !== null)).toBe(true); // only rated
     expect(c.length).toBe(3);
+  });
+});
+
+// The capsule is the only reason Radar can look like it is about games rather than
+// about rows. It is not new data — the crawler has always written appdetails
+// `header_image` into games.thumbnail_url — so this pins the plumbing that exposes
+// it, and pins that a game without one yields null rather than a broken image URL.
+describe("D12e comparables carry the Steam header capsule (contract v17)", () => {
+  it("surfaces the crawled thumbnail as capsuleUrl, and null when there is none", async () => {
+    const db = await freshMemoryDb();
+    await loadGames(
+      db,
+      "steam",
+      STEAM_BASE_URL,
+      [
+        steamGame({
+          sourceGameId: "withart",
+          title: "With Art",
+          releaseDate: "2025-03-01",
+          ownersEst: 90_000,
+          thumbnailUrl: "https://cdn.example/header_withart.jpg",
+        }),
+        steamGame({
+          sourceGameId: "noart",
+          title: "No Art",
+          releaseDate: "2025-02-01",
+          ownersEst: 90_000,
+        }),
+      ],
+      "2026-06-30T00:00:00.000Z",
+    );
+    const rows = await q.getSteamComparables(db, 10);
+    const withArt = rows.find((r) => r.title === "With Art");
+    const noArt = rows.find((r) => r.title === "No Art");
+    expect(withArt?.capsuleUrl).toBe("https://cdn.example/header_withart.jpg");
+    expect(noArt?.capsuleUrl).toBeNull();
+  });
+
+  it("carries the capsule onto new releases too", async () => {
+    const db = await freshMemoryDb();
+    await loadGames(
+      db,
+      "steam",
+      STEAM_BASE_URL,
+      [
+        steamGame({
+          sourceGameId: "fresh",
+          title: "Fresh Drop",
+          releaseDate: "2026-06-01",
+          thumbnailUrl: "https://cdn.example/header_fresh.jpg",
+        }),
+      ],
+      "2026-06-30T00:00:00.000Z",
+    );
+    const rows = await q.getSteamNewReleases(db);
+    expect(rows.find((r) => r.title === "Fresh Drop")?.capsuleUrl).toBe(
+      "https://cdn.example/header_fresh.jpg",
+    );
   });
 });
 

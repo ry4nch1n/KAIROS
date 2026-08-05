@@ -9,7 +9,7 @@ const BASE_WEEK_NO = 15; // labels W15..W26
 const BASE_DATE = Date.UTC(2026, 5, 26); // 2026-06-26 (latest week)
 
 function mulberry32(seed: number) {
-  return function () {
+  return () => {
     seed |= 0;
     seed = (seed + 0x6d2b79f5) | 0;
     let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
@@ -181,9 +181,7 @@ export async function seed(db: Querier): Promise<void> {
       // hidden-gem injection: ~ first 4 games per source -> high rating, low votes, never featured
       const isGem = idx <= 4;
       const debut = !isGem && rng() < 0.18 ? 6 + Math.floor(rng() * 6) : 0; // some games debut mid-window
-      const baseVotes = isGem
-        ? Math.floor(200 + rng() * 2500)
-        : Math.floor(Math.pow(10, 2 + rng() * 4)); // 100 .. ~1,000,000
+      const baseVotes = isGem ? Math.floor(200 + rng() * 2500) : Math.floor(10 ** (2 + rng() * 4)); // 100 .. ~1,000,000
       const baseRating = isGem ? 4.5 + rng() * 0.45 : 3.4 + rng() * 1.5;
       const slug = `${genre.toLowerCase().replace(/[^a-z]/g, "")}-${src.name}-${idx}`;
       const game = await one(
@@ -359,6 +357,374 @@ export async function seed(db: Querier): Promise<void> {
   // library_items: seed the curated Prototypes collection (idempotent inserter,
   // shared with the prod migrate path so local and Neon stay in sync).
   await ensureLibraryPrototypes(db);
+
+  await seedSteam(db, ensureTag);
+}
+
+// Steam is Radar's DEFAULT panel, and the seed used to contain no Steam rows at
+// all — so every local `npm run dev` opened on an empty dashboard and none of the
+// Steam surfaces (comparables, tier mix, genre economics, quadrant, new releases)
+// could be developed or reviewed without a live Neon connection.
+//
+// This is sample data, not a capture: titles are invented and the capsule URLs
+// point at Steam's real CDN path shape but at appids chosen for the sample, so a
+// few may not resolve — that is deliberate, because it also exercises the plate's
+// missing-art fallback. Deterministic: fixed appids, fixed dates, no RNG.
+async function seedSteam(db: Querier, ensureTag: (name: string) => Promise<number>): Promise<void> {
+  const srcRow = await one(db, "INSERT INTO sources(name, base_url) VALUES ($1,$2) RETURNING id", [
+    "steam",
+    "https://store.steampowered.com",
+  ]);
+  const sourceId = srcRow.id as number;
+
+  // Two snapshot dates so review velocity and demand trajectory have a delta to
+  // compute from; a single snapshot would make every momentum signal read "new".
+  const snapDates = [weekDate(WEEKS - 2), weekDate(WEEKS - 1)];
+  const crawlIds: number[] = [];
+  for (const d of snapDates) {
+    const c = await one(
+      db,
+      "INSERT INTO crawls(source_id, started_at, finished_at, status, games_seen) VALUES ($1,$2,$2,'ok',0) RETURNING id",
+      [sourceId, d],
+    );
+    crawlIds.push(c.id);
+  }
+
+  // [appid, title, genre, tags, tier, releaseDate, owners, priceCents, rating, votes, aiDisclosed]
+  const ROWS: [
+    number,
+    string,
+    string,
+    string[],
+    string,
+    string,
+    number,
+    number,
+    number,
+    number,
+    boolean | null,
+  ][] = [
+    [
+      1,
+      "Deckbound Hollow",
+      "Strategy",
+      ["Deckbuilding", "Roguelike"],
+      "small_indie",
+      "2026-04-18",
+      180_000,
+      1999,
+      4.6,
+      4_200,
+      false,
+    ],
+    [
+      2,
+      "Tidewright",
+      "Simulation",
+      ["Crafting", "Relaxing"],
+      "small_indie",
+      "2026-03-02",
+      120_000,
+      1699,
+      4.4,
+      2_800,
+      false,
+    ],
+    [
+      3,
+      "Nine Lanterns",
+      "Adventure",
+      ["Story Rich", "Atmospheric"],
+      "hobby",
+      "2026-05-21",
+      34_000,
+      1299,
+      4.2,
+      610,
+      null,
+    ],
+    [
+      4,
+      "Grist & Gearworks",
+      "Simulation",
+      ["Automation", "Base Building"],
+      "est_indie",
+      "2025-11-12",
+      420_000,
+      2499,
+      4.7,
+      11_500,
+      false,
+    ],
+    [
+      5,
+      "Pale Harbour",
+      "Adventure",
+      ["Mystery", "Atmospheric"],
+      "small_indie",
+      "2026-01-29",
+      95_000,
+      1499,
+      4.1,
+      1_900,
+      true,
+    ],
+    [
+      6,
+      "Ember Circuit",
+      "Action",
+      ["Roguelike", "Bullet Hell"],
+      "small_indie",
+      "2026-02-14",
+      210_000,
+      1299,
+      4.5,
+      5_400,
+      false,
+    ],
+    [
+      7,
+      "Hollowfield",
+      "Strategy",
+      ["Turn-Based", "Tactics"],
+      "hobby",
+      "2026-06-03",
+      26_000,
+      999,
+      3.9,
+      240,
+      null,
+    ],
+    [
+      8,
+      "Saltmarsh Rally",
+      "Racing",
+      ["Arcade", "Physics"],
+      "hobby",
+      "2026-05-08",
+      41_000,
+      899,
+      4.0,
+      380,
+      null,
+    ],
+    [
+      9,
+      "The Long Kiln",
+      "Simulation",
+      ["Crafting", "Cozy"],
+      "small_indie",
+      "2025-12-04",
+      145_000,
+      1799,
+      4.5,
+      3_300,
+      false,
+    ],
+    [
+      10,
+      "Vesper Line",
+      "Action",
+      ["Shooter", "Co-op"],
+      "est_indie",
+      "2025-09-19",
+      610_000,
+      2999,
+      4.3,
+      18_200,
+      false,
+    ],
+    [
+      11,
+      "Quarry & Crown",
+      "Strategy",
+      ["City Builder", "Management"],
+      "small_indie",
+      "2026-03-27",
+      88_000,
+      2199,
+      4.2,
+      1_450,
+      false,
+    ],
+    [
+      12,
+      "Moth & Marrow",
+      "Adventure",
+      ["Horror", "Story Rich"],
+      "hobby",
+      "2026-06-11",
+      19_000,
+      1099,
+      4.4,
+      130,
+      true,
+    ],
+    [
+      13,
+      "Stonebrook Fair",
+      "Simulation",
+      ["Cozy", "Farming"],
+      "small_indie",
+      "2026-02-26",
+      165_000,
+      1599,
+      4.6,
+      3_900,
+      false,
+    ],
+    [
+      14,
+      "Iron Antiphon",
+      "Strategy",
+      ["Deckbuilding", "Tactics"],
+      "small_indie",
+      "2025-10-30",
+      132_000,
+      1899,
+      4.3,
+      2_600,
+      false,
+    ],
+    [
+      15,
+      "Nightjar Protocol",
+      "Action",
+      ["Stealth", "Immersive Sim"],
+      "est_indie",
+      "2026-01-15",
+      355_000,
+      2799,
+      4.5,
+      9_100,
+      false,
+    ],
+    [
+      16,
+      "Wanderlight",
+      "Adventure",
+      ["Exploration", "Relaxing"],
+      "hobby",
+      "2026-05-29",
+      22_000,
+      799,
+      4.1,
+      95,
+      null,
+    ],
+    [
+      17,
+      "Grand Meridian",
+      "Strategy",
+      ["4X", "Turn-Based"],
+      "aaa",
+      "2025-08-21",
+      2_400_000,
+      5999,
+      4.4,
+      62_000,
+      false,
+    ],
+    [
+      18,
+      "Cascade Foundry",
+      "Simulation",
+      ["Automation", "Puzzle"],
+      "small_indie",
+      "2026-04-02",
+      108_000,
+      1999,
+      4.7,
+      2_100,
+      false,
+    ],
+    [
+      19,
+      "Ashen Ledger",
+      "Adventure",
+      ["Story Rich", "Choices Matter"],
+      "hobby",
+      "2026-06-18",
+      12_000,
+      1399,
+      4.0,
+      58,
+      true,
+    ],
+    [
+      20,
+      "Verdant Reach",
+      "Simulation",
+      ["Farming", "Multiplayer"],
+      "aaa",
+      "2025-07-10",
+      3_100_000,
+      4999,
+      4.2,
+      88_000,
+      false,
+    ],
+  ];
+
+  for (const [
+    appid,
+    title,
+    genre,
+    tags,
+    tier,
+    releaseDate,
+    owners,
+    priceCents,
+    rating,
+    votes,
+    ai,
+  ] of ROWS) {
+    const g = await one(
+      db,
+      `INSERT INTO games(source_id, source_game_id, url, title, thumbnail_url, developer, release_date, first_seen_at, last_seen_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id`,
+      [
+        sourceId,
+        String(appid),
+        `https://store.steampowered.com/app/${appid}`,
+        title,
+        // Steam's real capsule path shape. Sample appids, so some will 404 —
+        // which is the point: the plate must degrade to its fallback, not break.
+        `https://cdn.akamai.steamstatic.com/steam/apps/${appid}/header.jpg`,
+        `Studio ${(appid % 7) + 1}`,
+        releaseDate,
+        snapDates[0],
+        snapDates[1],
+      ],
+    );
+    for (const t of tags) {
+      await db.query(
+        "INSERT INTO game_tags(game_id, tag_id) VALUES ($1,$2) ON CONFLICT DO NOTHING",
+        [g.id, await ensureTag(t)],
+      );
+    }
+    for (let i = 0; i < snapDates.length; i++) {
+      await db.query(
+        `INSERT INTO game_snapshots(game_id, crawl_id, captured_at, rating, votes, featured, genre,
+                                    price_cents, owners_est, ccu, scale_tier, ai_disclosure)
+         VALUES ($1,$2,$3,$4,$5,false,$6,$7,$8,$9,$10,$11)`,
+        [
+          g.id,
+          crawlIds[i],
+          snapDates[i],
+          rating,
+          // second snapshot gains reviews so reviewVelocity is a real rate
+          i === 0 ? Math.round(votes * 0.88) : votes,
+          genre,
+          priceCents,
+          owners,
+          Math.max(10, Math.round(owners / 900)),
+          tier,
+          ai,
+        ],
+      );
+    }
+  }
 }
 
 export { weekLabels };

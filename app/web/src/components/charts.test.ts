@@ -8,6 +8,7 @@ import {
   momentumOption,
   treemapOption,
   tierBarOption,
+  PALETTE,
 } from "./charts.ts";
 import type {
   ScatterPoint,
@@ -32,8 +33,8 @@ describe("quadrantOption", () => {
     const data = opt.series[0].data;
     expect(data).toHaveLength(3);
     expect(data[0].value.slice(0, 2)).toEqual([20, 1500]);
-    expect(data[1].itemStyle.color).toContain("c2620a"); // rising = amber
-    expect(data[0].itemStyle.color).toContain("059669"); // quiet = green
+    expect(data[1].itemStyle.color).toContain(PALETTE.attention.slice(1)); // rising = crowding
+    expect(data[0].itemStyle.color).toContain(PALETTE.positive.slice(1)); // quiet = clean opening
   });
   it("draws a median cross so the underserved quadrant is readable", () => {
     const ml = opt.series[0].markLine.data;
@@ -96,17 +97,17 @@ describe("velocityBarOption", () => {
     expect(opt.xAxis.type).toBe("value");
   });
 
-  it("positive-velocity bar uses green #059669", () => {
+  it("positive-velocity bar uses the positive verdict colour", () => {
     // bars are reversed in the fn; Racing(5) becomes index 0, Puzzle(-30) index 1, Action(120) index 2
     const seriesData = opt.series[0].data;
     const actionBar = seriesData.find((d: any) => d.value === 120);
-    expect(actionBar.itemStyle.color).toBe("#059669");
+    expect(actionBar.itemStyle.color).toBe(PALETTE.positive);
   });
 
-  it("negative-velocity bar uses red #dc2626", () => {
+  it("negative-velocity bar uses the negative verdict colour", () => {
     const seriesData = opt.series[0].data;
     const puzzleBar = seriesData.find((d: any) => d.value === -30);
-    expect(puzzleBar.itemStyle.color).toBe("#dc2626");
+    expect(puzzleBar.itemStyle.color).toBe(PALETTE.negative);
   });
 });
 
@@ -256,12 +257,12 @@ describe("tierBarOption", () => {
     expect(opt.xAxis.type).toBe("value");
   });
 
-  it("AAA bar is grey, indie bars are blue", () => {
+  it("AAA is context colour, the indie cohort is the focus colour", () => {
     const data = opt.series[0].data;
     const aaa = data.find((d: any) => d.name === "aaa");
     const hobby = data.find((d: any) => d.name === "hobby");
-    expect(aaa.itemStyle.color).toBe("#cbd5e1");
-    expect(hobby.itemStyle.color).toBe("#2563eb");
+    expect(aaa.itemStyle.color).toBe(PALETTE.contextFill);
+    expect(hobby.itemStyle.color).toBe(PALETTE.focus);
   });
 
   it("includes every tier and its count", () => {

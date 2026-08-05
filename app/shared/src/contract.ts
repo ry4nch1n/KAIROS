@@ -66,7 +66,14 @@ export const CONTRACT = {
   //      `SteamOverview` gained `steering` (SteeringLens: flags in play, which applied, which
   //      matched NOTHING, rows lifted, weight). No flags set → the ranking is identical to v15.
   //      Browser `Overview.gaps` is NOT steered yet (same helper, follow-up). Additive.
-  version: 16,
+  // v17: `SteamComparable` and `SteamNewRelease` gained `capsuleUrl` — the game's Steam header
+  //      capsule, already crawled into games.thumbnail_url (the appdetails `header_image`) but
+  //      never exposed. A market-intelligence tool for GAMES could not show you the game: the
+  //      only surface carrying cover art was the Library pitch card, so Radar read as a generic
+  //      spreadsheet. Rendering the capsule in the Game column also makes a row identifiable by
+  //      recognition instead of by reading a title string. Nullable — a game with no crawled
+  //      thumbnail renders the bare plate. Additive; read defensively.
+  version: 17,
   pitch: {
     // v2: added visual-card fields — setting, artStyle, codeName, headerUrl, shotUrl.
     // v3: rating rework — scoreFields d1Fit/steamCeiling/buildCost → browserFit/steamFit/buildEase.

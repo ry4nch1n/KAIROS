@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useDrawer, NavToggle, NavScrim, DrawerClose } from "../components/MobileNav.tsx";
+import { Capsule } from "../components/Capsule.tsx";
 import type {
   Overview,
   Platform,
@@ -1148,7 +1149,12 @@ function NewReleasesTable({ rows }: { rows: SteamNewRelease[] }) {
       <tbody>
         {rows.map((r, i) => (
           <tr key={i}>
-            <td className="gname">{r.title}</td>
+            <td className="gname">
+              <span className="gamecell">
+                <Capsule url={r.capsuleUrl} title={r.title} />
+                <span>{r.title}</span>
+              </span>
+            </td>
             <td className="r">{r.releaseDate ?? "—"}</td>
             <td>{r.genre}</td>
             <td className="r">{rate(r.rating)}</td>
@@ -1249,7 +1255,12 @@ function ComparablesTable({
           const meta = ts ? TEAM_META[ts.bucket] : null;
           return (
             <tr key={i}>
-              <td className="gname">{c.title}</td>
+              <td className="gname">
+                <span className="gamecell">
+                  <Capsule url={c.capsuleUrl} title={c.title} />
+                  <span>{c.title}</span>
+                </span>
+              </td>
               <td>
                 <span className={"tier-chip " + tm.cls}>{tm.label}</span>
               </td>

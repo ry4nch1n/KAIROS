@@ -531,7 +531,8 @@ export function recencyBand(releaseDate: string | Date | null | undefined): stri
 export async function getSteamComparables(db: Querier, limit = 12): Promise<SteamComparable[]> {
   const candidates = await db.query(
     `SELECT g.id AS id, g.title, l.scale_tier AS tier, ${canonSql("l.genre")} AS genre, l.rating, l.votes,
-            l.owners_est AS owners, l.price_cents AS price, g.developer, g.release_date, l.ai_disclosure
+            l.owners_est AS owners, l.price_cents AS price, g.developer, g.release_date, l.ai_disclosure,
+            g.thumbnail_url AS capsule_url
      FROM v_latest l JOIN games g ON g.id = l.game_id JOIN sources src ON src.id = g.source_id
      WHERE g.is_live AND src.name = 'steam' AND l.rating IS NOT NULL
        AND (l.scale_tier IS NULL OR l.scale_tier <> 'aaa')
@@ -576,6 +577,8 @@ export async function getSteamComparables(db: Querier, limit = 12): Promise<Stea
       // Tri-state (#110): true = discloses AI content, false = checked & doesn't, null = not
       // checked (outside the gated recent-non-AAA fetch cohort) or the store-page fetch failed.
       aiDisclosure: r.ai_disclosure == null ? null : Boolean(r.ai_disclosure),
+      // Steam header capsule, already crawled. null renders the bare plate, not a broken image.
+      capsuleUrl: r.capsule_url ?? null,
       teamSize: ts
         ? {
             bucket: ts.bucket,
@@ -690,7 +693,7 @@ export function newReleaseTraction(
 
 export async function getSteamNewReleases(db: Querier): Promise<SteamNewRelease[]> {
   const rows = await db.query(
-    `SELECT g.title, ${canonSql("l.genre")} AS genre, l.scale_tier AS tier, l.rating, l.votes, l.owners_est AS owners, l.price_cents AS price, g.release_date
+    `SELECT g.title, ${canonSql("l.genre")} AS genre, l.scale_tier AS tier, l.rating, l.votes, l.owners_est AS owners, l.price_cents AS price, g.release_date, g.thumbnail_url AS capsule_url
      FROM v_latest l JOIN games g ON g.id = l.game_id JOIN sources src ON src.id = g.source_id
      WHERE g.is_live AND src.name = 'steam' AND g.release_date IS NOT NULL
        AND (l.scale_tier IS NULL OR l.scale_tier <> 'aaa')
@@ -709,6 +712,7 @@ export async function getSteamNewReleases(db: Querier): Promise<SteamNewRelease[
       owners: r.owners == null ? null : num(r.owners),
       priceCents: r.price == null ? null : num(r.price),
       releaseDate,
+      capsuleUrl: r.capsule_url ?? null,
       ...newReleaseTraction(votes, releaseDate),
     };
   });

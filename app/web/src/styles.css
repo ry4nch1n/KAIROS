@@ -1018,14 +1018,74 @@ textarea {
   border-radius: var(--r-lg);
 }
 
+/* ── The plate ─────────────────────────────────────────────────────────────────
+   Any Steam capsule, screenshot or generated key art mounts on --plate. It is
+   NOT a theme and never spreads to chrome: it is the one dark surface in a light
+   app, and it exists so artwork has a consistent ground to sit on.
+
+   This started as a Library-only treatment on the pitch card. Promoting it to a
+   law is what lets Radar carry game texture without a second colour scheme —
+   Radar and Library stay consistent because they share the RULE, not because
+   they look the same. The plate is the component; the art is its content, so a
+   missing image leaves a plate, never a broken image. */
+.plate {
+  background: var(--plate);
+  box-shadow: inset 0 0 0 1px var(--plate-edge);
+  border-radius: var(--r-md);
+  overflow: hidden;
+  flex: none;
+  line-height: 0;
+  display: grid;
+  place-items: center;
+}
+.plate img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+}
+/* Fallback when a game has no crawled capsule: the title's initial, set in the
+   mono voice so it reads as a placeholder rather than as art. */
+.plate-fallback {
+  font-family: "Fira Code";
+  font-size: var(--fs-1);
+  font-weight: 600;
+  color: #7d8ba4;
+  line-height: 1;
+}
+/* Row-scale capsule for dense tables. 46×22 keeps the Steam header's ~2:1 crop
+   recognisable at the smallest size a table row can carry. */
+.plate-xs {
+  width: 46px;
+  height: 22px;
+}
+.plate-sm {
+  width: 92px;
+  height: 43px;
+}
+/* The Game cell pairs the plate with the title; the title still carries the
+   meaning, the capsule makes the row findable by recognition. */
+.gamecell {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-width: 0;
+}
+.gamecell > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* --- Library: pitch cards --- */
 .pcard {
   padding: var(--sp-4) var(--sp-4) var(--sp-4);
 }
+/* The pitch card's 16:9 hero — the original plate, now expressed in the tokens. */
 .pcapsule {
-  margin: -16px -18px 13px;
+  margin: calc(var(--sp-4) * -1) calc(var(--sp-4) * -1) var(--sp-3);
   line-height: 0;
-  background: #0b0f16;
+  background: var(--plate);
   border-bottom: 1px solid var(--border-soft);
 }
 .pcapsule img {
@@ -1832,6 +1892,30 @@ textarea {
      explorer tables). See #135. */
   .grid > * {
     min-width: 0;
+  }
+  /* Same defect, second container: a card sitting DIRECTLY in .content is a
+     column-flex item, and flex items carry the identical `min-width: auto`.
+     It only surfaced once the Game column grew a 46px capsule, which pushed the
+     full-width tables (Studios & Releases) past 375px min-content. */
+  .content > *,
+  .card {
+    min-width: 0;
+  }
+  /* The platform selector is four segmented buttons on one row and it is the
+     tightest horizontal budget in the app. The spacing scale's 16px side padding
+     is correct for a comfortable control but overruns 375px across four of them,
+     so here the buttons drop to the next step down and the group may wrap. This
+     is the one place density beats the ladder — and it is bounded to the
+     control, not a general exception. */
+  .seg-group {
+    flex-wrap: wrap;
+    min-width: 0;
+  }
+  .seg {
+    flex-wrap: wrap;
+  }
+  .seg-btn {
+    padding: var(--sp-2) var(--sp-3);
   }
 }
 
