@@ -46,10 +46,15 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: main
           fetch-depth: 0 # need full history + tags to compare against `live`
+          # The `live` tag push at the end of this job uses the credentials this
+          # step leaves behind. checkout v6 changed WHERE those are stored (a
+          # separate file rather than .git/config), so the dependency is stated
+          # here rather than relying on a default that has already moved once.
+          persist-credentials: true
 
       - name: Check for undeployed changes
         id: check
@@ -78,7 +83,7 @@ jobs:
             echo "::notice::main is ahead of live — deploying."
           fi
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         if: steps.check.outputs.changed == 'true'
         with:
           node-version: "22"
