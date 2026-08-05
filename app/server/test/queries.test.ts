@@ -19,7 +19,9 @@ describe("A2 seed integrity", () => {
     const games = await db.query("SELECT count(*)::int n FROM games");
     expect(games[0].n).toBeGreaterThan(50);
     const srcs = await db.query("SELECT name FROM sources ORDER BY name");
-    expect(srcs.map((r) => r.name)).toEqual(["crazygames", "poki"]);
+    // steam joined the seed so Radar's DEFAULT panel is developable locally —
+    // before that, every local `npm run dev` opened on an empty dashboard.
+    expect(srcs.map((r) => r.name)).toEqual(["crazygames", "poki", "steam"]);
     const tags = await db.query("SELECT count(*)::int n FROM tags");
     expect(tags[0].n).toBeGreaterThan(0);
   });
@@ -171,10 +173,21 @@ describe("A_explorer queries", () => {
   it("new releases respects the first_seen 14-day window", async () => {
     const nr = await q.getNewReleases(db, "all");
     const total = (await db.query("SELECT count(*)::int n FROM games"))[0].n;
+    // The control query must carry the SAME platform predicate as the query it
+    // checks. "all" means browser-only, and the 14-day anchor is scoped to that
+    // catalog on purpose — an unscoped max(first_seen_at) lets one source's crawl
+    // recency set another's window, which is the exact defect newAnchor() guards
+    // against. This assertion silently relied on the seed being browser-only until
+    // steam was added to it.
+    const BROWSER = "AND src.name IN ('poki','crazygames')";
     const inWindow = (
       await db.query(
         `SELECT count(DISTINCT g.id)::int n FROM games g JOIN v_latest l ON l.game_id=g.id
-       WHERE g.is_live AND g.first_seen_at >= (SELECT max(first_seen_at) FROM games) - interval '14 days'`,
+         JOIN sources src ON src.id = g.source_id
+       WHERE g.is_live ${BROWSER} AND g.first_seen_at >= (
+         SELECT max(g2.first_seen_at) FROM games g2 JOIN sources src2 ON src2.id = g2.source_id
+         WHERE g2.is_live AND src2.name IN ('poki','crazygames')
+       ) - interval '14 days'`,
       )
     )[0].n;
     expect(nr.length).toBeGreaterThan(0);

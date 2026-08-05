@@ -1,5 +1,15 @@
 import { useEffect, useState } from "react";
-import { useDrawer, NavToggle, NavScrim, DrawerClose } from "../components/MobileNav.tsx";
+import {
+  useDrawer,
+  useIsDrawer,
+  drawerPanelProps,
+  NavToggle,
+  NavScrim,
+  DrawerClose,
+} from "../components/MobileNav.tsx";
+import { TabList } from "../components/Tabs.tsx";
+import { Handoff } from "../components/Handoff.tsx";
+import type { Service } from "../components/Rail.tsx";
 import {
   DAYS_PER_MONTH,
   targetBandUsd,
@@ -77,28 +87,18 @@ type Mode = "browser" | "steam";
  *  seg tucked in the far corner. */
 function ModeSeg({ mode, setMode }: { mode: Mode; setMode: (m: Mode) => void }) {
   return (
-    <div className="platform-groups" role="tablist" aria-label="Platform">
-      <div className="seg-group">
-        <span className="seg-group-label">Platform</span>
-        <div className="seg">
-          <button
-            className={"seg-btn" + (mode === "browser" ? " active" : "")}
-            role="tab"
-            aria-selected={mode === "browser"}
-            onClick={() => setMode("browser")}
-          >
-            <span className="dot all"></span>Browser
-          </button>
-          <button
-            className={"seg-btn" + (mode === "steam" ? " active" : "")}
-            role="tab"
-            aria-selected={mode === "steam"}
-            onClick={() => setMode("steam")}
-          >
-            <span className="dot steam"></span>Steam
-          </button>
-        </div>
-      </div>
+    <div className="platform-groups">
+      <TabList
+        groupLabel="Platform"
+        label="Platform"
+        panelId="revenue-panel"
+        value={mode}
+        onChange={setMode}
+        tabs={[
+          { id: "browser" as Mode, label: "Browser" },
+          { id: "steam" as Mode, label: "Steam" },
+        ]}
+      />
     </div>
   );
 }
@@ -107,10 +107,12 @@ export function Revenue({
   hidden,
   seed,
   onClearSeed,
+  onGoto,
 }: {
   hidden: boolean;
   seed?: RevenueSeed | null;
   onClearSeed?: () => void;
+  onGoto?: (svc: Service) => void;
 }) {
   const [mode, setMode] = useState<Mode>("browser");
   // A comparable projected from Radar is a Steam anchor — front the Steam panel for it.
@@ -127,7 +129,13 @@ export function Revenue({
   return (
     <section className="service" data-svc="revenue" hidden={hidden}>
       {mode === "browser" ? (
-        <BrowserPanel mode={mode} setMode={setMode} target={target} setTarget={setTarget} />
+        <BrowserPanel
+          mode={mode}
+          setMode={setMode}
+          target={target}
+          setTarget={setTarget}
+          onGoto={onGoto}
+        />
       ) : (
         <SteamPanel
           mode={mode}
@@ -135,6 +143,7 @@ export function Revenue({
           seed={seed}
           onClearSeed={onClearSeed}
           target={target}
+          onGoto={onGoto}
         />
       )}
     </section>
@@ -147,13 +156,16 @@ function BrowserPanel({
   setMode,
   target,
   setTarget,
+  onGoto,
 }: {
   mode: Mode;
   setMode: (m: Mode) => void;
   target: TargetBand | null;
   setTarget: (t: TargetBand | null) => void;
+  onGoto?: (svc: Service) => void;
 }) {
   const drawer = useDrawer();
+  const isDrawer = useIsDrawer();
   const [ads, setAds] = useState<BrowserAdInputs>(BROWSER_AD_DEFAULTS);
   const [rate, setRate] = useState(DEFAULT_SGD_PER_USD);
   const set = (k: keyof BrowserAdInputs) => (n: number) => setAds((a) => ({ ...a, [k]: n }));
@@ -187,6 +199,7 @@ function BrowserPanel({
   return (
     <>
       <aside
+        {...drawerPanelProps(drawer, isDrawer, "Revenue sections")}
         className={"side" + (drawer.open ? " open" : "")}
         onClick={(e) => {
           if ((e.target as HTMLElement).closest(".nav-item")) drawer.closeDrawer();
@@ -208,13 +221,13 @@ function BrowserPanel({
       <main className="main">
         <div className="topbar">
           <NavToggle onClick={drawer.openDrawer} />
-          <h2>
+          <h1>
             Revenue Model <small>project browser income against your monthly target</small>
-          </h2>
+          </h1>
           <ModeSeg mode={mode} setMode={setMode} />
         </div>
 
-        <div className="content">
+        <div className="content" id="revenue-panel" role="tabpanel" aria-label="Revenue projection">
           <div className="kpi-row">
             <div className="kpi">
               <div className="label">Monthly revenue (USD)</div>
@@ -256,10 +269,27 @@ function BrowserPanel({
                 )}
               </div>
             </div>
+            {/* The verdict is the answer this whole panel exists to produce, and it
+                changes as the dials move. Without a live region it flipped from
+                "Below target" to "Clears the target" in complete silence — the one
+                state change in the app that most deserves announcing. Polite, so it
+                waits for a pause rather than interrupting mid-edit. */}
             <div className="kpi">
-              <div className="label">Verdict</div>
-              <div className={"rev-verdict " + v.cls}>{v.label}</div>
-              <div className="kpi-sub">
+              <div className="label" id="verdict-label">
+                Verdict
+              </div>
+              <div
+                className={"rev-verdict " + v.cls}
+                role="status"
+                aria-live="polite"
+                aria-atomic="true"
+              >
+                {v.label}
+                <span className="sr-only">
+                  {pctToGoal !== null ? ` — ${pctToGoal}% of the target floor` : ""}
+                </span>
+              </div>
+              <div className="kpi-sub" aria-hidden="true">
                 {pctToGoal !== null
                   ? `${pctToGoal}% of the target floor`
                   : "set a monthly band to get a verdict"}
@@ -302,6 +332,20 @@ function BrowserPanel({
               <b>the realistic end, not the starting point</b>.
             </p>
           </div>
+          <Handoff
+            links={[
+              {
+                label: "Back to the pitch",
+                hint: "record what this projection means for the idea",
+                onClick: () => onGoto?.("library"),
+              },
+              {
+                label: "Re-check the market",
+                hint: "is the gap that justified this still open?",
+                onClick: () => onGoto?.("radar"),
+              },
+            ]}
+          />
         </div>
       </main>
     </>
@@ -321,14 +365,17 @@ function SteamPanel({
   seed,
   onClearSeed,
   target,
+  onGoto,
 }: {
   mode: Mode;
   setMode: (m: Mode) => void;
   seed?: RevenueSeed | null;
   onClearSeed?: () => void;
   target: TargetBand | null;
+  onGoto?: (svc: Service) => void;
 }) {
   const drawer = useDrawer();
+  const isDrawer = useIsDrawer();
   const [engineId, setEngineId] = useState<EngineId>("godot");
   const [wishlists, setWishlists] = useState(STEAM_DEFAULTS.wishlists);
   const [conversion, setConversion] = useState(STEAM_DEFAULTS.conversion);
@@ -378,6 +425,7 @@ function SteamPanel({
   return (
     <>
       <aside
+        {...drawerPanelProps(drawer, isDrawer, "Revenue sections")}
         className={"side" + (drawer.open ? " open" : "")}
         onClick={(e) => {
           if ((e.target as HTMLElement).closest(".nav-item")) drawer.closeDrawer();
@@ -390,8 +438,10 @@ function SteamPanel({
         </div>
         <div className="nav-label">Game engine</div>
         {ENGINES.map((e) => (
-          <a
+          <button
+            type="button"
             className={"nav-item" + (e.id === engineId ? " active" : "")}
+            aria-current={e.id === engineId ? "page" : undefined}
             key={e.id}
             onClick={() => setEngineId(e.id)}
           >
@@ -399,7 +449,7 @@ function SteamPanel({
             <span className="badge" style={{ background: "var(--primary)" }}>
               {ENGINE_BADGE[e.id]}
             </span>
-          </a>
+          </button>
         ))}
         <div className="side-foot">
           Pick the engine <b>you'll ship on</b> — this models your build, not any comparable's.
@@ -412,16 +462,16 @@ function SteamPanel({
       <main className="main">
         <div className="topbar">
           <NavToggle onClick={drawer.openDrawer} />
-          <h2>
+          <h1>
             Revenue Model{" "}
             <small>
               project Steam premium net revenue, after Steam's cut, refunds &amp; engine terms
             </small>
-          </h2>
+          </h1>
           <ModeSeg mode={mode} setMode={setMode} />
         </div>
 
-        <div className="content">
+        <div className="content" id="revenue-panel" role="tabpanel" aria-label="Revenue projection">
           {seed && (
             <div className="anchor-strip">
               <div className="anchor-body">
@@ -609,6 +659,20 @@ function SteamPanel({
               <b>{usd(p.netUsd)}</b> net. &nbsp;{eng.note}
             </p>
           </div>
+          <Handoff
+            links={[
+              {
+                label: "Back to the pitch",
+                hint: "record what this projection means for the idea",
+                onClick: () => onGoto?.("library"),
+              },
+              {
+                label: "Re-check the market",
+                hint: "is the gap that justified this still open?",
+                onClick: () => onGoto?.("radar"),
+              },
+            ]}
+          />
         </div>
       </main>
     </>

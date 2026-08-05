@@ -27,9 +27,42 @@ const BY_SLUG = new Map<string, Service>(
   (Object.keys(SLUG) as Service[]).map((svc) => [SLUG[svc], svc]),
 );
 
-/** The fragment (including `#`) that addresses a panel. */
-export function serviceHash(svc: Service): string {
-  return `#${SLUG[svc]}`;
+/**
+ * The fragment (including `#`) that addresses a panel, optionally down to a
+ * section within it: `#radar/comparables`.
+ *
+ * Only the top-level panel used to be addressable, so "look at Comparables →
+ * Solo-reachable" was unsendable and unbookmarkable, and Back from a section
+ * jumped to a different SERVICE — a trapdoor rather than an undo. The section is
+ * an opaque slug: this module does not know a panel's sections, and the panel
+ * validates what it gets, so adding a section needs no change here.
+ */
+export function serviceHash(svc: Service, section?: string | null): string {
+  const base = `#${SLUG[svc]}`;
+  return section ? `${base}/${encodeURIComponent(section)}` : base;
+}
+
+/** Split a fragment into its `service/section` parts. */
+function segments(hash: string | null | undefined): string[] {
+  if (!hash) return [];
+  return hash
+    .replace(/^#+/, "")
+    .split("/")
+    .map((s) => decodeURIComponent(s.trim()).toLowerCase())
+    .filter((s, i) => i === 0 || s.length > 0);
+}
+
+/**
+ * The section within the addressed panel, or null when the fragment names only a
+ * panel. Returns whatever slug is present — the caller decides whether it is one
+ * of its own, and falls back to its default when it is not.
+ */
+export function parseSectionHash(hash: string | null | undefined): string | null {
+  const parts = segments(hash);
+  if (parts.length < 2) return null;
+  // A section is meaningless without a valid service in front of it.
+  if (!BY_SLUG.has(parts[0])) return null;
+  return parts[1] || null;
 }
 
 /**
@@ -38,9 +71,7 @@ export function serviceHash(svc: Service): string {
  * rather than rendering nothing.
  */
 export function parseServiceHash(hash: string | null | undefined): Service {
-  if (!hash) return DEFAULT_SERVICE;
-  const slug = decodeURIComponent(hash.replace(/^#+/, "").trim()).toLowerCase();
-  return BY_SLUG.get(slug) ?? DEFAULT_SERVICE;
+  return BY_SLUG.get(segments(hash)[0] ?? "") ?? DEFAULT_SERVICE;
 }
 
 /** Minimal slice of `window.location` this module writes to (keeps it testable). */
@@ -53,10 +84,11 @@ export type HashTarget = { hash: string };
  */
 export function writeServiceHash(
   svc: Service,
+  section?: string | null,
   target: HashTarget | undefined = globalThis.location,
 ) {
   if (!target) return;
-  const next = serviceHash(svc);
+  const next = serviceHash(svc, section);
   if (target.hash === next) return;
   target.hash = next;
 }

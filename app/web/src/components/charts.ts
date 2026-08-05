@@ -11,24 +11,50 @@ import type {
   ScaleTierRow,
 } from "shared";
 
-const AX = "#64748b",
+const AX = "#5b6b86",
   GRID = "#e6ecf5",
   FONT = "'Fira Code', monospace";
-const LINE_COLORS = ["#059669", "#2563eb", "#d97706", "#dc2626"];
-const TREE_COLORS = [
-  "#1e3a8a",
-  "#1e40af",
-  "#2563eb",
-  "#3b82f6",
-  "#0e7490",
-  "#0891b2",
-  "#0ea5b7",
-  "#b45309",
-  "#c2620a",
-  "#d97706",
-  "#7c3aed",
-  "#9333ea",
-];
+// ── Chart palette ────────────────────────────────────────────────────────────
+// One focus colour; everything else graphite.
+//
+// Blue used to mean "primary action", "indie cohort", "Route 1", "cooling
+// supply" and "heatmap density" in five different places, so it meant nothing.
+// It now means exactly one thing: the series under decision. If two things in a
+// chart are blue, one of them is wrong.
+//
+// Semantic colour (POSITIVE / NEGATIVE) is reserved for verdicts — never a
+// category, never a series.
+// Exported so tests assert the ROLE MAPPING (which role lands on which mark)
+// rather than a literal hex — a palette change should not break a test whose
+// subject is "AAA is context, the indie cohort is the focus".
+export const PALETTE = {
+  focus: "#1d4ed8", // the series under decision. Exactly one per chart.
+  context: "#6b7a94", // benchmark, cohort baseline, AAA — graphite by design
+  attention: "#8a3f07", // crowding, estimator disagreement, a closing door
+  positive: "#047857",
+  negative: "#b91c1c",
+  contextFill: "#c3cfe2", // the light graphite used for AAA bars
+} as const;
+const FOCUS = PALETTE.focus;
+const CONTEXT = PALETTE.context;
+const ATTENTION = PALETTE.attention;
+const POSITIVE = PALETTE.positive;
+const NEGATIVE = PALETTE.negative;
+
+// Ordered magnitude. Categorical colour is never used for ordered data — that
+// was the error the old 12-stop rainbow made, mapping a treemap by INDEX so the
+// colour carried no information at all.
+const INK_RAMP = ["#eef2f8", "#c3cfe2", "#8fa3c0", "#4f6b98", "#1e3a5f"];
+
+// The treemap draws white labels ON the tiles, so its ramp cannot start pale —
+// the lightest step here is 4.97:1 against white, so every label stays legible
+// regardless of which tile it lands on.
+const TREE_RAMP = ["#5b7099", "#4a5f88", "#3a4f76", "#293d5f", "#12233d"];
+
+// Multi-series lines: series 0 is the focus (the caller already gives it a
+// thicker stroke and an area fill); the rest recede through the ink family in
+// order, so the chart reads as one system with a clear subject.
+const LINE_COLORS = [FOCUS, "#4f6b98", "#8fa3c0", "#b9c6da"];
 const tip = {
   backgroundColor: "#ffffff",
   borderColor: "#dbe3ef",
@@ -53,7 +79,7 @@ export function momentumOption(m: GenreMomentum): EChartsOption {
       type: "category",
       data: m.dates,
       axisLine: { lineStyle: { color: GRID } },
-      axisLabel: { color: AX, fontFamily: FONT, fontSize: 10 },
+      axisLabel: { color: AX, fontFamily: FONT, fontSize: 11 },
     },
     yAxis: {
       type: "value",
@@ -61,9 +87,9 @@ export function momentumOption(m: GenreMomentum): EChartsOption {
       nameLocation: "middle",
       nameGap: 44,
       nameRotate: 90,
-      nameTextStyle: { color: AX, fontFamily: FONT, fontSize: 10 },
+      nameTextStyle: { color: AX, fontFamily: FONT, fontSize: 11 },
       splitLine: { lineStyle: { color: GRID } },
-      axisLabel: { color: AX, fontFamily: FONT, fontSize: 10 },
+      axisLabel: { color: AX, fontFamily: FONT, fontSize: 11 },
     },
     series: m.series.map((s, i) => ({
       name: s.genre,
@@ -101,7 +127,9 @@ export function treemapOption(tags: TagFreq[]): EChartsOption {
           textShadowColor: "rgba(0,0,0,.25)",
           textShadowBlur: 3,
         },
-        levels: [{ color: TREE_COLORS, colorMappingBy: "index" }],
+        // by VALUE, not index: the tile's colour now encodes its magnitude,
+        // which is the only thing a treemap's colour can honestly say.
+        levels: [{ color: TREE_RAMP, colorMappingBy: "value" }],
         data: tags.map((t) => ({ name: t.tag, value: t.count })),
       },
     ],
@@ -126,9 +154,9 @@ export function scatterOption(points: ScatterPoint[]): EChartsOption {
       name: "votes (visibility) →",
       nameLocation: "middle",
       nameGap: 26,
-      nameTextStyle: { color: AX, fontFamily: FONT, fontSize: 10 },
+      nameTextStyle: { color: AX, fontFamily: FONT, fontSize: 11 },
       axisLine: { lineStyle: { color: GRID } },
-      axisLabel: { color: AX, fontFamily: FONT, fontSize: 9 },
+      axisLabel: { color: AX, fontFamily: FONT, fontSize: 11 },
       splitLine: { lineStyle: { color: GRID } },
     },
     yAxis: {
@@ -136,9 +164,9 @@ export function scatterOption(points: ScatterPoint[]): EChartsOption {
       min: 2.5,
       max: 5,
       name: "rating",
-      nameTextStyle: { color: AX, fontFamily: FONT, fontSize: 10 },
+      nameTextStyle: { color: AX, fontFamily: FONT, fontSize: 11 },
       axisLine: { lineStyle: { color: GRID } },
-      axisLabel: { color: AX, fontFamily: FONT, fontSize: 9 },
+      axisLabel: { color: AX, fontFamily: FONT, fontSize: 11 },
       splitLine: { lineStyle: { color: GRID } },
     },
     series: [
@@ -146,7 +174,7 @@ export function scatterOption(points: ScatterPoint[]): EChartsOption {
         name: "crowd",
         type: "scatter",
         symbolSize: 5,
-        itemStyle: { color: "rgba(100,116,139,.28)" },
+        itemStyle: { color: "rgba(107,122,148,.28)" },
         data: crowd,
       },
       {
@@ -154,18 +182,18 @@ export function scatterOption(points: ScatterPoint[]): EChartsOption {
         type: "scatter",
         symbolSize: 11,
         itemStyle: {
-          color: "#0891b2",
+          color: FOCUS,
           borderColor: "#fff",
           borderWidth: 1.5,
           shadowBlur: 6,
-          shadowColor: "rgba(8,145,178,.5)",
+          shadowColor: "rgba(29,78,216,.45)",
         },
         data: gems,
         markLine: {
           silent: true,
           symbol: "none",
-          lineStyle: { color: "#0891b2", type: "dashed", opacity: 0.5 },
-          data: [{ yAxis: 4.4, label: { formatter: "high rating", color: AX, fontSize: 9 } }],
+          lineStyle: { color: FOCUS, type: "dashed", opacity: 0.5 },
+          data: [{ yAxis: 4.4, label: { formatter: "high rating", color: AX, fontSize: 11 } }],
         },
       },
     ],
@@ -184,14 +212,14 @@ export function heatmapOption(h: FeatureHeatmap): EChartsOption {
       type: "category",
       data: h.weeks,
       axisLine: { lineStyle: { color: GRID } },
-      axisLabel: { color: AX, fontFamily: FONT, fontSize: 10 },
+      axisLabel: { color: AX, fontFamily: FONT, fontSize: 11 },
       splitArea: { show: false },
     },
     yAxis: {
       type: "category",
       data: h.genres,
       axisLine: { lineStyle: { color: GRID } },
-      axisLabel: { color: AX, fontFamily: FONT, fontSize: 10 },
+      axisLabel: { color: AX, fontFamily: FONT, fontSize: 11 },
     },
     visualMap: {
       min: 0,
@@ -202,8 +230,8 @@ export function heatmapOption(h: FeatureHeatmap): EChartsOption {
       bottom: 4,
       itemWidth: 10,
       itemHeight: 90,
-      textStyle: { color: AX, fontFamily: FONT, fontSize: 10 },
-      inRange: { color: ["#eef2f9", "#bfdbfe", "#60a5fa", "#2563eb", "#1e3a8a"] },
+      textStyle: { color: AX, fontFamily: FONT, fontSize: 11 },
+      inRange: { color: INK_RAMP },
     },
     series: [
       {
@@ -212,7 +240,7 @@ export function heatmapOption(h: FeatureHeatmap): EChartsOption {
         label: {
           show: true,
           fontFamily: FONT,
-          fontSize: 10,
+          fontSize: 11,
           fontWeight: 600,
           formatter: (p: any) => String(p.value[2]),
           color: "#1e293b",
@@ -220,7 +248,7 @@ export function heatmapOption(h: FeatureHeatmap): EChartsOption {
           textBorderWidth: 2.5,
         },
         itemStyle: { borderColor: "#fff", borderWidth: 2 },
-        emphasis: { itemStyle: { shadowBlur: 8, shadowColor: "rgba(37,99,235,.4)" } },
+        emphasis: { itemStyle: { shadowBlur: 8, shadowColor: "rgba(29,78,216,.35)" } },
       },
     ],
   };
@@ -252,9 +280,9 @@ export function landscapeOption(pts: GenreLandscapePoint[]): EChartsOption {
       name: "supply (games) →",
       nameLocation: "middle",
       nameGap: 28,
-      nameTextStyle: { color: AX, fontFamily: FONT, fontSize: 10 },
+      nameTextStyle: { color: AX, fontFamily: FONT, fontSize: 11 },
       axisLine: { lineStyle: { color: GRID } },
-      axisLabel: { color: AX, fontFamily: FONT, fontSize: 9 },
+      axisLabel: { color: AX, fontFamily: FONT, fontSize: 11 },
       splitLine: { lineStyle: { color: GRID } },
     },
     yAxis: {
@@ -265,23 +293,23 @@ export function landscapeOption(pts: GenreLandscapePoint[]): EChartsOption {
       nameLocation: "middle",
       nameGap: 44,
       nameRotate: 90,
-      nameTextStyle: { color: AX, fontFamily: FONT, fontSize: 10 },
+      nameTextStyle: { color: AX, fontFamily: FONT, fontSize: 11 },
       axisLine: { lineStyle: { color: GRID } },
-      axisLabel: { color: AX, fontFamily: FONT, fontSize: 9 },
+      axisLabel: { color: AX, fontFamily: FONT, fontSize: 11 },
       splitLine: { lineStyle: { color: GRID } },
     },
     series: [
       {
         type: "scatter",
         data,
-        itemStyle: { color: "rgba(37,99,235,.45)", borderColor: "#1e3a8a", borderWidth: 1 },
+        itemStyle: { color: "rgba(29,78,216,.45)", borderColor: "#1e3a5f", borderWidth: 1 },
         label: {
           show: true,
           formatter: (p: any) => p.value[3],
           position: "right",
           color: AX,
           fontFamily: FONT,
-          fontSize: 9,
+          fontSize: 11,
         },
         labelLayout: { hideOverlap: true },
       },
@@ -294,10 +322,10 @@ export function landscapeOption(pts: GenreLandscapePoint[]): EChartsOption {
 // appetite) is the underserved quadrant. Points coloured amber ("crowding") there are a
 // race; green ("quiet") there is the clean opening.
 const SUPPLY_COLOR: Record<string, string> = {
-  rising: "#c2620a",
-  steady: "#94a3b8",
-  cooling: "#2563eb",
-  quiet: "#059669",
+  rising: ATTENTION,
+  steady: CONTEXT,
+  cooling: FOCUS,
+  quiet: POSITIVE,
 };
 const median = (xs: number[]): number => {
   if (!xs.length) return 0;
@@ -316,7 +344,7 @@ export function quadrantOption(
     value: [Math.max(p.supply, 1), Math.max(p.appetite, 1), p.weight, p.genre, p.supplyTrend],
     symbolSize: 12 + 30 * Math.sqrt(p.weight / maxW),
     itemStyle: {
-      color: (SUPPLY_COLOR[p.supplyTrend] ?? "#94a3b8") + "cc",
+      color: (SUPPLY_COLOR[p.supplyTrend] ?? CONTEXT) + "cc",
       borderColor: "#fff",
       borderWidth: 1,
     },
@@ -333,9 +361,9 @@ export function quadrantOption(
       name: "supply (titles) →",
       nameLocation: "middle",
       nameGap: 28,
-      nameTextStyle: { color: AX, fontFamily: FONT, fontSize: 10 },
+      nameTextStyle: { color: AX, fontFamily: FONT, fontSize: 11 },
       axisLine: { lineStyle: { color: GRID } },
-      axisLabel: { color: AX, fontFamily: FONT, fontSize: 9 },
+      axisLabel: { color: AX, fontFamily: FONT, fontSize: 11 },
       splitLine: { lineStyle: { color: GRID } },
     },
     yAxis: {
@@ -344,9 +372,9 @@ export function quadrantOption(
       nameLocation: "middle",
       nameGap: 48,
       nameRotate: 90,
-      nameTextStyle: { color: AX, fontFamily: FONT, fontSize: 10 },
+      nameTextStyle: { color: AX, fontFamily: FONT, fontSize: 11 },
       axisLine: { lineStyle: { color: GRID } },
-      axisLabel: { color: AX, fontFamily: FONT, fontSize: 9 },
+      axisLabel: { color: AX, fontFamily: FONT, fontSize: 11 },
       splitLine: { lineStyle: { color: GRID } },
     },
     series: [
@@ -365,7 +393,7 @@ export function quadrantOption(
           position: "right",
           color: AX,
           fontFamily: FONT,
-          fontSize: 9,
+          fontSize: 11,
           backgroundColor: "rgba(255,255,255,.82)",
           padding: [1, 3],
           borderRadius: 2,
@@ -376,7 +404,7 @@ export function quadrantOption(
         markLine: {
           silent: true,
           symbol: "none",
-          lineStyle: { color: "#94a3b8", type: "dashed", opacity: 0.6 },
+          lineStyle: { color: CONTEXT, type: "dashed", opacity: 0.6 },
           data: [
             { xAxis: medSupply, label: { show: false } },
             {
@@ -384,7 +412,7 @@ export function quadrantOption(
               label: {
                 formatter: "median demand",
                 color: AX,
-                fontSize: 9,
+                fontSize: 11,
                 position: "insideEndTop",
               },
             },
@@ -412,13 +440,13 @@ export function tierBarOption(tiers: ScaleTierRow[]): EChartsOption {
     grid: { left: 124, right: 40, top: 8, bottom: 24 },
     xAxis: {
       type: "value",
-      axisLabel: { color: AX, fontFamily: FONT, fontSize: 9 },
+      axisLabel: { color: AX, fontFamily: FONT, fontSize: 11 },
       splitLine: { lineStyle: { color: GRID } },
     },
     yAxis: {
       type: "category",
       data: rows.map((r) => TIER_LABEL[r.tier]),
-      axisLabel: { color: AX, fontFamily: FONT, fontSize: 10 },
+      axisLabel: { color: AX, fontFamily: FONT, fontSize: 11 },
       axisLine: { lineStyle: { color: GRID } },
     },
     series: [
@@ -428,14 +456,14 @@ export function tierBarOption(tiers: ScaleTierRow[]): EChartsOption {
         data: rows.map((r) => ({
           value: r.games,
           name: r.tier,
-          itemStyle: { color: r.tier === "aaa" ? "#cbd5e1" : "#2563eb" },
+          itemStyle: { color: r.tier === "aaa" ? "#c3cfe2" : FOCUS },
         })),
         label: {
           show: true,
           position: "right",
           color: AX,
           fontFamily: FONT,
-          fontSize: 10,
+          fontSize: 11,
           fontWeight: 600,
           formatter: (p: any) => String(p.value),
         },
@@ -455,14 +483,14 @@ export function velocityBarOption(bars: GenreVelocityBar[]): EChartsOption {
     xAxis: {
       type: "value",
       name: "votes/day",
-      nameTextStyle: { color: AX, fontFamily: FONT, fontSize: 10 },
-      axisLabel: { color: AX, fontFamily: FONT, fontSize: 9 },
+      nameTextStyle: { color: AX, fontFamily: FONT, fontSize: 11 },
+      axisLabel: { color: AX, fontFamily: FONT, fontSize: 11 },
       splitLine: { lineStyle: { color: GRID } },
     },
     yAxis: {
       type: "category",
       data: data.map((b) => b.genre),
-      axisLabel: { color: AX, fontFamily: FONT, fontSize: 10 },
+      axisLabel: { color: AX, fontFamily: FONT, fontSize: 11 },
       axisLine: { lineStyle: { color: GRID } },
     },
     series: [
@@ -471,14 +499,14 @@ export function velocityBarOption(bars: GenreVelocityBar[]): EChartsOption {
         barWidth: "62%",
         data: data.map((b) => ({
           value: b.votesPerDay,
-          itemStyle: { color: b.votesPerDay >= 0 ? "#059669" : "#dc2626" },
+          itemStyle: { color: b.votesPerDay >= 0 ? POSITIVE : NEGATIVE },
         })),
         label: {
           show: true,
           position: "right",
           color: AX,
           fontFamily: FONT,
-          fontSize: 9,
+          fontSize: 11,
           formatter: (p: any) => Number(p.value).toLocaleString(),
         },
       },

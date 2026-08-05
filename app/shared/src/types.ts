@@ -103,6 +103,10 @@ export interface SteamComparable {
   // Content Disclosure block, false = checked and absent, null = not checked (outside the gated
   // recent-non-AAA fetch cohort) or the store-page fetch failed.
   aiDisclosure: boolean | null;
+  // Steam header capsule (appdetails `header_image`), already crawled into
+  // games.thumbnail_url. null when the game has no crawled thumbnail — the row then
+  // renders the bare plate rather than a broken image.
+  capsuleUrl: string | null;
 }
 
 // Signed contributions that make the composite opportunity `score` legible (#87). Each
@@ -181,6 +185,7 @@ export interface SteamNewRelease {
   daysSinceRelease: number | null; // age in days; null if release_date is missing/future
   reviewsPerDay: number | null; // votes / days-since-launch — launch traction rate
   belowScoreThreshold: boolean; // votes < 10 → Steam shows no overall score yet (a quiet launch)
+  capsuleUrl: string | null; // Steam header capsule; null when not crawled
 }
 
 export interface SteamOverview {

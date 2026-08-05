@@ -1,0 +1,567 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-08-05T00:00:00Z",
+  "title": "Design System: KAIROS GameRadar",
+  "extensions": {
+    "colorMeta": {
+      "focus-blue": {
+        "role": "primary",
+        "displayName": "Focus Blue",
+        "canonical": "#1d4ed8",
+        "tonalRamp": [
+          "#0b1a3d",
+          "#122654",
+          "#17336f",
+          "#1e40af",
+          "#1d4ed8",
+          "#5b83e8",
+          "#93b4fb",
+          "#dbe6ff"
+        ]
+      },
+      "focus-blue-deep": {
+        "role": "primary",
+        "displayName": "Focus Blue Deep",
+        "canonical": "#1e40af",
+        "tonalRamp": [
+          "#0a1531",
+          "#0f1f47",
+          "#15295e",
+          "#1a3585",
+          "#1e40af",
+          "#4d6ccc",
+          "#8aa4e6",
+          "#d5e0f7"
+        ]
+      },
+      "attention-umber": {
+        "role": "secondary",
+        "displayName": "Attention Umber",
+        "canonical": "#8a3f07",
+        "tonalRamp": [
+          "#2b1302",
+          "#421d03",
+          "#5a2804",
+          "#713305",
+          "#8a3f07",
+          "#b45309",
+          "#e0a458",
+          "#f7e6d0"
+        ]
+      },
+      "verdict-green": {
+        "role": "tertiary",
+        "displayName": "Verdict Green",
+        "canonical": "#047857",
+        "tonalRamp": [
+          "#01241a",
+          "#023826",
+          "#034c34",
+          "#046043",
+          "#047857",
+          "#0f9d76",
+          "#4ec9a0",
+          "#d5f0e5"
+        ]
+      },
+      "verdict-red": {
+        "role": "tertiary",
+        "displayName": "Verdict Red",
+        "canonical": "#b91c1c",
+        "tonalRamp": [
+          "#380808",
+          "#530c0c",
+          "#6d1010",
+          "#8f1616",
+          "#b91c1c",
+          "#d94a4a",
+          "#f28b82",
+          "#f8dcda"
+        ]
+      },
+      "spotlight-cyan": {
+        "role": "tertiary",
+        "displayName": "Spotlight Cyan",
+        "canonical": "#0e7490",
+        "tonalRamp": [
+          "#03242d",
+          "#053743",
+          "#074a5c",
+          "#0a5e75",
+          "#0e7490",
+          "#1798b8",
+          "#56b6c2",
+          "#d3eef4"
+        ]
+      },
+      "route-violet": {
+        "role": "tertiary",
+        "displayName": "Route Violet",
+        "canonical": "#6d28d9",
+        "tonalRamp": [
+          "#1f0a41",
+          "#2f0f61",
+          "#401581",
+          "#561fae",
+          "#6d28d9",
+          "#9163e6",
+          "#b39ddb",
+          "#e9e0f9"
+        ]
+      },
+      "ink": {
+        "role": "neutral",
+        "displayName": "Deep Navy Ink",
+        "canonical": "#14213a",
+        "tonalRamp": [
+          "#080d18",
+          "#0e1626",
+          "#14213a",
+          "#22314f",
+          "#4a5b78",
+          "#5b6b86",
+          "#8493ad",
+          "#dbe3ef"
+        ]
+      },
+      "ink-3": {
+        "role": "neutral",
+        "displayName": "Legible Graphite",
+        "canonical": "#5b6b86",
+        "tonalRamp": [
+          "#161c26",
+          "#232c3b",
+          "#333f53",
+          "#45536c",
+          "#5b6b86",
+          "#8493ad",
+          "#b7c2d4",
+          "#e6ecf5"
+        ]
+      },
+      "ink-4": {
+        "role": "neutral",
+        "displayName": "Rule Grey (non-text)",
+        "canonical": "#8493ad",
+        "tonalRamp": [
+          "#1c2230",
+          "#2b3446",
+          "#3d4a61",
+          "#55657f",
+          "#6f7f9b",
+          "#8493ad",
+          "#b3bfd2",
+          "#eef2f9"
+        ]
+      },
+      "page": {
+        "role": "neutral",
+        "displayName": "Cool Instrument Ground",
+        "canonical": "#f4f6fb",
+        "tonalRamp": [
+          "#0e1420",
+          "#131b2a",
+          "#161e2e",
+          "#2a3548",
+          "#8493ad",
+          "#dbe3ef",
+          "#eef2f9",
+          "#f4f6fb"
+        ]
+      },
+      "surface": {
+        "role": "neutral",
+        "displayName": "Card White",
+        "canonical": "#ffffff",
+        "tonalRamp": [
+          "#0b0f16",
+          "#161e2e",
+          "#1c2537",
+          "#4a5b78",
+          "#dbe3ef",
+          "#f1f5fb",
+          "#f4f6fb",
+          "#ffffff"
+        ]
+      },
+      "plate": {
+        "role": "neutral",
+        "displayName": "Media Plate (non-inverting)",
+        "canonical": "#0b0f16",
+        "tonalRamp": [
+          "#04060a",
+          "#080b11",
+          "#0b0f16",
+          "#141a25",
+          "#1f2836",
+          "#37445a",
+          "#5b6b86",
+          "#c3cfe2"
+        ]
+      },
+      "chart-context": {
+        "role": "neutral",
+        "displayName": "Chart Graphite",
+        "canonical": "#6b7a94",
+        "tonalRamp": [
+          "#12233d",
+          "#293d5f",
+          "#3a4f76",
+          "#4f6b98",
+          "#6b7a94",
+          "#8fa3c0",
+          "#c3cfe2",
+          "#eef2f8"
+        ]
+      },
+      "rail-glyph": {
+        "role": "neutral",
+        "displayName": "Rail Glyph",
+        "canonical": "#9fb3d4"
+      },
+      "rail-active": {
+        "role": "neutral",
+        "displayName": "Rail Active",
+        "canonical": "#60a5fa"
+      },
+      "ramp-5": {
+        "role": "neutral",
+        "displayName": "Ink Ramp 5",
+        "canonical": "#1e3a5f"
+      },
+      "plate-glyph": {
+        "role": "neutral",
+        "displayName": "Plate Glyph",
+        "canonical": "#7d8ba4"
+      },
+      "chart-muted": {
+        "role": "neutral",
+        "displayName": "Chart Muted",
+        "canonical": "#9ca3af"
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display Figure",
+        "purpose": "The single largest number on a panel; mono, tabular, clamped so it never breaks a 375px row."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Panel h1 in the topbar and empty-state headings."
+      },
+      "title": {
+        "displayName": "Card Title",
+        "purpose": "Card h2, pitch names, band headers, verdict lines."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Document default."
+      },
+      "body-dense": {
+        "displayName": "Analytical Body",
+        "purpose": "The working prose size: insight bodies, table cells, blurbs, the read strip."
+      },
+      "caption": {
+        "displayName": "Caption",
+        "purpose": "Sidebar footers, hints, notes, tooltip bubbles."
+      },
+      "label": {
+        "displayName": "Mono Label",
+        "purpose": "Table headers, section titles, chips, tags, axis ticks, meta lines. The 11px floor."
+      },
+      "figure": {
+        "displayName": "Figure",
+        "purpose": "KPI values and scenario nets; mono with tabular numerals."
+      }
+    },
+    "shadows": [
+      {
+        "name": "ambient-rest",
+        "value": "0 1px 2px rgba(16,24,40,0.04), 0 1px 3px rgba(16,24,40,0.07)",
+        "purpose": "Every card, chip, panel and tile at rest. Lift off the page, nothing more."
+      },
+      {
+        "name": "ambient-raised",
+        "value": "0 4px 14px rgba(16,24,40,0.07), 0 2px 4px rgba(16,24,40,0.04)",
+        "purpose": "Tooltips, rail hover labels, and the hover state of a genuinely clickable card."
+      },
+      {
+        "name": "ambient-rest-dark",
+        "value": "0 1px 2px rgba(0,0,0,0.4), 0 1px 3px rgba(0,0,0,0.3)",
+        "purpose": "Dark-scheme rest. In dark, elevation reads as light, not as a darker shadow."
+      },
+      {
+        "name": "ambient-raised-dark",
+        "value": "0 4px 14px rgba(0,0,0,0.45), 0 2px 4px rgba(0,0,0,0.3)",
+        "purpose": "Dark-scheme raised."
+      },
+      {
+        "name": "plate-edge",
+        "value": "inset 0 0 0 1px rgba(255,255,255,0.08)",
+        "purpose": "The hairline that keeps the dark media plate from reading as a hole (0.16 in dark mode)."
+      },
+      {
+        "name": "focus-ring",
+        "value": "outline: 2px solid #1d4ed8; outline-offset: 2px",
+        "purpose": "One ring for all 57 controls. Switches to #93b4fb inside the dark rail."
+      }
+    ],
+    "motion": [
+      {
+        "name": "control-fast",
+        "value": "0.12s",
+        "purpose": "Inline button background/border changes."
+      },
+      {
+        "name": "control-standard",
+        "value": "0.16s–0.18s",
+        "purpose": "Chips, nav items, rail buttons, hand-off cards."
+      },
+      {
+        "name": "drawer",
+        "value": "0.24s ease-out",
+        "purpose": "Mobile sidebar slide-in and its scrim fade."
+      },
+      {
+        "name": "reduced-motion",
+        "value": "@media (prefers-reduced-motion: reduce) → animations 0.01ms, smooth scroll off, shimmer and pulse stopped",
+        "purpose": "Covers everything that moves, not just the drawer."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "phone-floor",
+        "value": "375px"
+      },
+      {
+        "name": "tip-pin",
+        "value": "640px"
+      },
+      {
+        "name": "stack",
+        "value": "1080px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The one solid action: retry, publish, commit. Focus Blue fill, on-fill text, 44px floor.",
+      "html": "<button class=\"ds-btn-primary\">Retry</button>",
+      "css": ".ds-btn-primary { background: var(--primary, #1d4ed8); color: var(--on-fill, #fff); border: none; border-radius: var(--r-md, 10px); padding: 8px 16px; min-height: 44px; font-family: 'Fira Sans', sans-serif; font-size: 13px; font-weight: 600; cursor: pointer; transition: background 0.16s; } .ds-btn-primary:hover { background: var(--primary-deep, #1e40af); } .ds-btn-primary:focus-visible { outline: 2px solid var(--primary, #1d4ed8); outline-offset: 2px; border-radius: 6px; }"
+    },
+    {
+      "name": "Ghost Action",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Inline mono action on a dense row — 'project', 'play prototype', a provenance receipt. Hairline border, blue label.",
+      "html": "<button class=\"ds-btn-ghost\">&rarr; project</button>",
+      "css": ".ds-btn-ghost { font-family: 'Fira Code', monospace; font-size: 11px; font-weight: 600; color: var(--primary, #1d4ed8); background: color-mix(in srgb, var(--primary, #1d4ed8) 7%, var(--surface, #fff)); border: 1px solid var(--border, #dbe3ef); border-radius: var(--r-sm, 6px); padding: 4px 8px; min-height: 44px; white-space: nowrap; cursor: pointer; transition: background 0.12s, border-color 0.12s; } .ds-btn-ghost:hover { background: color-mix(in srgb, var(--primary, #1d4ed8) 14%, var(--surface, #fff)); border-color: var(--primary, #1d4ed8); } .ds-btn-ghost:focus-visible { outline: 2px solid var(--primary, #1d4ed8); outline-offset: 2px; }"
+    },
+    {
+      "name": "Platform Tab List",
+      "kind": "nav",
+      "refersTo": "tab",
+      "description": "A real tab list: roving tabindex (one tab stop), arrows + Home/End, aria-controls onto a real tabpanel, selection follows focus.",
+      "html": "<div class=\"ds-seg\" role=\"tablist\" aria-label=\"Platform\"><button class=\"ds-seg-btn ds-active\" role=\"tab\" aria-selected=\"true\" tabindex=\"0\"><i class=\"ds-dot\"></i>Steam</button><button class=\"ds-seg-btn\" role=\"tab\" aria-selected=\"false\" tabindex=\"-1\">Poki</button><button class=\"ds-seg-btn\" role=\"tab\" aria-selected=\"false\" tabindex=\"-1\">CrazyGames</button></div>",
+      "css": ".ds-seg { display: inline-flex; background: var(--surface-2, #f1f5fb); border: 1px solid var(--border, #dbe3ef); border-radius: var(--r-md, 10px); padding: 4px; gap: 2px; } .ds-seg-btn { display: flex; align-items: center; gap: 8px; border: none; background: transparent; color: var(--text-2, #4a5b78); font-family: 'Fira Sans', sans-serif; font-size: 12px; font-weight: 600; padding: 8px 16px; min-height: 44px; border-radius: var(--r-md, 10px); cursor: pointer; transition: 0.16s; } .ds-seg-btn:hover { color: var(--text, #14213a); } .ds-seg-btn.ds-active { background: var(--surface, #fff); color: var(--primary-deep, #1e40af); box-shadow: 0 1px 2px rgba(16,24,40,.04), 0 1px 3px rgba(16,24,40,.07); } .ds-seg-btn:focus-visible { outline: 2px solid var(--primary, #1d4ed8); outline-offset: 2px; } .ds-dot { width: 8px; height: 8px; border-radius: 50%; background: #1b6ec2; flex-shrink: 0; }"
+    },
+    {
+      "name": "Status Tag",
+      "kind": "chip",
+      "refersTo": "tag",
+      "description": "The 11px mono tag that carries every verdict and status. Ground and text are mixed from one token, so it follows the colour scheme.",
+      "html": "<span class=\"ds-tag ds-tag-green\">validated</span> <span class=\"ds-tag ds-tag-umber\">crowding</span> <span class=\"ds-tag ds-tag-inert\">shelved</span>",
+      "css": ".ds-tag { display: inline-block; font-family: 'Fira Code', monospace; font-size: 11px; font-weight: 700; letter-spacing: 0.4px; padding: 2px 8px; border-radius: var(--r-sm, 6px); white-space: nowrap; background: var(--surface-2, #f1f5fb); color: var(--text-2, #4a5b78); } .ds-tag-green { background: color-mix(in srgb, var(--green, #047857) 13%, var(--surface, #fff)); color: var(--green, #047857); } .ds-tag-umber { background: color-mix(in srgb, var(--amber, #8a3f07) 13%, var(--surface, #fff)); color: var(--accent, #8a3f07); } .ds-tag-inert { background: var(--surface-2, #f1f5fb); color: var(--text-3, #5b6b86); }"
+    },
+    {
+      "name": "Filter Chip",
+      "kind": "chip",
+      "refersTo": "chip",
+      "description": "Topbar filter control. White, hairline, ambient shadow; hover promotes border and label to Focus Blue.",
+      "html": "<button class=\"ds-chip\"><svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M4 6h16M7 12h10M10 18h4\"/></svg>Filters</button>",
+      "css": ".ds-chip { display: inline-flex; align-items: center; gap: 8px; background: var(--surface, #fff); border: 1px solid var(--border, #dbe3ef); border-radius: var(--r-md, 10px); padding: 8px 12px; font-family: 'Fira Sans', sans-serif; font-size: 12px; font-weight: 500; color: var(--text-2, #4a5b78); cursor: pointer; transition: 0.18s; box-shadow: 0 1px 2px rgba(16,24,40,.04), 0 1px 3px rgba(16,24,40,.07); min-height: 44px; } .ds-chip:hover { border-color: var(--primary, #1d4ed8); color: var(--primary, #1d4ed8); } .ds-chip:focus-visible { outline: 2px solid var(--primary, #1d4ed8); outline-offset: 2px; } .ds-chip svg { width: 13px; height: 13px; stroke: currentColor; fill: none; stroke-width: 1.8; }"
+    },
+    {
+      "name": "Analysis Card",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "The default container. 14px radius, soft hairline, ambient rest shadow, wrapping header with a Focus Blue drawn mark and a right-aligned mono sub.",
+      "html": "<section class=\"ds-card\"><h2>Genre momentum<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M3 17l6-6 4 4 8-8\"/></svg><span class=\"ds-sub\">n = 412</span></h2><p class=\"ds-card-body\">Puzzle supply cooled for a third week while appetite held.</p></section>",
+      "css": ".ds-card { background: var(--surface, #fff); border: 1px solid var(--border-soft, #e6ecf5); border-radius: var(--r-lg, 14px); padding: 16px 24px; display: flex; flex-direction: column; box-shadow: 0 1px 2px rgba(16,24,40,.04), 0 1px 3px rgba(16,24,40,.07); min-width: 0; } .ds-card h2 { font-family: 'Fira Sans', sans-serif; font-size: 14px; font-weight: 600; display: flex; align-items: center; flex-wrap: wrap; gap: 8px; color: var(--text, #14213a); } .ds-card h2 svg { width: 16px; height: 16px; stroke: var(--primary, #1d4ed8); fill: none; stroke-width: 1.8; } .ds-card .ds-sub { font-weight: 400; color: var(--text-3, #5b6b86); font-size: 12px; margin-left: auto; font-family: 'Fira Code', monospace; } .ds-card-body { font-size: 13px; line-height: 1.5; color: var(--text-2, #4a5b78); margin-top: 8px; }"
+    },
+    {
+      "name": "KPI Strip",
+      "kind": "custom",
+      "refersTo": "card",
+      "description": "Evidence for the answer above it, not six headlines: one ruled strip, no per-tile chrome, labels height-reserved so figures share a baseline.",
+      "html": "<div class=\"ds-kpis\"><div class=\"ds-kpi\"><div class=\"ds-kpi-label\">New titles / wk</div><div class=\"ds-kpi-val\">1,284</div><div class=\"ds-kpi-delta ds-up\">+6.1%</div></div><div class=\"ds-kpi\"><div class=\"ds-kpi-label\">Median votes</div><div class=\"ds-kpi-val\">318</div><div class=\"ds-kpi-delta ds-down\">-2.4%</div></div><div class=\"ds-kpi\"><div class=\"ds-kpi-label\">Supply trend</div><div class=\"ds-kpi-val ds-word\">Cooling</div></div></div>",
+      "css": ".ds-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 160px), 1fr)); gap: 12px 0; background: var(--surface, #fff); border: 1px solid var(--border-soft, #e6ecf5); border-radius: var(--r-lg, 14px); box-shadow: 0 1px 2px rgba(16,24,40,.04), 0 1px 3px rgba(16,24,40,.07); padding: 16px 16px 16px 0; } .ds-kpi { border-left: 1px solid var(--border, #dbe3ef); padding: 4px 16px; min-width: 0; } .ds-kpi:first-child { border-left: none; } .ds-kpi-label { min-height: 2.4em; font-family: 'Fira Sans', sans-serif; font-size: 12px; color: var(--text-3, #5b6b86); text-transform: uppercase; letter-spacing: 0.6px; font-weight: 600; } .ds-kpi-val { font-family: 'Fira Code', monospace; font-variant-numeric: tabular-nums; font-size: 20px; font-weight: 600; letter-spacing: -0.5px; color: var(--text, #14213a); margin: 8px 0 4px; } .ds-kpi-val.ds-word { font-size: 16px; padding-top: 4px; } .ds-kpi-delta { font-family: 'Fira Code', monospace; font-size: 12px; font-weight: 600; } .ds-up { color: var(--green, #047857); } .ds-down { color: var(--red, #b91c1c); }"
+    },
+    {
+      "name": "Media Plate",
+      "kind": "custom",
+      "refersTo": "plate",
+      "description": "The one dark surface in a light app and the mount for all game art. Does not invert. A missing image leaves a plate, never a broken image.",
+      "html": "<span class=\"ds-gamecell\"><span class=\"ds-plate ds-plate-xs\" aria-hidden=\"true\"><span class=\"ds-plate-fallback\">H</span></span><span>Hearthspeak</span></span>",
+      "css": ".ds-gamecell { display: flex; align-items: center; gap: 8px; min-width: 0; font-family: 'Fira Sans', sans-serif; font-size: 13px; font-weight: 600; color: var(--text, #14213a); } .ds-plate { background: var(--plate, #0b0f16); box-shadow: inset 0 0 0 1px var(--plate-edge, rgba(255,255,255,.08)); border-radius: var(--r-md, 10px); overflow: hidden; flex: none; line-height: 0; display: grid; place-items: center; } .ds-plate-xs { width: 46px; height: 22px; } .ds-plate img { width: 100%; height: 100%; display: block; object-fit: cover; } .ds-plate-fallback { font-family: 'Fira Code', monospace; font-size: 11px; font-weight: 600; color: #7d8ba4; line-height: 1; }"
+    },
+    {
+      "name": "Number Field",
+      "kind": "input",
+      "refersTo": "input-number",
+      "description": "The Revenue panel's primary control. Recessed fill, mono value, 44px floor, border promotes to Focus Blue on focus.",
+      "html": "<label class=\"ds-field\">Units sold<input type=\"number\" value=\"14000\" /></label>",
+      "css": ".ds-field { display: flex; flex-direction: column; gap: 8px; font-family: 'Fira Sans', sans-serif; font-size: 12px; font-weight: 600; color: var(--text-2, #4a5b78); min-width: 0; } .ds-field input { border: 1px solid var(--border, #dbe3ef); border-radius: var(--r-md, 10px); padding: 8px 12px; min-height: 44px; font-family: 'Fira Code', monospace; font-size: 14px; color: var(--text, #14213a); background: var(--surface-2, #f1f5fb); max-width: 100%; } .ds-field input:focus { border-color: var(--primary, #1d4ed8); } .ds-field input:focus-visible { outline: 2px solid var(--primary, #1d4ed8); outline-offset: 2px; }"
+    },
+    {
+      "name": "Hand-off",
+      "kind": "nav",
+      "refersTo": "card",
+      "description": "How every panel ends: the next step on the build/no-build path, never a byline.",
+      "html": "<nav class=\"ds-handoff\" aria-label=\"Next step\"><button class=\"ds-handoff-link\"><span class=\"ds-handoff-label\">Shape a pitch</span><span class=\"ds-handoff-hint\">Turn this gap into a candidate</span><svg class=\"ds-handoff-arrow\" viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M5 12h13M13 6l6 6-6 6\"/></svg></button></nav>",
+      "css": ".ds-handoff { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); gap: 12px; margin-top: 24px; padding-top: 24px; border-top: 1px solid var(--border, #dbe3ef); } .ds-handoff-link { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 4px 12px; text-align: left; background: var(--surface, #fff); border: 1px solid var(--border-soft, #e6ecf5); border-radius: var(--r-lg, 14px); padding: 12px 16px; cursor: pointer; font-family: 'Fira Sans', sans-serif; box-shadow: 0 1px 2px rgba(16,24,40,.04), 0 1px 3px rgba(16,24,40,.07); transition: 0.16s; min-height: 44px; } .ds-handoff-link:hover { border-color: var(--primary, #1d4ed8); box-shadow: 0 4px 14px rgba(16,24,40,.07), 0 2px 4px rgba(16,24,40,.04); } .ds-handoff-link:focus-visible { outline: 2px solid var(--primary, #1d4ed8); outline-offset: 2px; } .ds-handoff-label { font-size: 14px; font-weight: 600; color: var(--text, #14213a); } .ds-handoff-hint { grid-column: 1; font-size: 12px; color: var(--text-3, #5b6b86); } .ds-handoff-arrow { grid-row: 1 / span 2; grid-column: 2; width: 18px; height: 18px; stroke: var(--primary, #1d4ed8); fill: none; stroke-width: 1.8; }"
+    },
+    {
+      "name": "Tip",
+      "kind": "custom",
+      "refersTo": "card",
+      "description": "The definition layer replacing title=. 13px mark, 44px hit area, prose bubble in Fira Sans.",
+      "html": "<span class=\"ds-tip\"><button class=\"ds-tip-trigger\" aria-expanded=\"true\" aria-label=\"What is P75 rating?\"><svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><circle cx=\"12\" cy=\"12\" r=\"9\"/><path d=\"M9.5 9.5a2.6 2.6 0 1 1 3.2 2.5c-.6.2-.7.7-.7 1.3M12 17h.01\"/></svg></button><span class=\"ds-tip-bubble\">The 75th-percentile rating in this genre &mdash; the quality ceiling a new entrant has to clear.</span></span>",
+      "css": ".ds-tip { position: relative; display: inline-flex; vertical-align: middle; margin-left: 4px; } .ds-tip-trigger { display: grid; place-items: center; width: 14px; height: 14px; padding: 0; border: none; background: none; cursor: pointer; color: var(--text-3, #5b6b86); position: relative; } .ds-tip-trigger::after { content: ''; position: absolute; inset: -15px; } .ds-tip-trigger:hover, .ds-tip-trigger[aria-expanded='true'] { color: var(--primary, #1d4ed8); } .ds-tip-trigger svg { width: 13px; height: 13px; stroke: currentColor; fill: none; stroke-width: 2; } .ds-tip-trigger:focus-visible { outline: 2px solid var(--primary, #1d4ed8); outline-offset: 2px; } .ds-tip-bubble { position: absolute; z-index: 60; top: calc(100% + 8px); left: 50%; transform: translateX(-50%); width: max-content; max-width: min(44ch, 78vw); background: var(--surface, #fff); color: var(--text-2, #4a5b78); border: 1px solid var(--border, #dbe3ef); border-radius: var(--r-md, 10px); box-shadow: 0 4px 14px rgba(16,24,40,.07), 0 2px 4px rgba(16,24,40,.04); padding: 8px 12px; font-family: 'Fira Sans', sans-serif; font-size: 12px; line-height: 1.5; text-align: left; white-space: normal; }"
+    },
+    {
+      "name": "Data Table",
+      "kind": "custom",
+      "refersTo": "card",
+      "description": "Scrolls inside its own card at every width, with edge fades marking 'more this way'. Numeric columns are mono, tabular and right-aligned.",
+      "html": "<table class=\"ds-dtable\"><thead><tr><th>Game</th><th class=\"ds-r\">Reviews</th><th class=\"ds-r\">Est. revenue</th></tr></thead><tbody><tr><td class=\"ds-gname\">Hearthspeak</td><td class=\"ds-r\">4,812</td><td class=\"ds-r\">$182,400</td></tr><tr><td class=\"ds-gname\">Overflow</td><td class=\"ds-r\">921</td><td class=\"ds-r\">$31,900</td></tr></tbody></table>",
+      "css": ".ds-dtable { display: block; width: max-content; max-width: 100%; overflow-x: auto; border-collapse: collapse; font-family: 'Fira Sans', sans-serif; font-size: 13px; background: linear-gradient(to right, var(--surface, #fff) 30%, rgba(255,255,255,0)) left center, linear-gradient(to left, var(--surface, #fff) 30%, rgba(255,255,255,0)) right center, linear-gradient(to right, rgba(20,33,58,.13), rgba(20,33,58,0)) left center, linear-gradient(to left, rgba(20,33,58,.13), rgba(20,33,58,0)) right center; background-repeat: no-repeat; background-size: 36px 100%, 36px 100%, 12px 100%, 12px 100%; background-attachment: local, local, scroll, scroll; } .ds-dtable th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.6px; color: var(--text-3, #5b6b86); font-weight: 600; padding: 8px 12px; border-bottom: 1px solid var(--border, #dbe3ef); position: sticky; top: 0; background: var(--surface, #fff); } .ds-dtable td { padding: 12px; border-bottom: 1px solid var(--border-soft, #e6ecf5); color: var(--text-2, #4a5b78); } .ds-dtable tbody tr:hover td { background: var(--surface-2, #f1f5fb); } .ds-dtable .ds-r { font-family: 'Fira Code', monospace; font-variant-numeric: tabular-nums; text-align: right; } .ds-dtable .ds-gname { font-weight: 600; color: var(--text, #14213a); }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Analyst's Bench",
+    "overview": "GameRadar is an instrument, not a dashboard. It is read at a working distance by one person deciding whether a game is worth building, so it is dense on purpose: many small figures, ruled and aligned, on cool light chrome. Density is achieved through padding, never through shrinking type — the smallest text in the product is 11px and that is a floor, not a starting point.\n\nThe world it explicitly refuses is the stock admin template: gradient rails, decorative KPI blobs, six equal hero-metric cards, rainbow categorical charts, and coloured accent stripes on card edges. Where that template puts six competing headlines, this build puts one answer ('this week's read') above its evidence, and the evidence reads as one ruled strip rather than six boxes. Where that template throws twelve hues at a treemap, this build has exactly one focus colour and calls everything else graphite.\n\nEvery panel tells a step of one story — find an underserved market, shape a pitch, judge whether it clears an income target — and every panel ends by handing off to the next step rather than signing its own name. Dark mode is a second token set over the same scale, not a second design; only colour tokens move.",
+    "keyCharacteristics": [
+      "Cool light chrome (#f4f6fb page, white surfaces, hairline borders) with a single dark media plate",
+      "Fira Sans for prose, Fira Code with tabular numerals for every figure, label, axis tick and chip",
+      "One focus blue meaning 'the series under decision'; all other context is graphite",
+      "Semantic colour reserved for verdicts, never for categories",
+      "Compactness from padding, with an 11px type floor and a 44px touch floor",
+      "Flat-by-default surfaces; two shadow steps, both ambient, no elevation theatre"
+    ],
+    "rules": [
+      {
+        "name": "The Ink-4 Rule",
+        "body": "--text-4 (#8493ad) is a NON-TEXT token: dividers, disabled glyphs, scrollbar thumbs, decorative rules. It must never carry a word. Text stops at Ink 3.",
+        "section": "colors"
+      },
+      {
+        "name": "The One Focus Rule",
+        "body": "Focus Blue means exactly one thing: the series under decision. If two things in a chart are blue, one of them is wrong. Semantic colour (positive/negative) is reserved for verdicts — never a category, never a series.",
+        "section": "colors"
+      },
+      {
+        "name": "The No-Rainbow Rule",
+        "body": "Categorical colour is never used for ordered data. Magnitude gets a single-hue ink ramp (#eef2f8 → #1e3a5f; the treemap's variant starts at #5b7099 because it prints white labels on its tiles). Scale tiers are one hue at three weights, not three unrelated blues.",
+        "section": "colors"
+      },
+      {
+        "name": "The Mixed-Tint Rule",
+        "body": "Every tinted ground is color-mix(in srgb, var(--token) N%, var(--surface)) — never a hardcoded pastel. A mixed tint follows the colour scheme; a literal pastel becomes a stain in dark mode. Typical mixes: 5–7% for a full-card ground, 10–14% for a chip or tag.",
+        "section": "colors"
+      },
+      {
+        "name": "The On-Fill Rule",
+        "body": "Text printed on a solid semantic fill (badges, counters, section numerals, the primary button) uses --on-fill, never #fff. Those fills invert between schemes and the text has to invert with them.",
+        "section": "colors"
+      },
+      {
+        "name": "The Plate Rule",
+        "body": "--plate does not invert. It is a media mount, not a surface: every Steam capsule, screenshot and generated key art sits on the same dark ground in both colour schemes, which is what keeps Radar and Library consistent. The plate never spreads to chrome.",
+        "section": "colors"
+      },
+      {
+        "name": "The 11px Floor Rule",
+        "body": "Nothing renders below 11px (--fs-1), ever. The e2e accessibility spec fails the build on any text node under it. Compactness comes from padding, never from point size.",
+        "section": "typography"
+      },
+      {
+        "name": "The Two Voices Rule",
+        "body": "Mono is for figures, labels, axis ticks and chips. Prose sets in Fira Sans regardless of how small it is — including the sidebar footers, which are sentences, not status lines. A status line (the catalog dot + count) is the exception and is scoped to its own class, because applying the flex/mono treatment to a paragraph shatters it into ten-character columns.",
+        "section": "typography"
+      },
+      {
+        "name": "The Step-Down Rule",
+        "body": "When content does not fit, move down the scale (a word-valued KPI takes 16px instead of 20px), never to an off-scale inline value.",
+        "section": "typography"
+      },
+      {
+        "name": "The No-Sideways-Page Rule",
+        "body": "The page never scrolls horizontally at any width. A wide table scrolls inside its own card at every width (not conditionally below a breakpoint), and every container that holds one — grid items, flex children, .card — carries min-width: 0, because the default min-width: auto inflates a track to a max-content table's full width and defeats max-width: 100%. Enforced by web/e2e/mobile.spec.ts at 375px.",
+        "section": "layout"
+      },
+      {
+        "name": "The Earned Column Rule",
+        "body": "A column appears only when the data supports it. The Team column renders only when hasTeamCoverage(rows) clears its coverage threshold; the capsule column renders only when anyArt is true. A column of '—' is a column that should not exist.",
+        "section": "layout"
+      },
+      {
+        "name": "The 44px Rule",
+        "body": "Every control is at least 44px tall at 375px. Block-level controls take min-height. Inline controls inside running text (source links, provenance receipts, tip triggers) keep their box and expand the hit area with an absolutely-positioned ::after — growing the box would break paragraph rhythm. The a11y spec measures the pseudo-element, so this is the sanctioned technique.",
+        "section": "layout"
+      },
+      {
+        "name": "The Honest Affordance Rule",
+        "body": "A hover response is a promise. Cursor changes, hover lifts and raised shadows belong only to elements with a click handler; static evidence rows (.insight, .gap, .ref-card, .action) carry none.",
+        "section": "elevation"
+      },
+      {
+        "name": "The No-Stripe Rule",
+        "body": "An accent stripe — a coloured left border or a coloured inset shadow on a card edge — is banned as a signal device. It is the most recognisable tell of a generated UI, and it repeats what the card's title, mark or ground already says. Use a tinted ground (color-mix at 5–7%) or a coloured label instead. Where the colour is the key across a set of tiles, put the colour on the label the reader actually looks at, not on a rule above it.",
+        "section": "elevation"
+      },
+      {
+        "name": "The Pill Rule",
+        "body": "--r-pill is for counts, numeric badges and small status capsules only — never a text chip. A pill-shaped word reads as a different component than a rounded one.",
+        "section": "shapes"
+      },
+      {
+        "name": "The Drawn Mark Rule",
+        "body": "Icons are drawn SVG on a 24px viewBox, fill: none, stroke: currentColor, stroke-width: 1.7–1.9, sized 13–21px by context. No emoji as icons, no icon fonts, no raster marks.",
+        "section": "shapes"
+      }
+    ],
+    "dos": [
+      "Do take every size from the scale. If a component needs a value that is not on it, the component is wrong — adding a token is a design decision, not a convenience.",
+      "Do get density from padding. The type floor is 11px and the touch floor is 44px, both machine-checked.",
+      "Do build tinted grounds with color-mix(in srgb, var(--token) N%, var(--surface)) so they follow the colour scheme.",
+      "Do use --on-fill for text on a solid semantic fill.",
+      "Do keep --text-4 off every word — dividers and disabled glyphs only.",
+      "Do give a chart exactly one focus colour and let everything else be graphite.",
+      "Do map ordered data to a single-hue ramp by value.",
+      "Do let a wide table scroll inside its own card at every width, and give every container that holds one min-width: 0.",
+      "Do render a column only when the data supports it (hasTeamCoverage, anyArt).",
+      "Do draw icons as SVG on a 24px viewBox at 1.7–1.9 stroke with currentColor.",
+      "Do end a panel on its hand-off to the next step.",
+      "Do run the a11y and mobile e2e specs before pushing — they are the enforced floor, wired into the pre-push hook, and they cover both colour schemes."
+    ],
+    "donts": [
+      "Don't put an accent stripe — a coloured border or inset shadow on a card edge — on anything. Use a tinted ground or a coloured label.",
+      "Don't hardcode a pastel. A literal rgba() tint stops following the colour scheme.",
+      "Don't invert --plate. It is a media mount, not a surface.",
+      "Don't use --sp-0 (2px) for layout. Control internals only.",
+      "Don't use --r-pill on a text chip; a pill-shaped word reads as a different component.",
+      "Don't set line-height independently of its type step.",
+      "Don't set prose in Fira Code, at any size.",
+      "Don't use emoji, icon fonts, or raster images as icons.",
+      "Don't use categorical colour for ordered data, or semantic green/red for a category.",
+      "Don't let a second element in a chart be blue.",
+      "Don't attach a cursor, hover lift or raised shadow to an element with no click handler.",
+      "Don't ship an hrefless <a> as a button — it is keyboard-unreachable and the a11y spec fails on it.",
+      "Don't use a fixed column count in a grid whose item count can vary."
+    ]
+  }
+}

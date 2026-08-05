@@ -1,5 +1,14 @@
 import { useEffect, useState } from "react";
-import { useDrawer, NavToggle, NavScrim, DrawerClose } from "../components/MobileNav.tsx";
+import { Handoff } from "../components/Handoff.tsx";
+import type { Service } from "../components/Rail.tsx";
+import {
+  useDrawer,
+  useIsDrawer,
+  drawerPanelProps,
+  NavToggle,
+  NavScrim,
+  DrawerClose,
+} from "../components/MobileNav.tsx";
 import type { BriefEditionMeta, BriefEdition, BriefNotable, BriefSteering } from "shared";
 import { api } from "../lib/api.ts";
 import { isSameWeek } from "../lib/week.ts";
@@ -22,7 +31,7 @@ function md(s: string): string {
 }
 const srcLink = {
   fontFamily: "'Fira Code'",
-  fontSize: 11,
+  fontSize: "var(--fs-1)",
   color: "var(--primary)",
   marginTop: 8,
   display: "inline-block",
@@ -46,14 +55,42 @@ const KIND: Record<string, string> = {
 };
 const isUrl = (s?: string | null) => typeof s === "string" && /^https?:\/\//i.test(s.trim());
 
+// Portal marks, drawn in the same 24px / 1.8-stroke grammar as components/icons.tsx.
+const MARK = {
+  pad: (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <rect x="2" y="6" width="20" height="12" rx="4" />
+      <path d="M7 12h3M8.5 10.5v3M15 11.5h.01M17.5 13.5h.01" />
+    </svg>
+  ),
+  trend: (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M3 17l5-5 4 3 8-8" />
+      <path d="M15 7h5v5" />
+    </svg>
+  ),
+  globe: (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <circle cx="12" cy="12" r="9" />
+      <path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18" />
+    </svg>
+  ),
+  shelf: (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M4 4v16M9 4v16M14 5l5 15" />
+      <path d="M3 20h18" />
+    </svg>
+  ),
+};
+
 function platformOf(it: BriefNotable) {
   const s = `${it.source || ""} ${it.name || ""} ${it.kind || ""}`.toLowerCase();
-  if (/crazygames/.test(s)) return { label: "CrazyGames", cls: "pf-crazy", icon: "🕹️" };
-  if (/\bpoki\b/.test(s)) return { label: "Poki", cls: "pf-poki", icon: "🎮" };
-  if (/itch\.io|itch /.test(s)) return { label: "itch.io", cls: "pf-itch", icon: "🎮" };
+  if (/crazygames/.test(s)) return { label: "CrazyGames", cls: "pf-crazy", icon: MARK.pad };
+  if (/\bpoki\b/.test(s)) return { label: "Poki", cls: "pf-poki", icon: MARK.pad };
+  if (/itch\.io|itch /.test(s)) return { label: "itch.io", cls: "pf-itch", icon: MARK.pad };
   if ((it.kind || "") === "Loop signal")
-    return { label: "Loop signal", cls: "pf-signal", icon: "📈" };
-  return { label: it.kind || "Browser", cls: "pf-web", icon: "🌐" };
+    return { label: "Loop signal", cls: "pf-signal", icon: MARK.trend };
+  return { label: it.kind || "Browser", cls: "pf-web", icon: MARK.globe };
 }
 
 function RichCard({ item, kind }: { item: BriefNotable; kind: "notable" | "browser" }) {
@@ -98,7 +135,7 @@ function RichCard({ item, kind }: { item: BriefNotable; kind: "notable" | "brows
           {badge && <span className={"btag " + badgeCls}>{badge}</span>}
           {item.figure && <span className="bfig">{item.figure}</span>}
         </div>
-        <h3>{item.name}</h3>
+        <h2>{item.name}</h2>
         {meta && <div className="bmeta">{meta}</div>}
         {item.blurb && <p className="bblurb">{item.blurb}</p>}
         {item.relevance && <p className="brel">{item.relevance}</p>}
@@ -119,7 +156,7 @@ function RichCard({ item, kind }: { item: BriefNotable; kind: "notable" | "brows
 function DemandTracker({ t }: { t: NonNullable<BriefEdition["tracker"]> }) {
   return (
     <>
-      <p style={{ fontSize: 13, color: "var(--text-2)", margin: "0 0 4px" }}>
+      <p style={{ fontSize: "var(--fs-3)", color: "var(--text-2)", margin: "0 0 4px" }}>
         {t.total} signals below, grouped by loop family — {t.tagged} placed by the curated map,{" "}
         {t.total - t.tagged} unclassified (no family claimed)
         {t.comparedTo ? `; arrows vs the ${fmt(t.comparedTo)} edition` : ""}.
@@ -128,7 +165,7 @@ function DemandTracker({ t }: { t: NonNullable<BriefEdition["tracker"]> }) {
         {t.rows.map((r) => (
           <div className="ref-card" key={r.family ?? "_none"}>
             <span className="rtag">{r.family ?? "unclassified"}</span>
-            <h4>{rowSummary(r)}</h4>
+            <h3>{rowSummary(r)}</h3>
             {r.titles.length > 0 && <div className="src">{r.titles.join(" · ")}</div>}
           </div>
         ))}
@@ -137,8 +174,9 @@ function DemandTracker({ t }: { t: NonNullable<BriefEdition["tracker"]> }) {
   );
 }
 
-export function Brief({ hidden }: { hidden: boolean }) {
+export function Brief({ hidden, onGoto }: { hidden: boolean; onGoto?: (svc: Service) => void }) {
   const drawer = useDrawer();
+  const isDrawer = useIsDrawer();
   const [list, setList] = useState<BriefEditionMeta[]>([]);
   const [sel, setSel] = useState<string | null>(null);
   const [ed, setEd] = useState<BriefEdition | null>(null);
@@ -169,16 +207,18 @@ export function Brief({ hidden }: { hidden: boolean }) {
   const editionRow = (e: BriefEditionMeta) => {
     const di = dow(e.editionDate);
     return (
-      <a
+      <button
+        type="button"
         key={e.id}
         className={"edition" + (sel === e.editionDate ? " active" : "")}
+        aria-current={sel === e.editionDate ? "page" : undefined}
         onClick={() => setSel(e.editionDate)}
       >
         <span>{fmt(e.editionDate)}</span>
         <span className={"ed-tag " + (di === 4 ? "thu" : di === 1 ? "mon" : "day")}>
           {DAYS_SHORT[di]}
         </span>
-      </a>
+      </button>
     );
   };
 
@@ -186,6 +226,7 @@ export function Brief({ hidden }: { hidden: boolean }) {
   return (
     <section className="service" data-svc="brief" hidden={hidden}>
       <aside
+        {...drawerPanelProps(drawer, isDrawer, "Brief editions")}
         className={"side" + (drawer.open ? " open" : "")}
         onClick={(e) => {
           if ((e.target as HTMLElement).closest(".edition")) drawer.closeDrawer();
@@ -222,12 +263,12 @@ export function Brief({ hidden }: { hidden: boolean }) {
       <main className="main">
         <div className="topbar">
           <NavToggle onClick={drawer.openDrawer} />
-          <h2>
+          <h1>
             Indie &amp; Gaming Brief{" "}
             <small>
               {ed ? `Edition ${ed.editionDate} · ${DAYS_LONG[dow(ed.editionDate)]}` : "…"}
             </small>
-          </h2>
+          </h1>
           <div className="filters">
             {ed && ed.sourceCount > 0 && (
               <div className="chip">
@@ -250,7 +291,7 @@ export function Brief({ hidden }: { hidden: boolean }) {
                   <path d="M7 9h7M7 13h7M7 17h4" />
                 </svg>
               </div>
-              <h3>No brief editions yet</h3>
+              <h2>No brief editions yet</h2>
               <p>Editions appear here automatically as they're published.</p>
             </div>
           ) : !p ? (
@@ -266,7 +307,7 @@ export function Brief({ hidden }: { hidden: boolean }) {
                   </div>
                   <div className="card" style={{ gap: 10 }}>
                     {p.top_signals.map((s, i) => (
-                      <div key={i} style={{ display: "flex", gap: 10, fontSize: 13.5 }}>
+                      <div key={i} style={{ display: "flex", gap: 10, fontSize: "var(--fs-3)" }}>
                         <span style={{ color: "var(--primary)" }}>▸</span>
                         <span dangerouslySetInnerHTML={{ __html: md(s) }} />
                       </div>
@@ -316,7 +357,9 @@ export function Brief({ hidden }: { hidden: boolean }) {
                     <span className="n">4</span>Tooling
                   </div>
                   {p.tooling.headline && (
-                    <p style={{ fontSize: 13, color: "var(--text-2)", margin: "0 0 4px" }}>
+                    <p
+                      style={{ fontSize: "var(--fs-3)", color: "var(--text-2)", margin: "0 0 4px" }}
+                    >
                       {p.tooling.headline}
                     </p>
                   )}
@@ -324,7 +367,7 @@ export function Brief({ hidden }: { hidden: boolean }) {
                     {p.tooling.items.map((t, i) => (
                       <div className="ref-card" key={i}>
                         {t.group && <span className="rtag">{t.group}</span>}
-                        <h4>{t.headline}</h4>
+                        <h3>{t.headline}</h3>
                         {t.version_or_date && <div className="src">{t.version_or_date}</div>}
                         {t.detail && <p>{t.detail}</p>}
                         {t.relevance && (
@@ -370,9 +413,11 @@ export function Brief({ hidden }: { hidden: boolean }) {
                           </span>
                         )}
                         <div>
-                          <div style={{ fontSize: 13.5, fontWeight: 600 }}>{m.headline}</div>
+                          <div style={{ fontSize: "var(--fs-3)", fontWeight: 600 }}>
+                            {m.headline}
+                          </div>
                           {m.detail && (
-                            <div style={{ fontSize: 12.5, color: "var(--text-3)" }}>
+                            <div style={{ fontSize: "var(--fs-2)", color: "var(--text-3)" }}>
                               {m.detail}
                               {m.source && (
                                 <>
@@ -404,7 +449,10 @@ export function Brief({ hidden }: { hidden: boolean }) {
                   </div>
                   <div className="card" style={{ gap: 10 }}>
                     {p.founder_take.map((para, i) => (
-                      <p key={i} style={{ fontSize: 13.5, lineHeight: 1.55, color: "var(--text)" }}>
+                      <p
+                        key={i}
+                        style={{ fontSize: "var(--fs-3)", lineHeight: 1.55, color: "var(--text)" }}
+                      >
                         {para}
                       </p>
                     ))}
@@ -412,8 +460,21 @@ export function Brief({ hidden }: { hidden: boolean }) {
                 </>
               )}
 
-              {p.reference_shelf && <div className="foot-note">📚 {p.reference_shelf}</div>}
-              <div className="foot-note">KAIROS · News Brief · auto-published editions</div>
+              {p.reference_shelf && (
+                <div className="foot-note ref-shelf">
+                  {MARK.shelf}
+                  {p.reference_shelf}
+                </div>
+              )}
+              <Handoff
+                links={[
+                  {
+                    label: "Check the market behind this",
+                    hint: "open Radar on the genres this edition names",
+                    onClick: () => onGoto?.("radar"),
+                  },
+                ]}
+              />
             </>
           )}
         </div>

@@ -1,5 +1,18 @@
 import { useEffect, useState } from "react";
-import { useDrawer, NavToggle, NavScrim, DrawerClose } from "../components/MobileNav.tsx";
+import { Tip } from "../components/Tip.tsx";
+import {
+  useDrawer,
+  useIsDrawer,
+  drawerPanelProps,
+  NavToggle,
+  NavScrim,
+  DrawerClose,
+} from "../components/MobileNav.tsx";
+import { Capsule } from "../components/Capsule.tsx";
+import { describeLoadError } from "../lib/loadError.ts";
+import { TabList } from "../components/Tabs.tsx";
+import { Handoff } from "../components/Handoff.tsx";
+import type { Service } from "../components/Rail.tsx";
 import type {
   Overview,
   Platform,
@@ -69,8 +82,13 @@ const fmtOwners = (n: number | null) =>
       : n >= 1e3
         ? Math.round(n / 1e3) + "K"
         : String(n);
-const money = (cents: number | null) =>
-  cents == null ? "—" : cents === 0 ? "Free" : "$" + (cents / 100).toFixed(2);
+// `sample` distinguishes the two things a 0 can mean. A median of 0 cents over a
+// real cohort means those games are genuinely Free; a median of 0 over an EMPTY
+// cohort means unknown, and printing "Free" there states a market fact the data
+// never supported. Callers with a per-row price omit `sample` — a row's own price
+// of 0 is always a real Free.
+const money = (cents: number | null, sample?: number) =>
+  sample === 0 || cents == null ? "—" : cents === 0 ? "Free" : "$" + (cents / 100).toFixed(2);
 const proxy = (d: number) =>
   d >= 1e9
     ? "$" + (d / 1e9).toFixed(1) + "B"
@@ -104,6 +122,32 @@ type SteamSection =
   | "studios"
   | "comparables"
   | "opportunity";
+
+// The URL carries an untyped slug; these narrow it to a section this panel owns,
+// so a stale bookmark or a typo falls back to the default instead of blanking.
+const BROWSER_VIEWS: View[] = [
+  "overview",
+  "genres",
+  "tags",
+  "developers",
+  "trends",
+  "hidden-gems",
+  "new-releases",
+  "market-gaps",
+];
+const STEAM_SECTIONS: SteamSection[] = [
+  "overview",
+  "economics",
+  "pricing",
+  "ownership",
+  "studios",
+  "comparables",
+  "opportunity",
+];
+const isBrowserView = (s: string | null | undefined): s is View =>
+  !!s && (BROWSER_VIEWS as string[]).includes(s);
+const isSteamSection = (s: string | null | undefined): s is SteamSection =>
+  !!s && (STEAM_SECTIONS as string[]).includes(s);
 const I = {
   overview: (
     <svg viewBox="0 0 24 24">
@@ -177,11 +221,11 @@ const Skel = ({ h = 300 }: { h?: number }) => (
   </div>
 );
 const head = (icon: JSX.Element, title: string, sub?: string) => (
-  <h3>
+  <h2>
     {icon}
     {title}
     {sub && <span className="sub">{sub}</span>}
-  </h3>
+  </h2>
 );
 const deltaCls = (d: number) => (d > 3 ? "delta-up" : d < -3 ? "delta-dn" : "delta-fl");
 const TRAJ_LABEL: Record<string, string> = {
@@ -236,13 +280,13 @@ function QuadrantCard({
   if (points.length < 3) return null;
   return (
     <div className="card hero">
-      <h3>
+      <h2>
         {I.gaps}Demand vs. Supply
         <span className="sub">
           top-left = underserved (few titles, high demand) · bubble = {weightName} · colour = supply
           momentum
         </span>
-      </h3>
+      </h2>
       <div className="q-legend">
         {SUPPLY_LEGEND.map(([k, c, label]) => (
           <span key={k} className="q-legend-item">
@@ -276,9 +320,7 @@ function OverviewView({ ov }: { ov: Overview }) {
         </div>
         <div className="kpi">
           <div className="label">{I.trends}Rising genre</div>
-          <div className="val num" style={{ fontSize: 24, paddingTop: 4 }}>
-            {ov.kpi.risingGenre}
-          </div>
+          <div className="val val-word num">{ov.kpi.risingGenre}</div>
           <span className="delta up num">▲ +{ov.kpi.risingVotesPerDay} votes/day</span>
         </div>
         <div className="kpi accent">
@@ -357,7 +399,7 @@ function OverviewView({ ov }: { ov: Overview }) {
               <tr key={r.label}>
                 <td className="gname">{r.label}</td>
                 <td style={{ maxWidth: 360 }}>{r.definition}</td>
-                <td style={{ color: "var(--ink-3, #6b7280)" }}>{r.examples.join(" · ") || "—"}</td>
+                <td style={{ color: "var(--text-3)" }}>{r.examples.join(" · ") || "—"}</td>
               </tr>
             ))}
           </tbody>
@@ -422,7 +464,7 @@ function SteerChip({ s }: { s?: SteeringMatch }) {
 function GapList({ gaps }: { gaps: Overview["gaps"] }) {
   return (
     <div className="gaplist">
-      <p className="gap-legend" title={Z_TIP}>
+      <p className="gap-legend">
         opportunity = z(appetite: median votes/title) + z(quality ceiling: P90 rating) − z(supply:
         games)
       </p>
@@ -431,7 +473,10 @@ function GapList({ gaps }: { gaps: Overview["gaps"] }) {
           <span className="rank num">{i + 1}</span>
           <div className="name">
             {g.label}
-            <small title={Z_TIP}>opportunity {g.score.toFixed(1)}</small>
+            <small>
+              opportunity {g.score.toFixed(1)}
+              <Tip text={Z_TIP} />
+            </small>
             {g.supplyRising && (
               <span
                 className="supply-flag"
@@ -491,10 +536,14 @@ function LoopFamilyMarketCard({ platform }: { platform: Platform }) {
             <tr>
               <th>Loop family</th>
               <th className="r">Supply</th>
-              <th className="r" title="Supply-weighted median votes/reviews">
+              <th className="r">
                 Appetite
+                <Tip text="Supply-weighted median votes/reviews" />
               </th>
-              <th title={SUPPLY_TIP}>Supply trend</th>
+              <th>
+                Supply trend
+                <Tip text={SUPPLY_TIP} />
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -540,10 +589,14 @@ function GenresView({ rows }: { rows: GenreRow[] }) {
             <th className="r">P90 votes (top-10% bar)</th>
             <th className="r">P90 rating</th>
             <th className="r">Votes/day</th>
-            <th title="Later-half momentum vs earlier-half of the genre's median-vote series: rising / plateau / decaying">
+            <th>
               Demand trend
+              <Tip text="Later-half momentum vs earlier-half of the genre's median-vote series: rising / plateau / decaying" />
             </th>
-            <th title={SUPPLY_TIP}>Supply</th>
+            <th>
+              Supply
+              <Tip text={SUPPLY_TIP} />
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -640,9 +693,7 @@ function TagsView({ ov }: { ov: Overview }) {
                       <i style={{ width: (s.count / setMax) * 100 + "%" }} />
                     </span>
                   </td>
-                  <td style={{ color: "var(--ink-3, #6b7280)" }}>
-                    {s.examples.join(" · ") || "—"}
-                  </td>
+                  <td style={{ color: "var(--text-3)" }}>{s.examples.join(" · ") || "—"}</td>
                   <td className="r">{fmt(s.count)}</td>
                 </tr>
               ))}
@@ -660,7 +711,7 @@ function DevelopersView({ rows, platform }: { rows: DeveloperRow[]; platform: Pl
       <div className="card">
         <div className="empty">
           <div className="big-ic">{I.developers}</div>
-          <h3>No developer data yet</h3>
+          <h2>No developer data yet</h2>
           <p>
             CrazyGames doesn't expose developer names — Poki does. Once the Poki crawl runs, repeat
             publishers show up here.
@@ -712,8 +763,8 @@ function TrendsView({ ov }: { ov: Overview }) {
             className="empty-inline"
             style={{
               padding: "28px 8px",
-              color: "var(--ink-3, #6b7280)",
-              fontSize: 13,
+              color: "var(--text-3)",
+              fontSize: "var(--fs-3)",
               lineHeight: 1.6,
             }}
           >
@@ -799,7 +850,10 @@ function NewReleasesView({ rows }: { rows: NewRelease[] }) {
             >
               Votes/day
             </th>
-            <th title="Later-half momentum vs earlier-half: rising / plateau / decaying">Trend</th>
+            <th>
+              Trend
+              <Tip text="Later-half momentum vs earlier-half: rising / plateau / decaying" />
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -854,15 +908,11 @@ function RevBand({ r }: { r: SteamGenreEconomics }) {
   if (r.revenueBandHighPerGame == null) return null; // older payloads carry no band
   const same = r.revenueBandLowPerGame === r.revenueBandHighPerGame;
   return (
-    <div className="est-band" title={BAND_TIP}>
+    <div className="est-band">
       {same
         ? proxy(r.revenueBandLowPerGame)
         : `${proxy(r.revenueBandLowPerGame)}–${proxy(r.revenueBandHighPerGame)}`}
-      {r.estimatorsDisagree ? (
-        <span className="est-split" title={SPLIT_TIP}>
-          wide
-        </span>
-      ) : null}
+      {r.estimatorsDisagree ? <span className="est-split">wide</span> : null}
     </div>
   );
 }
@@ -909,28 +959,39 @@ function EconTable({
           <th>{keyLabel}</th>
           <th className="r">Games</th>
           {demand ? (
-            <th className="r" title={DEMAND_TIP}>
+            <th className="r">
               Median reviews
+              <Tip text={DEMAND_TIP} />
             </th>
           ) : null}
           <th className="r">Median price</th>
           <th className="r">Median rating</th>
-          <th className="r" title={OWNERS_TIP}>
+          <th className="r">
             Total owners
+            <Tip text={OWNERS_TIP} />
           </th>
-          <th className="r" title={MED_REV_TIP}>
+          <th className="r">
             Median rev/game
+            <Tip text={MED_REV_TIP} />
           </th>
-          <th className="r" title={MEAN_REV_TIP}>
+          <th className="r">
             Mean rev/game
+            <Tip text={MEAN_REV_TIP} />
           </th>
-          <th className="r" title={TOTAL_REV_TIP}>
+          <th className="r">
             Total rev proxy
+            <Tip text={TOTAL_REV_TIP} />
           </th>
           {trend ? (
             <>
-              <th title={SUBGENRE_DEMAND_TREND_TIP}>Demand trend</th>
-              <th title={SUPPLY_TIP}>Supply</th>
+              <th>
+                Demand trend
+                <Tip text={SUBGENRE_DEMAND_TREND_TIP} />
+              </th>
+              <th>
+                Supply
+                <Tip text={SUPPLY_TIP} />
+              </th>
             </>
           ) : null}
         </tr>
@@ -984,7 +1045,7 @@ function OppList({ gaps, lens }: { gaps: SteamGap[]; lens?: SteeringLens }) {
     );
   return (
     <div className="gaplist">
-      <p className="gap-legend" title={Z_TIP}>
+      <p className="gap-legend">
         opportunity = z(demand: median owners) + z(quality ceiling: P90 rating) − z(supply: games) ·
         median price is context, not scored
       </p>
@@ -994,7 +1055,10 @@ function OppList({ gaps, lens }: { gaps: SteamGap[]; lens?: SteeringLens }) {
           <span className="rank num">{i + 1}</span>
           <div className="name">
             {g.label}
-            <small title={Z_TIP}>opportunity {g.score.toFixed(1)}</small>
+            <small>
+              opportunity {g.score.toFixed(1)}
+              <Tip text={Z_TIP} />
+            </small>
             {g.supplyRising && (
               <span
                 className="supply-flag"
@@ -1037,11 +1101,13 @@ function PricingTable({ rows }: { rows: SteamPriceBand[] }) {
           <th>Price band</th>
           <th className="r">Games</th>
           <th className="r">Median rating</th>
-          <th className="r" title={OWNERS_TIP}>
+          <th className="r">
             Total owners
+            <Tip text={OWNERS_TIP} />
           </th>
-          <th className="r" title={PROXY_TIP}>
+          <th className="r">
             Revenue proxy
+            <Tip text={PROXY_TIP} />
           </th>
         </tr>
       </thead>
@@ -1071,13 +1137,15 @@ function OwnershipTable({ rows }: { rows: SteamOwnershipRow[] }) {
         <tr>
           <th>Genre</th>
           <th className="r">Games</th>
-          <th className="r" title={OWNERS_TIP}>
+          <th className="r">
             Total owners
+            <Tip text={OWNERS_TIP} />
           </th>
           <th className="r">Median owners</th>
           <th className="r">Live CCU</th>
-          <th className="r" title={CONTENT_TIP}>
+          <th className="r">
             Content expectation
+            <Tip text={CONTENT_TIP} />
           </th>
         </tr>
       </thead>
@@ -1104,8 +1172,9 @@ function DevTable({ rows }: { rows: SteamDeveloperRow[] }) {
         <tr>
           <th>Developer</th>
           <th className="r">Games</th>
-          <th className="r" title={OWNERS_TIP}>
+          <th className="r">
             Total owners
+            <Tip text={OWNERS_TIP} />
           </th>
           <th className="r">Avg rating</th>
           <th>Top genre</th>
@@ -1129,6 +1198,8 @@ function DevTable({ rows }: { rows: SteamDeveloperRow[] }) {
 const REVIEWS_TIP =
   "Review count = launch traction the rating hides. Steam shows no overall score until ~10 reviews, so a “quiet” row (below that) is a launch that landed at near-zero visibility — the modal indie outcome, not an error (#109).";
 function NewReleasesTable({ rows }: { rows: SteamNewRelease[] }) {
+  // The capsule column exists only if the set has capsules to show.
+  const anyArt = rows.some((r) => !!r.capsuleUrl);
   return (
     <table className="dtable">
       <thead>
@@ -1137,14 +1208,17 @@ function NewReleasesTable({ rows }: { rows: SteamNewRelease[] }) {
           <th className="r">Released</th>
           <th>Genre</th>
           <th className="r">Rating</th>
-          <th className="r" title={REVIEWS_TIP}>
+          <th className="r">
             Reviews
+            <Tip text={REVIEWS_TIP} />
           </th>
-          <th className="r" title="Reviews per day since launch — traction rate, not a total.">
+          <th className="r">
             Rev/day
+            <Tip text="Reviews per day since launch — traction rate, not a total." />
           </th>
-          <th className="r" title={OWNERS_TIP}>
+          <th className="r">
             Owners
+            <Tip text={OWNERS_TIP} />
           </th>
           <th className="r">Price</th>
         </tr>
@@ -1152,7 +1226,12 @@ function NewReleasesTable({ rows }: { rows: SteamNewRelease[] }) {
       <tbody>
         {rows.map((r, i) => (
           <tr key={i}>
-            <td className="gname">{r.title}</td>
+            <td className="gname">
+              <span className="gamecell">
+                {anyArt && <Capsule url={r.capsuleUrl} title={r.title} />}
+                <span>{r.title}</span>
+              </span>
+            </td>
             <td className="r">{r.releaseDate ?? "—"}</td>
             <td>{r.genre}</td>
             <td className="r">{rate(r.rating)}</td>
@@ -1221,29 +1300,45 @@ function ComparablesTable({
   onProject?: (seed: RevenueSeed) => void;
 }) {
   const showTeam = hasTeamCoverage(rows);
+  // Same discipline as showTeam: the capsule column earns its width only when the
+  // set actually has art. Otherwise every row renders an identical dark pill
+  // holding one letter that already appears beside it — noise, not information.
+  const anyArt = rows.some((r) => !!r.capsuleUrl);
   return (
     <table className="dtable">
       <thead>
         <tr>
           <th>Game</th>
           <th>Tier</th>
-          {showTeam && <th title={TEAM_TIP}>Team (est.)</th>}
+          {showTeam && (
+            <th>
+              Team (est.)
+              <Tip text={TEAM_TIP} />
+            </th>
+          )}
           <th>Genre</th>
           <th className="r">Released</th>
           <th className="r">Rating</th>
-          <th className="r" title={AI_DISCLOSURE_TIP}>
+          <th className="r">
             AI
+            <Tip text={AI_DISCLOSURE_TIP} />
           </th>
           <th className="r">Reviews</th>
-          <th className="r" title={VELOCITY_TIP}>
+          <th className="r">
             Rev./day
+            <Tip text={VELOCITY_TIP} />
           </th>
-          <th className="r" title={OWNERS_TIP}>
+          <th className="r">
             Owners
+            <Tip text={OWNERS_TIP} />
           </th>
           <th className="r">Price</th>
           <th>Developer</th>
-          {onProject && <th title={PROJECT_TIP}></th>}
+          {onProject && (
+            <th>
+              <Tip text={PROJECT_TIP} />
+            </th>
+          )}
         </tr>
       </thead>
       <tbody>
@@ -1253,7 +1348,12 @@ function ComparablesTable({
           const meta = ts ? TEAM_META[ts.bucket] : null;
           return (
             <tr key={i}>
-              <td className="gname">{c.title}</td>
+              <td className="gname">
+                <span className="gamecell">
+                  {anyArt && <Capsule url={c.capsuleUrl} title={c.title} />}
+                  <span>{c.title}</span>
+                </span>
+              </td>
               <td>
                 <span className={"tier-chip " + tm.cls}>{tm.label}</span>
               </td>
@@ -1298,9 +1398,9 @@ function ComparablesTable({
                     AI
                   </span>
                 ) : c.aiDisclosure === false ? (
-                  <span style={{ color: "var(--ink-3, #6b7280)" }}>—</span>
+                  <span style={{ color: "var(--text-3)" }}>—</span>
                 ) : (
-                  <span style={{ color: "var(--ink-3, #6b7280)" }} title="Not checked">
+                  <span style={{ color: "var(--text-3)" }} title="Not checked">
                     ?
                   </span>
                 )}
@@ -1309,7 +1409,7 @@ function ComparablesTable({
               <td className="r">{c.reviewVelocity == null ? "—" : fmt(c.reviewVelocity)}</td>
               <td className="r">{fmtOwners(c.owners)}</td>
               <td className="r">{money(c.priceCents)}</td>
-              <td style={{ color: "var(--ink-3, #6b7280)" }}>{c.developer ?? "—"}</td>
+              <td style={{ color: "var(--text-3)" }}>{c.developer ?? "—"}</td>
               {onProject && (
                 <td className="r">
                   <button
@@ -1350,24 +1450,28 @@ function ComparablesCard({
   const soloN = rows.filter(isSoloReachable).length;
   return (
     <div className="card">
-      <h3>
+      <h2>
         {I.gems}Indie comparables
         <span className="sub">the realistic peer set — indie-tier games, most recent first</span>
-        <span className="seg" role="tablist" aria-label="Cohort" style={{ marginLeft: "auto" }}>
+        <span className="seg" role="group" aria-label="Cohort">
           <button
             className={"seg-btn" + (cohort === "all" ? " active" : "")}
+            type="button"
+            aria-pressed={cohort === "all"}
             onClick={() => setCohort("all")}
           >
             All ({rows.length})
           </button>
           <button
             className={"seg-btn" + (cohort === "solo" ? " active" : "")}
+            type="button"
+            aria-pressed={cohort === "solo"}
             onClick={() => setCohort("solo")}
           >
             Solo-reachable ({soloN})
           </button>
         </span>
-      </h3>
+      </h2>
       {cohort === "solo" && (
         <p className="view-head">
           Studios a <b>1–2 or 3–10 person</b> team could realistically match, by researched
@@ -1403,15 +1507,13 @@ function SteamKpis({ data }: { data: SteamOverview }) {
       </div>
       <div className="kpi">
         <div className="label">{I.money}Indie median price</div>
-        <div className="val num">{money(data.kpi.indieMedianPriceCents)}</div>
+        <div className="val num">{money(data.kpi.indieMedianPriceCents, data.kpi.indie)}</div>
         <span className="delta flat num">what indies charge</span>
       </div>
       <div className="kpi">
-        <div
-          className="label"
-          title="Share of tracked non-AAA titles released in the last 90 days still under ~10 reviews (Steam shows no overall score yet). The failure floor — what a competent-but-quiet launch actually looks like (#109)."
-        >
+        <div className="label">
           {I.releases}Quiet launches
+          <Tip text="Share of tracked non-AAA titles released in the last 90 days still under ~10 reviews (Steam shows no overall score yet). The failure floor — what a competent-but-quiet launch actually looks like (#109)." />
         </div>
         <div className="val num">{data.kpi.quietLaunchPct}%</div>
         <span className="delta flat num">
@@ -1419,11 +1521,9 @@ function SteamKpis({ data }: { data: SteamOverview }) {
         </span>
       </div>
       <div className="kpi">
-        <div
-          className="label"
-          title="Share of checked non-AAA titles released in the last 90 days whose store page carries Steam's AI Generated Content Disclosure. Only recent non-AAA titles are checked, so this reads over the sample we actually fetched (#110)."
-        >
+        <div className="label">
           {I.gems}AI disclosed
+          <Tip text="Share of checked non-AAA titles released in the last 90 days whose store page carries Steam's AI Generated Content Disclosure. Only recent non-AAA titles are checked, so this reads over the sample we actually fetched (#110)." />
         </div>
         <div className="val num">
           {data.kpi.aiDisclosurePct == null ? "—" : `${data.kpi.aiDisclosurePct}%`}
@@ -1481,19 +1581,23 @@ function GenreEconCard({ data }: { data: SteamOverview }) {
   }, [trimmed, searching]);
   return (
     <div className="card">
-      <h3>
+      <h2>
         {I.money}
         {lens === "genre" ? "Genre economics" : "Sub-genre economics"}
         <span className="sub">owners × realized price — what a market is worth at this scale</span>
-        <span className="seg" role="tablist" aria-label="Lens" style={{ marginLeft: "auto" }}>
+        <span className="seg" role="group" aria-label="Lens">
           <button
             className={"seg-btn" + (lens === "genre" ? " active" : "")}
+            type="button"
+            aria-pressed={lens === "genre"}
             onClick={() => setLens("genre")}
           >
             Genre
           </button>
           <button
             className={"seg-btn" + (lens === "tag" ? " active" : "")}
+            type="button"
+            aria-pressed={lens === "tag"}
             onClick={() => setLens("tag")}
             disabled={!tagRows.length}
             title={SUBGENRE_TIP}
@@ -1502,22 +1606,26 @@ function GenreEconCard({ data }: { data: SteamOverview }) {
           </button>
         </span>
         {lens === "genre" && (
-          <span className="seg" role="tablist" aria-label="Cohort">
+          <span className="seg" role="group" aria-label="Cohort">
             <button
               className={"seg-btn" + (cohort === "indie" ? " active" : "")}
+              type="button"
+              aria-pressed={cohort === "indie"}
               onClick={() => setCohort("indie")}
             >
               Indie
             </button>
             <button
               className={"seg-btn" + (cohort === "all" ? " active" : "")}
+              type="button"
+              aria-pressed={cohort === "all"}
               onClick={() => setCohort("all")}
             >
               All tiers
             </button>
           </span>
         )}
-      </h3>
+      </h2>
       {lens === "genre" && cohort === "all" && (
         <p className="view-head">
           All tiers include AAA — owners/revenue are dominated by mega-hits; demand context only,{" "}
@@ -1550,7 +1658,7 @@ function GenreEconCard({ data }: { data: SteamOverview }) {
                 borderRadius: 9,
                 padding: "8px 11px",
                 fontFamily: "Fira Code",
-                fontSize: 13,
+                fontSize: "var(--fs-3)",
                 color: "var(--text)",
                 background: "var(--surface-2)",
               }}
@@ -1593,6 +1701,84 @@ function GenreEconCard({ data }: { data: SteamOverview }) {
   );
 }
 
+// The P0 this guards against: with zero crawled games the panel still rendered a
+// full analysis — six KPIs reading 0, an empty tier chart, an "Indie median price"
+// of "Free", and a "This week's read" strip stating "No genre shows extreme
+// hit-concentration in the indie cohort this window", which is a CONCLUSION drawn
+// from nothing. A decision engine that produces confident sentences without data
+// is failing at its only job, so an empty catalog now fails loudly instead.
+// A failed load used to render `Failed to load: TypeError: Failed to fetch` in a
+// red card with no way out but a page refresh. It now names the problem, says
+// what to do, offers the retry, and keeps the raw text available for diagnosis
+// without leading with it.
+function LoadFailure({ error, onRetry }: { error: unknown; onRetry: () => void }) {
+  const { title, hint, detail } = describeLoadError(error);
+  return (
+    <div className="card load-failure" role="alert">
+      <div className="lf-head">
+        <span className="lf-mark" aria-hidden="true">
+          {I.gaps}
+        </span>
+        <div>
+          <b>{title}</b>
+          <p>{hint}</p>
+        </div>
+      </div>
+      <div className="lf-actions">
+        <button type="button" className="btn-retry" onClick={onRetry}>
+          Try again
+        </button>
+        <details className="lf-detail">
+          <summary>Technical detail</summary>
+          <code>{detail}</code>
+        </details>
+      </div>
+    </div>
+  );
+}
+
+// This used to read "Crawl OK" with a healthy green pulse — a hardcoded string,
+// so it said OK over an empty catalog too. The dot now reports something the
+// client can actually observe.
+//
+// Honest about its limits: this is derived from the CATALOG SIZE, not from crawl
+// freshness, because no timestamp reaches this payload. A stale-but-populated
+// catalog therefore still reads healthy. Surfacing last-crawl age is the real fix
+// and needs a contract field; naming that here so the next reader knows the dot
+// is narrower than "everything is fine".
+function CatalogStatus({ loaded, count }: { loaded: boolean; count?: number }) {
+  const state = !loaded ? "loading" : count ? "ok" : "empty";
+  const label =
+    state === "loading" ? "Loading catalog…" : state === "ok" ? `${fmt(count!)} games` : "No data";
+  return (
+    <div className="side-foot side-status">
+      <span className={"pulse pulse-" + state} aria-hidden="true"></span>
+      <span role="status">
+        {label}
+        {state === "empty" && " · nothing crawled"}
+      </span>
+    </div>
+  );
+}
+
+function SteamEmpty() {
+  return (
+    <div className="empty">
+      <div className="big-ic">{I.steam}</div>
+      <h2>No Steam data yet</h2>
+      <p>
+        Nothing has been crawled into this catalog, so there is no market to read. The figures,
+        charts and rankings below would all be computed from an empty set — they are hidden rather
+        than shown as zeroes, because a zero here means "unknown", not "none".
+      </p>
+      <p className="empty-next">
+        Run <code>npm run crawl:steam</code> to populate it, or <code>npm run db:seed</code> for the
+        deterministic sample catalog.
+      </p>
+    </div>
+  );
+}
+
 function SteamView({
   data,
   section,
@@ -1602,6 +1788,10 @@ function SteamView({
   section: SteamSection;
   onProject?: (seed: RevenueSeed) => void;
 }) {
+  // Applies to every section, not just the overview: with no catalog, Comparables,
+  // Pricing and Market Gaps are equally empty, and each would render its own
+  // confident-looking shell around nothing.
+  if (!data.kpi.games) return <SteamEmpty />;
   if (section === "economics") return <GenreEconCard data={data} />;
   if (section === "pricing")
     return (
@@ -1686,19 +1876,45 @@ function SteamView({
 /* ───────────── shell ───────────── */
 export function Radar({
   hidden,
+  section,
+  onSection,
+  onGoto,
   onProject,
 }: {
   hidden: boolean;
+  /** Section slug from the URL, or null for this panel's default. */
+  section?: string | null;
+  /** Report a section move so the URL (and Back) follow it. */
+  onSection?: (s: string | null) => void;
+  /** Hand off to another service — the funnel's next step. */
+  onGoto?: (svc: Service) => void;
   onProject?: (seed: RevenueSeed) => void;
 }) {
   const drawer = useDrawer();
+  const isDrawer = useIsDrawer();
   const [platform, setPlatform] = useState<Platform>(DEFAULT_PLATFORM);
   const [view, setView] = useState<View>("overview");
   const [steamView, setSteamView] = useState<SteamSection>("overview");
+  // The URL is the source of truth for which section is fronted: a deep link, a
+  // hand-edited fragment and Back all arrive here. The panel validates the slug
+  // against its own vocabulary and ignores anything it does not own.
+  useEffect(() => {
+    if (hidden) return;
+    if (isSteamSection(section)) setSteamView(section);
+    else if (isBrowserView(section)) setView(section);
+    else if (section == null) {
+      setSteamView("overview");
+      setView("overview");
+    }
+  }, [section, hidden]);
   const [ov, setOv] = useState<Overview | null>(null);
   const [steam, setSteam] = useState<SteamOverview | null>(null);
   const [extra, setExtra] = useState<any>(null);
-  const [err, setErr] = useState<string | null>(null);
+  const [err, setErr] = useState<unknown>(null);
+  // Bumping this re-runs the load effect — the retry button's whole mechanism.
+  // Previously a failed load was terminal: the only recovery was a page refresh,
+  // which also discarded whichever panel and section the user was on.
+  const [reloadNonce, setReloadNonce] = useState(0);
   const isSteam = platform === "steam";
 
   useEffect(() => {
@@ -1708,19 +1924,19 @@ export function Radar({
       setSteam(null);
       api.steam().then(
         (d) => on && setSteam(d),
-        (e) => on && setErr(String(e)),
+        (e) => on && setErr(e),
       );
     } else {
       setOv(null);
       api.overview(platform).then(
         (d) => on && setOv(d),
-        (e) => on && setErr(String(e)),
+        (e) => on && setErr(e),
       );
     }
     return () => {
       on = false;
     };
-  }, [platform]);
+  }, [platform, reloadNonce]);
 
   useEffect(() => {
     let on = true;
@@ -1746,27 +1962,42 @@ export function Radar({
   }, [view, platform]);
 
   const gems = ov ? ov.scatter.filter((p) => p.gem).length : 0;
+  // These were <a> with an onClick and no href. An anchor without href is not in
+  // the tab order and does not fire on Enter, so the ENTIRE section navigation —
+  // Genre Economics, Comparables, Market Gaps, the leaderboard, the engine picker
+  // — was unreachable by keyboard or screen reader. They look and behave like
+  // buttons, so they are buttons.
   const navItem = (key: View, icon: JSX.Element, label: string, badge?: number) => (
-    <a
+    <button
+      type="button"
       className={"nav-item" + (view === key ? " active" : "")}
-      onClick={() => setView(key)}
+      aria-current={view === key ? "page" : undefined}
+      onClick={() => {
+        setView(key);
+        onSection?.(key === "overview" ? null : key);
+      }}
       key={key}
     >
       {icon}
       {label}
       {badge != null && <span className="badge">{badge}</span>}
-    </a>
+    </button>
   );
   const steamNav = (key: SteamSection, icon: JSX.Element, label: string, badge?: number) => (
-    <a
+    <button
+      type="button"
       className={"nav-item" + (steamView === key ? " active" : "")}
-      onClick={() => setSteamView(key)}
+      aria-current={steamView === key ? "page" : undefined}
+      onClick={() => {
+        setSteamView(key);
+        onSection?.(key === "overview" ? null : key);
+      }}
       key={key}
     >
       {icon}
       {label}
       {badge != null && <span className="badge">{badge}</span>}
-    </a>
+    </button>
   );
 
   const subtitle = isSteam ? (steam ? steam.subtitle : "loading…") : ov ? ov.subtitle : "loading…";
@@ -1774,6 +2005,7 @@ export function Radar({
   return (
     <section className="service" data-svc="radar" hidden={hidden}>
       <aside
+        {...drawerPanelProps(drawer, isDrawer, "Radar sections")}
         className={"side" + (drawer.open ? " open" : "")}
         onClick={(e) => {
           if ((e.target as HTMLElement).closest(".nav-item")) drawer.closeDrawer();
@@ -1820,51 +2052,39 @@ export function Radar({
             {navItem("market-gaps", I.gaps, "Market Gaps", ov ? ov.kpi.openGaps : undefined)}
           </>
         )}
-        <div className="side-foot">
-          <span className="pulse"></span>Crawl OK ·{" "}
-          {isSteam ? (steam ? fmt(steam.kpi.games) : "…") : ov ? fmt(ov.kpi.gamesTracked) : "…"}{" "}
-          games
-          <br />
-          live · Neon
-        </div>
+        <CatalogStatus
+          loaded={isSteam ? !!steam : !!ov}
+          count={isSteam ? steam?.kpi.games : ov?.kpi.gamesTracked}
+        />
       </aside>
       <NavScrim open={drawer.open} onClose={drawer.closeDrawer} />
 
       <main className="main">
         <div className="topbar">
           <NavToggle onClick={drawer.openDrawer} />
-          <h2>
+          <h1>
             {isSteam ? "Steam (PC) Market" : "Market Overview"} <small>{subtitle}</small>
-          </h2>
-          <div className="platform-groups" role="tablist" aria-label="Platform">
+          </h1>
+          <div className="platform-groups">
             {PLATFORM_GROUPS.map((grp) => (
-              <div className="seg-group" key={grp.group}>
-                <span className="seg-group-label">{grp.group}</span>
-                <div className="seg">
-                  {grp.items.map((p) => (
-                    <button
-                      key={p.id}
-                      className={"seg-btn" + (platform === p.id ? " active" : "")}
-                      role="tab"
-                      aria-selected={platform === p.id}
-                      onClick={() => setPlatform(p.id)}
-                    >
-                      <span className={"dot " + p.id}></span>
-                      {p.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
+              <TabList
+                key={grp.group}
+                groupLabel={grp.group}
+                label={`Platform — ${grp.group}`}
+                panelId="radar-panel"
+                value={platform}
+                onChange={setPlatform}
+                tabs={grp.items.map((p) => ({
+                  id: p.id,
+                  label: p.label,
+                }))}
+              />
             ))}
           </div>
         </div>
 
-        <div className="content">
-          {err && (
-            <div className="card" style={{ color: "var(--red)" }}>
-              Failed to load: {err}
-            </div>
-          )}
+        <div className="content" id="radar-panel" role="tabpanel" aria-label="Market data">
+          {err != null && <LoadFailure error={err} onRetry={() => setReloadNonce((n) => n + 1)} />}
           {isSteam ? (
             steam ? (
               <SteamView data={steam} section={steamView} onProject={onProject} />
@@ -1895,7 +2115,20 @@ export function Radar({
                 ))}
             </>
           )}
-          <div className="foot-note">KAIROS · GameRadar · live from Neon</div>
+          <Handoff
+            links={[
+              {
+                label: "Shape a pitch from a gap",
+                hint: "take an underserved market into the Library",
+                onClick: () => onGoto?.("library"),
+              },
+              {
+                label: "Project the revenue",
+                hint: "can this clear the monthly target?",
+                onClick: () => onGoto?.("revenue"),
+              },
+            ]}
+          />
         </div>
       </main>
     </section>
