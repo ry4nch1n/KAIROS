@@ -95,8 +95,8 @@ function ModeSeg({ mode, setMode }: { mode: Mode; setMode: (m: Mode) => void }) 
         value={mode}
         onChange={setMode}
         tabs={[
-          { id: "browser" as Mode, label: "Browser", mark: <span className="dot all" /> },
-          { id: "steam" as Mode, label: "Steam", mark: <span className="dot steam" /> },
+          { id: "browser" as Mode, label: "Browser" },
+          { id: "steam" as Mode, label: "Steam" },
         ]}
       />
     </div>

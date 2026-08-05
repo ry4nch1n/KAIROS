@@ -2077,7 +2077,6 @@ export function Radar({
                 tabs={grp.items.map((p) => ({
                   id: p.id,
                   label: p.label,
-                  mark: <span className={"dot " + p.id} aria-hidden="true"></span>,
                 }))}
               />
             ))}

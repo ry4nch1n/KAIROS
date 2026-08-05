@@ -604,27 +604,45 @@ textarea {
    four-column track left a ragged 4+2 row. .kpi-row already had it right. */
 .kpis {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 190px), 1fr));
-  gap: var(--sp-4);
-}
-.kpi {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 160px), 1fr));
+  gap: var(--sp-3) 0;
   background: var(--surface);
   border: 1px solid var(--border-soft);
   border-radius: var(--radius);
-  padding: var(--sp-4) var(--sp-4) var(--sp-4);
-  position: relative;
-  overflow: hidden;
   box-shadow: var(--shadow);
+  padding: var(--sp-4) var(--sp-4) var(--sp-4) 0;
+}
+/* The first cell opens the strip, so it carries no divider. */
+.kpis > .kpi:first-child {
+  border-left: none;
+}
+/* Six same-size cards of icon + caps label + big number is the hero-metric
+   template — the exact arrangement this design claims to refuse, and it owned the
+   first viewport of the primary service. These are EVIDENCE for the answer stated
+   above them, not six competing headlines, so they read as one ruled strip: no
+   card chrome, no shadow, no equal-weight boxes. The figures still carry the
+   mono/tabular treatment, which is what makes them scannable across the row. */
+.kpi {
+  background: none;
+  border: none;
+  border-left: 1px solid var(--border);
+  border-radius: 0;
+  padding: var(--sp-1) var(--sp-4);
+  position: relative;
+  box-shadow: none;
   min-width: 0;
 }
+/* A two-line label must not push its figure out of the row: the strip only reads
+   as a ruler if the numbers sit on one baseline. */
 .kpi .label {
+  min-height: 2.4em;
   font-size: var(--fs-2);
   color: var(--text-3);
   text-transform: uppercase;
   letter-spacing: 0.6px;
   font-weight: 600;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: var(--sp-2);
 }
 .kpi .label svg {
@@ -636,7 +654,7 @@ textarea {
 }
 .kpi .val {
   font-family: "Fira Code";
-  font-size: var(--fs-7);
+  font-size: var(--fs-6);
   font-weight: 600;
   margin: var(--sp-2) 0 var(--sp-1);
   letter-spacing: -0.5px;
@@ -645,7 +663,7 @@ textarea {
 /* A KPI whose value is a word ("Cooking"), not a figure — it needs a step down
    to fit the tile, but on the scale rather than as an inline override. */
 .kpi .val.val-word {
-  font-size: var(--fs-6);
+  font-size: var(--fs-5);
   padding-top: var(--sp-1);
 }
 .kpi .delta {
