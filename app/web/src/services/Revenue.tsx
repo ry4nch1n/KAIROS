@@ -8,6 +8,8 @@ import {
   DrawerClose,
 } from "../components/MobileNav.tsx";
 import { TabList } from "../components/Tabs.tsx";
+import { Handoff } from "../components/Handoff.tsx";
+import type { Service } from "../components/Rail.tsx";
 import {
   DAYS_PER_MONTH,
   targetBandUsd,
@@ -105,10 +107,12 @@ export function Revenue({
   hidden,
   seed,
   onClearSeed,
+  onGoto,
 }: {
   hidden: boolean;
   seed?: RevenueSeed | null;
   onClearSeed?: () => void;
+  onGoto?: (svc: Service) => void;
 }) {
   const [mode, setMode] = useState<Mode>("browser");
   // A comparable projected from Radar is a Steam anchor — front the Steam panel for it.
@@ -125,7 +129,13 @@ export function Revenue({
   return (
     <section className="service" data-svc="revenue" hidden={hidden}>
       {mode === "browser" ? (
-        <BrowserPanel mode={mode} setMode={setMode} target={target} setTarget={setTarget} />
+        <BrowserPanel
+          mode={mode}
+          setMode={setMode}
+          target={target}
+          setTarget={setTarget}
+          onGoto={onGoto}
+        />
       ) : (
         <SteamPanel
           mode={mode}
@@ -133,6 +143,7 @@ export function Revenue({
           seed={seed}
           onClearSeed={onClearSeed}
           target={target}
+          onGoto={onGoto}
         />
       )}
     </section>
@@ -145,11 +156,13 @@ function BrowserPanel({
   setMode,
   target,
   setTarget,
+  onGoto,
 }: {
   mode: Mode;
   setMode: (m: Mode) => void;
   target: TargetBand | null;
   setTarget: (t: TargetBand | null) => void;
+  onGoto?: (svc: Service) => void;
 }) {
   const drawer = useDrawer();
   const isDrawer = useIsDrawer();
@@ -319,6 +332,20 @@ function BrowserPanel({
               <b>the realistic end, not the starting point</b>.
             </p>
           </div>
+          <Handoff
+            links={[
+              {
+                label: "Back to the pitch",
+                hint: "record what this projection means for the idea",
+                onClick: () => onGoto?.("library"),
+              },
+              {
+                label: "Re-check the market",
+                hint: "is the gap that justified this still open?",
+                onClick: () => onGoto?.("radar"),
+              },
+            ]}
+          />
         </div>
       </main>
     </>
@@ -338,12 +365,14 @@ function SteamPanel({
   seed,
   onClearSeed,
   target,
+  onGoto,
 }: {
   mode: Mode;
   setMode: (m: Mode) => void;
   seed?: RevenueSeed | null;
   onClearSeed?: () => void;
   target: TargetBand | null;
+  onGoto?: (svc: Service) => void;
 }) {
   const drawer = useDrawer();
   const isDrawer = useIsDrawer();
@@ -630,6 +659,20 @@ function SteamPanel({
               <b>{usd(p.netUsd)}</b> net. &nbsp;{eng.note}
             </p>
           </div>
+          <Handoff
+            links={[
+              {
+                label: "Back to the pitch",
+                hint: "record what this projection means for the idea",
+                onClick: () => onGoto?.("library"),
+              },
+              {
+                label: "Re-check the market",
+                hint: "is the gap that justified this still open?",
+                onClick: () => onGoto?.("radar"),
+              },
+            ]}
+          />
         </div>
       </main>
     </>

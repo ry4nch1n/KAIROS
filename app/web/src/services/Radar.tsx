@@ -10,6 +10,8 @@ import {
 import { Capsule } from "../components/Capsule.tsx";
 import { describeLoadError } from "../lib/loadError.ts";
 import { TabList } from "../components/Tabs.tsx";
+import { Handoff } from "../components/Handoff.tsx";
+import type { Service } from "../components/Rail.tsx";
 import type {
   Overview,
   Platform,
@@ -119,6 +121,32 @@ type SteamSection =
   | "studios"
   | "comparables"
   | "opportunity";
+
+// The URL carries an untyped slug; these narrow it to a section this panel owns,
+// so a stale bookmark or a typo falls back to the default instead of blanking.
+const BROWSER_VIEWS: View[] = [
+  "overview",
+  "genres",
+  "tags",
+  "developers",
+  "trends",
+  "hidden-gems",
+  "new-releases",
+  "market-gaps",
+];
+const STEAM_SECTIONS: SteamSection[] = [
+  "overview",
+  "economics",
+  "pricing",
+  "ownership",
+  "studios",
+  "comparables",
+  "opportunity",
+];
+const isBrowserView = (s: string | null | undefined): s is View =>
+  !!s && (BROWSER_VIEWS as string[]).includes(s);
+const isSteamSection = (s: string | null | undefined): s is SteamSection =>
+  !!s && (STEAM_SECTIONS as string[]).includes(s);
 const I = {
   overview: (
     <svg viewBox="0 0 24 24">
@@ -1801,9 +1829,18 @@ function SteamView({
 /* ───────────── shell ───────────── */
 export function Radar({
   hidden,
+  section,
+  onSection,
+  onGoto,
   onProject,
 }: {
   hidden: boolean;
+  /** Section slug from the URL, or null for this panel's default. */
+  section?: string | null;
+  /** Report a section move so the URL (and Back) follow it. */
+  onSection?: (s: string | null) => void;
+  /** Hand off to another service — the funnel's next step. */
+  onGoto?: (svc: Service) => void;
   onProject?: (seed: RevenueSeed) => void;
 }) {
   const drawer = useDrawer();
@@ -1811,6 +1848,18 @@ export function Radar({
   const [platform, setPlatform] = useState<Platform>(DEFAULT_PLATFORM);
   const [view, setView] = useState<View>("overview");
   const [steamView, setSteamView] = useState<SteamSection>("overview");
+  // The URL is the source of truth for which section is fronted: a deep link, a
+  // hand-edited fragment and Back all arrive here. The panel validates the slug
+  // against its own vocabulary and ignores anything it does not own.
+  useEffect(() => {
+    if (hidden) return;
+    if (isSteamSection(section)) setSteamView(section);
+    else if (isBrowserView(section)) setView(section);
+    else if (section == null) {
+      setSteamView("overview");
+      setView("overview");
+    }
+  }, [section, hidden]);
   const [ov, setOv] = useState<Overview | null>(null);
   const [steam, setSteam] = useState<SteamOverview | null>(null);
   const [extra, setExtra] = useState<any>(null);
@@ -1876,7 +1925,10 @@ export function Radar({
       type="button"
       className={"nav-item" + (view === key ? " active" : "")}
       aria-current={view === key ? "page" : undefined}
-      onClick={() => setView(key)}
+      onClick={() => {
+        setView(key);
+        onSection?.(key === "overview" ? null : key);
+      }}
       key={key}
     >
       {icon}
@@ -1889,7 +1941,10 @@ export function Radar({
       type="button"
       className={"nav-item" + (steamView === key ? " active" : "")}
       aria-current={steamView === key ? "page" : undefined}
-      onClick={() => setSteamView(key)}
+      onClick={() => {
+        setSteamView(key);
+        onSection?.(key === "overview" ? null : key);
+      }}
       key={key}
     >
       {icon}
@@ -2014,7 +2069,20 @@ export function Radar({
                 ))}
             </>
           )}
-          <div className="foot-note">KAIROS · GameRadar · live from Neon</div>
+          <Handoff
+            links={[
+              {
+                label: "Shape a pitch from a gap",
+                hint: "take an underserved market into the Library",
+                onClick: () => onGoto?.("library"),
+              },
+              {
+                label: "Project the revenue",
+                hint: "can this clear the monthly target?",
+                onClick: () => onGoto?.("revenue"),
+              },
+            ]}
+          />
         </div>
       </main>
     </section>

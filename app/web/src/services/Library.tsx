@@ -1,4 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Handoff } from "../components/Handoff.tsx";
+import type { Service } from "../components/Rail.tsx";
 import {
   useDrawer,
   useIsDrawer,
@@ -36,6 +38,8 @@ const COLLECTIONS = [
   },
 ] as const;
 
+// Slugs this panel answers to in the URL (#library/<slug>).
+const LIBRARY_SECTIONS: string[] = [...COLLECTIONS.map((c) => c.key), "leaderboard", "families"];
 const DEFAULT_COLLECTION = COLLECTIONS[0].key; // Pitches — the primary collection
 
 const LOOP_LABEL: Record<string, string> = {
@@ -738,12 +742,29 @@ function FamilyCoverageView({ pitches }: { pitches: Pitch[] }) {
   );
 }
 
-export function Library({ hidden }: { hidden: boolean }) {
+export function Library({
+  hidden,
+  section,
+  onSection,
+  onGoto,
+}: {
+  hidden: boolean;
+  section?: string | null;
+  onSection?: (s: string | null) => void;
+  onGoto?: (svc: Service) => void;
+}) {
   const drawer = useDrawer();
   const isDrawer = useIsDrawer();
   const [pitches, setPitches] = useState<Pitch[]>([]);
   const [items, setItems] = useState<LibraryItem[]>([]);
   const [active, setActive] = useState<string>(DEFAULT_COLLECTION);
+  // Deep link, hand-edited fragment and Back all arrive here. An unknown slug
+  // falls back to the default collection rather than rendering an empty panel.
+  useEffect(() => {
+    if (hidden) return;
+    if (section && LIBRARY_SECTIONS.includes(section)) setActive(section);
+    else if (section == null) setActive(DEFAULT_COLLECTION);
+  }, [section, hidden]);
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
@@ -802,7 +823,10 @@ export function Library({ hidden }: { hidden: boolean }) {
             className={"nav-item" + (c.key === active ? " active" : "")}
             aria-current={c.key === active ? "page" : undefined}
             key={c.key}
-            onClick={() => setActive(c.key)}
+            onClick={() => {
+              setActive(c.key);
+              onSection?.(c.key === DEFAULT_COLLECTION ? null : c.key);
+            }}
           >
             <svg viewBox="0 0 24 24">{c.icon}</svg>
             {c.name}
@@ -819,7 +843,10 @@ export function Library({ hidden }: { hidden: boolean }) {
           type="button"
           className={"nav-item" + (isLeaderboard ? " active" : "")}
           aria-current={isLeaderboard ? "page" : undefined}
-          onClick={() => setActive("leaderboard")}
+          onClick={() => {
+            setActive("leaderboard");
+            onSection?.("leaderboard");
+          }}
         >
           <svg viewBox="0 0 24 24">
             <path d="M4 20V10M12 20V4M20 20v-7" />
@@ -836,7 +863,10 @@ export function Library({ hidden }: { hidden: boolean }) {
           type="button"
           className={"nav-item" + (isFamilies ? " active" : "")}
           aria-current={isFamilies ? "page" : undefined}
-          onClick={() => setActive("families")}
+          onClick={() => {
+            setActive("families");
+            onSection?.("families");
+          }}
         >
           <svg viewBox="0 0 24 24">
             <path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z" />
@@ -897,6 +927,20 @@ export function Library({ hidden }: { hidden: boolean }) {
               )}
             </>
           )}
+          <Handoff
+            links={[
+              {
+                label: "Project this pitch's revenue",
+                hint: "does the idea clear the monthly target?",
+                onClick: () => onGoto?.("revenue"),
+              },
+              {
+                label: "Back to the market",
+                hint: "check the gap this came from is still open",
+                onClick: () => onGoto?.("radar"),
+              },
+            ]}
+          />
         </div>
       </main>
     </section>

@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_SERVICE, parseServiceHash, serviceHash, writeServiceHash } from "./hashRoute.ts";
+import {
+  DEFAULT_SERVICE,
+  parseServiceHash,
+  parseSectionHash,
+  serviceHash,
+  writeServiceHash,
+} from "./hashRoute.ts";
 import type { Service } from "../components/Rail.tsx";
 
 const ALL: Service[] = ["radar", "brief", "library", "revenue"];
@@ -32,7 +38,7 @@ describe("parseServiceHash — URL fragment → fronted panel", () => {
 describe("writeServiceHash — panel switch → URL fragment", () => {
   it("points the URL at the selected panel", () => {
     const loc = { hash: "" };
-    writeServiceHash("library", loc);
+    writeServiceHash("library", null, loc);
     expect(loc.hash).toBe("#library");
     expect(parseServiceHash(loc.hash)).toBe("library");
   });
@@ -47,13 +53,53 @@ describe("writeServiceHash — panel switch → URL fragment", () => {
         writes++;
       },
     };
-    writeServiceHash("brief", loc);
+    writeServiceHash("brief", null, loc);
     expect(writes).toBe(0);
-    writeServiceHash("revenue", loc);
+    writeServiceHash("revenue", null, loc);
     expect(writes).toBe(1);
   });
 
   it("is a no-op without a location (non-browser render)", () => {
-    expect(() => writeServiceHash("radar", undefined)).not.toThrow();
+    expect(() => writeServiceHash("radar", null, undefined)).not.toThrow();
+  });
+});
+
+describe("parseSectionHash — the section within a panel", () => {
+  it("reads the section from a two-part fragment", () => {
+    expect(parseSectionHash("#radar/comparables")).toBe("comparables");
+    expect(parseSectionHash("#library/leaderboard")).toBe("leaderboard");
+  });
+
+  it("is null when the fragment names only a panel", () => {
+    expect(parseSectionHash("#radar")).toBeNull();
+    expect(parseSectionHash("#")).toBeNull();
+    expect(parseSectionHash("")).toBeNull();
+    expect(parseSectionHash(undefined)).toBeNull();
+  });
+
+  // A section slug is meaningless without a real panel in front of it — otherwise
+  // "#nonsense/comparables" would push a section onto whatever panel defaulted in.
+  it("is null when the panel segment is not a real service", () => {
+    expect(parseSectionHash("#nope/comparables")).toBeNull();
+    expect(parseSectionHash("#/radar/deep")).toBeNull();
+  });
+
+  it("tolerates casing, whitespace and percent-encoding like the service segment", () => {
+    expect(parseSectionHash("#RADAR/Market%20Gaps")).toBe("market gaps");
+    expect(parseSectionHash("#radar/  comparables  ")).toBe("comparables");
+  });
+
+  it("round-trips through serviceHash", () => {
+    const h = serviceHash("radar", "comparables");
+    expect(h).toBe("#radar/comparables");
+    expect(parseServiceHash(h)).toBe("radar");
+    expect(parseSectionHash(h)).toBe("comparables");
+  });
+
+  // The boot guarantee still holds: a deep fragment must not change which panel
+  // a plain visit lands on, and must never throw.
+  it("keeps the service resolution unchanged for deep fragments", () => {
+    expect(parseServiceHash("#library/anything")).toBe("library");
+    expect(parseServiceHash("#junk/anything")).toBe(DEFAULT_SERVICE);
   });
 });

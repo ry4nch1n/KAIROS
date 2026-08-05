@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react";
+import { Handoff } from "../components/Handoff.tsx";
+import type { Service } from "../components/Rail.tsx";
 import {
   useDrawer,
   useIsDrawer,
@@ -144,7 +146,7 @@ function DemandTracker({ t }: { t: NonNullable<BriefEdition["tracker"]> }) {
   );
 }
 
-export function Brief({ hidden }: { hidden: boolean }) {
+export function Brief({ hidden, onGoto }: { hidden: boolean; onGoto?: (svc: Service) => void }) {
   const drawer = useDrawer();
   const isDrawer = useIsDrawer();
   const [list, setList] = useState<BriefEditionMeta[]>([]);
@@ -431,7 +433,15 @@ export function Brief({ hidden }: { hidden: boolean }) {
               )}
 
               {p.reference_shelf && <div className="foot-note">📚 {p.reference_shelf}</div>}
-              <div className="foot-note">KAIROS · News Brief · auto-published editions</div>
+              <Handoff
+                links={[
+                  {
+                    label: "Check the market behind this",
+                    hint: "open Radar on the genres this edition names",
+                    onClick: () => onGoto?.("radar"),
+                  },
+                ]}
+              />
             </>
           )}
         </div>

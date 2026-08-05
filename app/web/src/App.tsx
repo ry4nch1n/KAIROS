@@ -2,7 +2,7 @@ import { lazy, Suspense, useEffect, useState } from "react";
 import { Rail, type Service } from "./components/Rail.tsx";
 import { Radar } from "./services/Radar.tsx";
 import { addActivated, INITIAL_ACTIVATED } from "./lib/activated.ts";
-import { parseServiceHash, writeServiceHash } from "./lib/hashRoute.ts";
+import { parseServiceHash, parseSectionHash, writeServiceHash } from "./lib/hashRoute.ts";
 import type { RevenueSeed } from "./lib/steamRevenue.ts";
 
 // Radar is the default tab: eager-imported so it paints immediately, no Suspense.
@@ -41,10 +41,23 @@ export default function App() {
   const [activated, setActivated] = useState<Set<Service>>(() =>
     addActivated(new Set(INITIAL_ACTIVATED), svc),
   );
+  // The section within the fronted panel (`#radar/comparables`). Panels own their
+  // own section vocabulary, so this is a plain slug: each panel reads it, matches
+  // it against its own list, and ignores what it doesn't recognise.
+  const [section, setSection] = useState<string | null>(() =>
+    parseSectionHash(globalThis.location?.hash),
+  );
   const select = (next: Service) => {
     setActivated((prev) => addActivated(prev, next));
     setSvc(next);
+    setSection(null);
     writeServiceHash(next);
+  };
+  // A panel reporting the section the user moved to, so the URL follows in-panel
+  // navigation and Back undoes a section move instead of leaving the service.
+  const selectSection = (svc: Service, next: string | null) => {
+    setSection(next);
+    writeServiceHash(svc, next);
   };
   // Browser back/forward (and a hand-edited fragment) move between panels.
   useEffect(() => {
@@ -52,6 +65,7 @@ export default function App() {
       const next = parseServiceHash(globalThis.location?.hash);
       setActivated((prev) => addActivated(prev, next));
       setSvc(next);
+      setSection(parseSectionHash(globalThis.location?.hash));
     };
     globalThis.addEventListener("hashchange", onHashChange);
     return () => globalThis.removeEventListener("hashchange", onHashChange);
@@ -61,6 +75,9 @@ export default function App() {
       <Rail active={svc} onSelect={select} />
       <Radar
         hidden={svc !== "radar"}
+        section={svc === "radar" ? section : null}
+        onSection={(s) => selectSection("radar", s)}
+        onGoto={(to) => select(to)}
         onProject={(s) => {
           setRevSeed(s);
           select("revenue");
@@ -68,17 +85,27 @@ export default function App() {
       />
       {activated.has("brief") && (
         <Suspense fallback={<PanelSkeleton />}>
-          <Brief hidden={svc !== "brief"} />
+          <Brief hidden={svc !== "brief"} onGoto={(to) => select(to)} />
         </Suspense>
       )}
       {activated.has("library") && (
         <Suspense fallback={<PanelSkeleton />}>
-          <Library hidden={svc !== "library"} />
+          <Library
+            hidden={svc !== "library"}
+            section={svc === "library" ? section : null}
+            onSection={(s) => selectSection("library", s)}
+            onGoto={(to) => select(to)}
+          />
         </Suspense>
       )}
       {activated.has("revenue") && (
         <Suspense fallback={<PanelSkeleton />}>
-          <Revenue hidden={svc !== "revenue"} seed={revSeed} onClearSeed={() => setRevSeed(null)} />
+          <Revenue
+            hidden={svc !== "revenue"}
+            seed={revSeed}
+            onClearSeed={() => setRevSeed(null)}
+            onGoto={(to) => select(to)}
+          />
         </Suspense>
       )}
     </div>
