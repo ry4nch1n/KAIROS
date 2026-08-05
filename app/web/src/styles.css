@@ -1018,6 +1018,105 @@ textarea {
   border-radius: var(--r-lg);
 }
 
+/* ── Truthful states ───────────────────────────────────────────────────────────
+   Two states that used to lie: an empty catalog rendered as a full analysis, and
+   a failed load rendered as a raw exception with no way out. */
+
+/* The catalog dot reports what the client can observe, so it needs more than one
+   colour. Green is no longer the only thing it can be. */
+.pulse-ok {
+  color: var(--green);
+}
+.pulse-empty {
+  color: var(--amber);
+  animation: none;
+}
+.pulse-loading {
+  color: var(--text-4);
+}
+.side-foot {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+}
+
+.empty-next {
+  font-size: var(--fs-2);
+  color: var(--text-3);
+}
+.empty-next code {
+  font-family: "Fira Code";
+  font-size: var(--fs-1);
+  background: var(--surface-2);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--r-sm);
+  padding: var(--sp-0) var(--sp-1);
+  color: var(--text-2);
+}
+
+.load-failure {
+  gap: var(--sp-3);
+  box-shadow:
+    inset 3px 0 0 var(--red),
+    var(--shadow);
+}
+.lf-head {
+  display: flex;
+  gap: var(--sp-3);
+  align-items: flex-start;
+}
+.lf-mark svg {
+  width: 18px;
+  height: 18px;
+  stroke: var(--red);
+  fill: none;
+  stroke-width: 1.8;
+}
+.lf-head b {
+  font-size: var(--fs-4);
+  color: var(--text);
+}
+.lf-head p {
+  font-size: var(--fs-3);
+  color: var(--text-2);
+  margin-top: var(--sp-1);
+  max-width: 62ch;
+}
+.lf-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  flex-wrap: wrap;
+}
+.btn-retry {
+  background: var(--primary);
+  color: #fff;
+  border: none;
+  border-radius: var(--r-md);
+  padding: var(--sp-2) var(--sp-4);
+  font-size: var(--fs-3);
+  font-weight: 600;
+  cursor: pointer;
+  min-height: 44px;
+  transition: background 0.16s;
+}
+.btn-retry:hover {
+  background: var(--primary-deep);
+}
+.lf-detail summary {
+  font-size: var(--fs-2);
+  color: var(--text-3);
+  cursor: pointer;
+}
+.lf-detail code {
+  display: block;
+  margin-top: var(--sp-2);
+  font-family: "Fira Code";
+  font-size: var(--fs-1);
+  color: var(--text-2);
+  word-break: break-word;
+}
+
 /* ── The plate ─────────────────────────────────────────────────────────────────
    Any Steam capsule, screenshot or generated key art mounts on --plate. It is
    NOT a theme and never spreads to chrome: it is the one dark surface in a light

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useDrawer, NavToggle, NavScrim, DrawerClose } from "../components/MobileNav.tsx";
 import { Capsule } from "../components/Capsule.tsx";
+import { describeLoadError } from "../lib/loadError.ts";
 import type {
   Overview,
   Platform,
@@ -70,8 +71,13 @@ const fmtOwners = (n: number | null) =>
       : n >= 1e3
         ? Math.round(n / 1e3) + "K"
         : String(n);
-const money = (cents: number | null) =>
-  cents == null ? "—" : cents === 0 ? "Free" : "$" + (cents / 100).toFixed(2);
+// `sample` distinguishes the two things a 0 can mean. A median of 0 cents over a
+// real cohort means those games are genuinely Free; a median of 0 over an EMPTY
+// cohort means unknown, and printing "Free" there states a market fact the data
+// never supported. Callers with a per-row price omit `sample` — a row's own price
+// of 0 is always a real Free.
+const money = (cents: number | null, sample?: number) =>
+  sample === 0 || cents == null ? "—" : cents === 0 ? "Free" : "$" + (cents / 100).toFixed(2);
 const proxy = (d: number) =>
   d >= 1e9
     ? "$" + (d / 1e9).toFixed(1) + "B"
@@ -1410,7 +1416,7 @@ function SteamKpis({ data }: { data: SteamOverview }) {
       </div>
       <div className="kpi">
         <div className="label">{I.money}Indie median price</div>
-        <div className="val num">{money(data.kpi.indieMedianPriceCents)}</div>
+        <div className="val num">{money(data.kpi.indieMedianPriceCents, data.kpi.indie)}</div>
         <span className="delta flat num">what indies charge</span>
       </div>
       <div className="kpi">
@@ -1600,6 +1606,84 @@ function GenreEconCard({ data }: { data: SteamOverview }) {
   );
 }
 
+// The P0 this guards against: with zero crawled games the panel still rendered a
+// full analysis — six KPIs reading 0, an empty tier chart, an "Indie median price"
+// of "Free", and a "This week's read" strip stating "No genre shows extreme
+// hit-concentration in the indie cohort this window", which is a CONCLUSION drawn
+// from nothing. A decision engine that produces confident sentences without data
+// is failing at its only job, so an empty catalog now fails loudly instead.
+// A failed load used to render `Failed to load: TypeError: Failed to fetch` in a
+// red card with no way out but a page refresh. It now names the problem, says
+// what to do, offers the retry, and keeps the raw text available for diagnosis
+// without leading with it.
+function LoadFailure({ error, onRetry }: { error: unknown; onRetry: () => void }) {
+  const { title, hint, detail } = describeLoadError(error);
+  return (
+    <div className="card load-failure" role="alert">
+      <div className="lf-head">
+        <span className="lf-mark" aria-hidden="true">
+          {I.gaps}
+        </span>
+        <div>
+          <b>{title}</b>
+          <p>{hint}</p>
+        </div>
+      </div>
+      <div className="lf-actions">
+        <button type="button" className="btn-retry" onClick={onRetry}>
+          Try again
+        </button>
+        <details className="lf-detail">
+          <summary>Technical detail</summary>
+          <code>{detail}</code>
+        </details>
+      </div>
+    </div>
+  );
+}
+
+// This used to read "Crawl OK" with a healthy green pulse — a hardcoded string,
+// so it said OK over an empty catalog too. The dot now reports something the
+// client can actually observe.
+//
+// Honest about its limits: this is derived from the CATALOG SIZE, not from crawl
+// freshness, because no timestamp reaches this payload. A stale-but-populated
+// catalog therefore still reads healthy. Surfacing last-crawl age is the real fix
+// and needs a contract field; naming that here so the next reader knows the dot
+// is narrower than "everything is fine".
+function CatalogStatus({ loaded, count }: { loaded: boolean; count?: number }) {
+  const state = !loaded ? "loading" : count ? "ok" : "empty";
+  const label =
+    state === "loading" ? "Loading catalog…" : state === "ok" ? `${fmt(count!)} games` : "No data";
+  return (
+    <div className="side-foot">
+      <span className={"pulse pulse-" + state} aria-hidden="true"></span>
+      <span role="status">
+        {label}
+        {state === "empty" && " · nothing crawled"}
+      </span>
+    </div>
+  );
+}
+
+function SteamEmpty() {
+  return (
+    <div className="empty">
+      <div className="big-ic">{I.steam}</div>
+      <h3>No Steam data yet</h3>
+      <p>
+        Nothing has been crawled into this catalog, so there is no market to read. The figures,
+        charts and rankings below would all be computed from an empty set — they are hidden rather
+        than shown as zeroes, because a zero here means "unknown", not "none".
+      </p>
+      <p className="empty-next">
+        Run <code>npm run crawl:steam</code> to populate it, or <code>npm run db:seed</code> for the
+        deterministic sample catalog.
+      </p>
+    </div>
+  );
+}
+
 function SteamView({
   data,
   section,
@@ -1609,6 +1693,10 @@ function SteamView({
   section: SteamSection;
   onProject?: (seed: RevenueSeed) => void;
 }) {
+  // Applies to every section, not just the overview: with no catalog, Comparables,
+  // Pricing and Market Gaps are equally empty, and each would render its own
+  // confident-looking shell around nothing.
+  if (!data.kpi.games) return <SteamEmpty />;
   if (section === "economics") return <GenreEconCard data={data} />;
   if (section === "pricing")
     return (
@@ -1705,7 +1793,11 @@ export function Radar({
   const [ov, setOv] = useState<Overview | null>(null);
   const [steam, setSteam] = useState<SteamOverview | null>(null);
   const [extra, setExtra] = useState<any>(null);
-  const [err, setErr] = useState<string | null>(null);
+  const [err, setErr] = useState<unknown>(null);
+  // Bumping this re-runs the load effect — the retry button's whole mechanism.
+  // Previously a failed load was terminal: the only recovery was a page refresh,
+  // which also discarded whichever panel and section the user was on.
+  const [reloadNonce, setReloadNonce] = useState(0);
   const isSteam = platform === "steam";
 
   useEffect(() => {
@@ -1715,19 +1807,19 @@ export function Radar({
       setSteam(null);
       api.steam().then(
         (d) => on && setSteam(d),
-        (e) => on && setErr(String(e)),
+        (e) => on && setErr(e),
       );
     } else {
       setOv(null);
       api.overview(platform).then(
         (d) => on && setOv(d),
-        (e) => on && setErr(String(e)),
+        (e) => on && setErr(e),
       );
     }
     return () => {
       on = false;
     };
-  }, [platform]);
+  }, [platform, reloadNonce]);
 
   useEffect(() => {
     let on = true;
@@ -1827,13 +1919,10 @@ export function Radar({
             {navItem("market-gaps", I.gaps, "Market Gaps", ov ? ov.kpi.openGaps : undefined)}
           </>
         )}
-        <div className="side-foot">
-          <span className="pulse"></span>Crawl OK ·{" "}
-          {isSteam ? (steam ? fmt(steam.kpi.games) : "…") : ov ? fmt(ov.kpi.gamesTracked) : "…"}{" "}
-          games
-          <br />
-          live · Neon
-        </div>
+        <CatalogStatus
+          loaded={isSteam ? !!steam : !!ov}
+          count={isSteam ? steam?.kpi.games : ov?.kpi.gamesTracked}
+        />
       </aside>
       <NavScrim open={drawer.open} onClose={drawer.closeDrawer} />
 
@@ -1867,11 +1956,7 @@ export function Radar({
         </div>
 
         <div className="content">
-          {err && (
-            <div className="card" style={{ color: "var(--red)" }}>
-              Failed to load: {err}
-            </div>
-          )}
+          {err != null && <LoadFailure error={err} onRetry={() => setReloadNonce((n) => n + 1)} />}
           {isSteam ? (
             steam ? (
               <SteamView data={steam} section={steamView} onProject={onProject} />
