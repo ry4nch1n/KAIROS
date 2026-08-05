@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Tip } from "../components/Tip.tsx";
 import {
   useDrawer,
   useIsDrawer,
@@ -463,7 +464,7 @@ function SteerChip({ s }: { s?: SteeringMatch }) {
 function GapList({ gaps }: { gaps: Overview["gaps"] }) {
   return (
     <div className="gaplist">
-      <p className="gap-legend" title={Z_TIP}>
+      <p className="gap-legend">
         opportunity = z(appetite: median votes/title) + z(quality ceiling: P90 rating) − z(supply:
         games)
       </p>
@@ -472,7 +473,10 @@ function GapList({ gaps }: { gaps: Overview["gaps"] }) {
           <span className="rank num">{i + 1}</span>
           <div className="name">
             {g.label}
-            <small title={Z_TIP}>opportunity {g.score.toFixed(1)}</small>
+            <small>
+              opportunity {g.score.toFixed(1)}
+              <Tip text={Z_TIP} />
+            </small>
             {g.supplyRising && (
               <span
                 className="supply-flag"
@@ -532,10 +536,14 @@ function LoopFamilyMarketCard({ platform }: { platform: Platform }) {
             <tr>
               <th>Loop family</th>
               <th className="r">Supply</th>
-              <th className="r" title="Supply-weighted median votes/reviews">
+              <th className="r">
                 Appetite
+                <Tip text="Supply-weighted median votes/reviews" />
               </th>
-              <th title={SUPPLY_TIP}>Supply trend</th>
+              <th>
+                Supply trend
+                <Tip text={SUPPLY_TIP} />
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -581,10 +589,14 @@ function GenresView({ rows }: { rows: GenreRow[] }) {
             <th className="r">P90 votes (top-10% bar)</th>
             <th className="r">P90 rating</th>
             <th className="r">Votes/day</th>
-            <th title="Later-half momentum vs earlier-half of the genre's median-vote series: rising / plateau / decaying">
+            <th>
               Demand trend
+              <Tip text="Later-half momentum vs earlier-half of the genre's median-vote series: rising / plateau / decaying" />
             </th>
-            <th title={SUPPLY_TIP}>Supply</th>
+            <th>
+              Supply
+              <Tip text={SUPPLY_TIP} />
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -838,7 +850,10 @@ function NewReleasesView({ rows }: { rows: NewRelease[] }) {
             >
               Votes/day
             </th>
-            <th title="Later-half momentum vs earlier-half: rising / plateau / decaying">Trend</th>
+            <th>
+              Trend
+              <Tip text="Later-half momentum vs earlier-half: rising / plateau / decaying" />
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -893,15 +908,11 @@ function RevBand({ r }: { r: SteamGenreEconomics }) {
   if (r.revenueBandHighPerGame == null) return null; // older payloads carry no band
   const same = r.revenueBandLowPerGame === r.revenueBandHighPerGame;
   return (
-    <div className="est-band" title={BAND_TIP}>
+    <div className="est-band">
       {same
         ? proxy(r.revenueBandLowPerGame)
         : `${proxy(r.revenueBandLowPerGame)}–${proxy(r.revenueBandHighPerGame)}`}
-      {r.estimatorsDisagree ? (
-        <span className="est-split" title={SPLIT_TIP}>
-          wide
-        </span>
-      ) : null}
+      {r.estimatorsDisagree ? <span className="est-split">wide</span> : null}
     </div>
   );
 }
@@ -948,28 +959,39 @@ function EconTable({
           <th>{keyLabel}</th>
           <th className="r">Games</th>
           {demand ? (
-            <th className="r" title={DEMAND_TIP}>
+            <th className="r">
               Median reviews
+              <Tip text={DEMAND_TIP} />
             </th>
           ) : null}
           <th className="r">Median price</th>
           <th className="r">Median rating</th>
-          <th className="r" title={OWNERS_TIP}>
+          <th className="r">
             Total owners
+            <Tip text={OWNERS_TIP} />
           </th>
-          <th className="r" title={MED_REV_TIP}>
+          <th className="r">
             Median rev/game
+            <Tip text={MED_REV_TIP} />
           </th>
-          <th className="r" title={MEAN_REV_TIP}>
+          <th className="r">
             Mean rev/game
+            <Tip text={MEAN_REV_TIP} />
           </th>
-          <th className="r" title={TOTAL_REV_TIP}>
+          <th className="r">
             Total rev proxy
+            <Tip text={TOTAL_REV_TIP} />
           </th>
           {trend ? (
             <>
-              <th title={SUBGENRE_DEMAND_TREND_TIP}>Demand trend</th>
-              <th title={SUPPLY_TIP}>Supply</th>
+              <th>
+                Demand trend
+                <Tip text={SUBGENRE_DEMAND_TREND_TIP} />
+              </th>
+              <th>
+                Supply
+                <Tip text={SUPPLY_TIP} />
+              </th>
             </>
           ) : null}
         </tr>
@@ -1023,7 +1045,7 @@ function OppList({ gaps, lens }: { gaps: SteamGap[]; lens?: SteeringLens }) {
     );
   return (
     <div className="gaplist">
-      <p className="gap-legend" title={Z_TIP}>
+      <p className="gap-legend">
         opportunity = z(demand: median owners) + z(quality ceiling: P90 rating) − z(supply: games) ·
         median price is context, not scored
       </p>
@@ -1033,7 +1055,10 @@ function OppList({ gaps, lens }: { gaps: SteamGap[]; lens?: SteeringLens }) {
           <span className="rank num">{i + 1}</span>
           <div className="name">
             {g.label}
-            <small title={Z_TIP}>opportunity {g.score.toFixed(1)}</small>
+            <small>
+              opportunity {g.score.toFixed(1)}
+              <Tip text={Z_TIP} />
+            </small>
             {g.supplyRising && (
               <span
                 className="supply-flag"
@@ -1076,11 +1101,13 @@ function PricingTable({ rows }: { rows: SteamPriceBand[] }) {
           <th>Price band</th>
           <th className="r">Games</th>
           <th className="r">Median rating</th>
-          <th className="r" title={OWNERS_TIP}>
+          <th className="r">
             Total owners
+            <Tip text={OWNERS_TIP} />
           </th>
-          <th className="r" title={PROXY_TIP}>
+          <th className="r">
             Revenue proxy
+            <Tip text={PROXY_TIP} />
           </th>
         </tr>
       </thead>
@@ -1110,13 +1137,15 @@ function OwnershipTable({ rows }: { rows: SteamOwnershipRow[] }) {
         <tr>
           <th>Genre</th>
           <th className="r">Games</th>
-          <th className="r" title={OWNERS_TIP}>
+          <th className="r">
             Total owners
+            <Tip text={OWNERS_TIP} />
           </th>
           <th className="r">Median owners</th>
           <th className="r">Live CCU</th>
-          <th className="r" title={CONTENT_TIP}>
+          <th className="r">
             Content expectation
+            <Tip text={CONTENT_TIP} />
           </th>
         </tr>
       </thead>
@@ -1143,8 +1172,9 @@ function DevTable({ rows }: { rows: SteamDeveloperRow[] }) {
         <tr>
           <th>Developer</th>
           <th className="r">Games</th>
-          <th className="r" title={OWNERS_TIP}>
+          <th className="r">
             Total owners
+            <Tip text={OWNERS_TIP} />
           </th>
           <th className="r">Avg rating</th>
           <th>Top genre</th>
@@ -1176,14 +1206,17 @@ function NewReleasesTable({ rows }: { rows: SteamNewRelease[] }) {
           <th className="r">Released</th>
           <th>Genre</th>
           <th className="r">Rating</th>
-          <th className="r" title={REVIEWS_TIP}>
+          <th className="r">
             Reviews
+            <Tip text={REVIEWS_TIP} />
           </th>
-          <th className="r" title="Reviews per day since launch — traction rate, not a total.">
+          <th className="r">
             Rev/day
+            <Tip text="Reviews per day since launch — traction rate, not a total." />
           </th>
-          <th className="r" title={OWNERS_TIP}>
+          <th className="r">
             Owners
+            <Tip text={OWNERS_TIP} />
           </th>
           <th className="r">Price</th>
         </tr>
@@ -1271,23 +1304,35 @@ function ComparablesTable({
         <tr>
           <th>Game</th>
           <th>Tier</th>
-          {showTeam && <th title={TEAM_TIP}>Team (est.)</th>}
+          {showTeam && (
+            <th>
+              Team (est.)
+              <Tip text={TEAM_TIP} />
+            </th>
+          )}
           <th>Genre</th>
           <th className="r">Released</th>
           <th className="r">Rating</th>
-          <th className="r" title={AI_DISCLOSURE_TIP}>
+          <th className="r">
             AI
+            <Tip text={AI_DISCLOSURE_TIP} />
           </th>
           <th className="r">Reviews</th>
-          <th className="r" title={VELOCITY_TIP}>
+          <th className="r">
             Rev./day
+            <Tip text={VELOCITY_TIP} />
           </th>
-          <th className="r" title={OWNERS_TIP}>
+          <th className="r">
             Owners
+            <Tip text={OWNERS_TIP} />
           </th>
           <th className="r">Price</th>
           <th>Developer</th>
-          {onProject && <th title={PROJECT_TIP}></th>}
+          {onProject && (
+            <th>
+              <Tip text={PROJECT_TIP} />
+            </th>
+          )}
         </tr>
       </thead>
       <tbody>
@@ -1460,11 +1505,9 @@ function SteamKpis({ data }: { data: SteamOverview }) {
         <span className="delta flat num">what indies charge</span>
       </div>
       <div className="kpi">
-        <div
-          className="label"
-          title="Share of tracked non-AAA titles released in the last 90 days still under ~10 reviews (Steam shows no overall score yet). The failure floor — what a competent-but-quiet launch actually looks like (#109)."
-        >
+        <div className="label">
           {I.releases}Quiet launches
+          <Tip text="Share of tracked non-AAA titles released in the last 90 days still under ~10 reviews (Steam shows no overall score yet). The failure floor — what a competent-but-quiet launch actually looks like (#109)." />
         </div>
         <div className="val num">{data.kpi.quietLaunchPct}%</div>
         <span className="delta flat num">
@@ -1472,11 +1515,9 @@ function SteamKpis({ data }: { data: SteamOverview }) {
         </span>
       </div>
       <div className="kpi">
-        <div
-          className="label"
-          title="Share of checked non-AAA titles released in the last 90 days whose store page carries Steam's AI Generated Content Disclosure. Only recent non-AAA titles are checked, so this reads over the sample we actually fetched (#110)."
-        >
+        <div className="label">
           {I.gems}AI disclosed
+          <Tip text="Share of checked non-AAA titles released in the last 90 days whose store page carries Steam's AI Generated Content Disclosure. Only recent non-AAA titles are checked, so this reads over the sample we actually fetched (#110)." />
         </div>
         <div className="val num">
           {data.kpi.aiDisclosurePct == null ? "—" : `${data.kpi.aiDisclosurePct}%`}

@@ -92,6 +92,51 @@
   --shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 1px 3px rgba(16, 24, 40, 0.07);
   --shadow-lg: 0 4px 14px rgba(16, 24, 40, 0.07), 0 2px 4px rgba(16, 24, 40, 0.04);
 }
+
+/* ── Dark ──────────────────────────────────────────────────────────────────────
+   A phone-first tool that is white-only gets opened in bed. This is a SECOND
+   TOKEN SET over the same scale, not a second design: only the colour tokens
+   move, so every rule in this file follows without being touched. That is the
+   whole return on committing the token layer first.
+
+   Two things deliberately do NOT invert:
+   - --plate stays dark. It is a media mount, not a surface; art sits on the same
+     ground in both modes, which is what keeps Radar and Library consistent.
+   - the chart FOCUS/CONTEXT roles keep their meaning; only their lightness is
+     tuned in charts.ts against the dark ground.
+
+   Contrast is held to the same AA floor as light: --text-3 here is 5.6:1 on
+   --surface, not a dimmer grey. */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0e1420;
+    --bg-1: #131b2a;
+    --surface: #161e2e;
+    --surface-2: #1c2537;
+    --border: #2a3548;
+    --border-soft: #222c3d;
+
+    --text: #e8eef8;
+    --text-2: #b3c0d4;
+    --text-3: #93a2b9;
+    --text-4: #64748b;
+
+    --primary: #7aa2f7;
+    --primary-deep: #a9c4ff;
+    --accent: #e0a458;
+    --accent-soft: #e0a458;
+    --green: #4ec9a0;
+    --amber: #e0a458;
+    --red: #f28b82;
+    --violet: #b39ddb;
+    --cyan: #56b6c2;
+
+    /* Elevation reads as light in the dark, not as a darker shadow. */
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 1px 3px rgba(0, 0, 0, 0.3);
+    --shadow-lg: 0 4px 14px rgba(0, 0, 0, 0.45), 0 2px 4px rgba(0, 0, 0, 0.3);
+  }
+}
+
 * {
   box-sizing: border-box;
   margin: 0;
@@ -138,7 +183,7 @@ button {
    Selection, caret and scrollbars ship with defaults that belong to no design
    system. Theme them from the palette. */
 ::selection {
-  background: rgba(29, 78, 216, 0.18);
+  background: color-mix(in srgb, var(--primary) 18%, var(--surface));
   color: var(--text);
 }
 input,
@@ -224,7 +269,7 @@ textarea {
   color: #fff;
 }
 .rail-btn.active {
-  background: rgba(59, 130, 246, 0.22);
+  background: color-mix(in srgb, var(--primary) 22%, var(--surface));
   color: #fff;
 }
 .rail-btn.active::before {
@@ -269,7 +314,7 @@ textarea {
 }
 
 .side {
-  background: #fff;
+  background: var(--surface);
   border-right: 1px solid var(--border);
   padding: var(--sp-5) var(--sp-4);
   position: sticky;
@@ -421,15 +466,15 @@ textarea {
   border-radius: var(--r-sm);
 }
 .ed-tag.thu {
-  background: rgba(8, 145, 178, 0.13);
+  background: color-mix(in srgb, var(--cyan) 13%, var(--surface));
   color: var(--cyan);
 }
 .ed-tag.mon {
-  background: rgba(217, 119, 6, 0.14);
+  background: color-mix(in srgb, var(--amber) 14%, var(--surface));
   color: var(--accent);
 }
 .ed-tag.day {
-  background: rgba(37, 99, 235, 0.1);
+  background: color-mix(in srgb, var(--primary) 10%, var(--surface));
   color: var(--primary);
 }
 
@@ -441,7 +486,7 @@ textarea {
   position: sticky;
   top: 0;
   z-index: 20;
-  background: rgba(244, 246, 251, 0.85);
+  background: color-mix(in srgb, var(--bg) 85%, transparent);
   backdrop-filter: blur(14px);
   border-bottom: 1px solid var(--border);
   padding: var(--sp-4) var(--sp-6);
@@ -487,7 +532,7 @@ textarea {
   color: var(--text);
 }
 .seg-btn.active {
-  background: #fff;
+  background: var(--surface);
   color: var(--primary-deep);
   box-shadow: var(--shadow);
 }
@@ -517,7 +562,7 @@ textarea {
   display: flex;
   align-items: center;
   gap: var(--sp-2);
-  background: #fff;
+  background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--r-md);
   padding: var(--sp-2) var(--sp-3);
@@ -555,7 +600,7 @@ textarea {
   gap: var(--sp-4);
 }
 .kpi {
-  background: #fff;
+  background: var(--surface);
   border: 1px solid var(--border-soft);
   border-radius: var(--radius);
   padding: var(--sp-4) var(--sp-4) var(--sp-4);
@@ -705,25 +750,25 @@ textarea {
   stroke-width: 1.9;
 }
 .ic.up {
-  background: rgba(5, 150, 105, 0.1);
+  background: color-mix(in srgb, var(--green) 10%, var(--surface));
 }
 .ic.up svg {
   stroke: var(--green);
 }
 .ic.down {
-  background: rgba(220, 38, 38, 0.09);
+  background: color-mix(in srgb, var(--red) 9%, var(--surface));
 }
 .ic.down svg {
   stroke: var(--red);
 }
 .ic.gap {
-  background: rgba(217, 119, 6, 0.11);
+  background: color-mix(in srgb, var(--amber) 11%, var(--surface));
 }
 .ic.gap svg {
   stroke: var(--accent-soft);
 }
 .ic.gem {
-  background: rgba(8, 145, 178, 0.11);
+  background: color-mix(in srgb, var(--cyan) 11%, var(--surface));
 }
 .ic.gem svg {
   stroke: var(--cyan);
@@ -752,19 +797,19 @@ textarea {
   font-weight: 600;
 }
 .tag-op.opp {
-  background: rgba(217, 119, 6, 0.13);
+  background: color-mix(in srgb, var(--amber) 13%, var(--surface));
   color: var(--accent);
 }
 .tag-op.dec {
-  background: rgba(220, 38, 38, 0.11);
+  background: color-mix(in srgb, var(--red) 11%, var(--surface));
   color: var(--red);
 }
 .tag-op.gem {
-  background: rgba(8, 145, 178, 0.12);
+  background: color-mix(in srgb, var(--cyan) 12%, var(--surface));
   color: var(--cyan);
 }
 .tag-op.up {
-  background: rgba(5, 150, 105, 0.12);
+  background: color-mix(in srgb, var(--green) 12%, var(--surface));
   color: var(--green);
 }
 
@@ -889,7 +934,7 @@ textarea {
   gap: var(--sp-4);
 }
 .ref-card {
-  background: #fff;
+  background: var(--surface);
   border: 1px solid var(--border-soft);
   border-radius: var(--r-md);
   padding: var(--sp-4) var(--sp-4);
@@ -902,7 +947,7 @@ textarea {
   font-weight: 700;
   letter-spacing: 0.5px;
   color: var(--primary);
-  background: rgba(37, 99, 235, 0.1);
+  background: color-mix(in srgb, var(--primary) 10%, var(--surface));
   padding: var(--sp-0) var(--sp-2);
   border-radius: var(--r-sm);
 }
@@ -927,7 +972,7 @@ textarea {
   align-items: center;
   gap: var(--sp-3);
   padding: var(--sp-3) var(--sp-4);
-  background: #fff;
+  background: var(--surface);
   border: 1px solid var(--border-soft);
   border-radius: var(--r-md);
   margin-bottom: var(--sp-2);
@@ -1018,6 +1063,142 @@ textarea {
   background: var(--surface-2);
   padding: var(--sp-1) var(--sp-3);
   border-radius: var(--r-lg);
+}
+
+/* ── Touch targets ─────────────────────────────────────────────────────────────
+   Height was the failing axis everywhere: Brief's "source ↗" links measured
+   54×15, .prov-receipt 69×19, .pexpand 119×25 and .seg-btn ~29 tall, all
+   unchanged at 375px.
+
+   These are inline controls inside running text, so growing the BOX would break
+   the paragraph rhythm. Instead the hit area is expanded past the ink with an
+   absolutely-positioned pseudo-element: the layout is untouched, the thumb gets
+   its 44px. Controls that own their own block (.pexpand, .seg-btn) just get a
+   min-height, which is simpler and does not risk overlapping neighbours. */
+.tap-44 {
+  position: relative;
+}
+.tap-44::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  height: 44px;
+  /* Purely a hit area — never paints, never blocks what is under it visually. */
+  pointer-events: auto;
+}
+/* Every external "source" link in a panel, wherever it sits — chasing individual
+   containers missed two of them. */
+.content a[target="_blank"],
+.prov-receipt {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+}
+.content a[target="_blank"]::after,
+.prov-receipt::after {
+  content: "";
+  position: absolute;
+  left: -8px;
+  right: -8px;
+  top: 50%;
+  transform: translateY(-50%);
+  height: 44px;
+}
+.pexpand,
+.project-btn {
+  min-height: 44px;
+}
+/* The drawer chrome sat at 40x40 — close enough to look intentional, still under
+   the floor for a thumb. */
+.side-close,
+.nav-toggle {
+  min-width: 44px;
+  min-height: 44px;
+}
+/* Number fields are the primary control of the Revenue panel and were 37px tall. */
+.rev-field input,
+.target-edit input {
+  min-height: 44px;
+}
+.seg-btn {
+  min-height: 44px;
+}
+
+/* ── Tip ───────────────────────────────────────────────────────────────────────
+   Replaces `title=` as the definition layer. See components/Tip.tsx for why that
+   was a product gap and not a polish item. */
+.tip-wrap {
+  position: relative;
+  display: inline-flex;
+  vertical-align: middle;
+  margin-left: var(--sp-1);
+}
+.tip-trigger {
+  display: grid;
+  place-items: center;
+  /* The visible mark is 13px, but the hit area is a full 44px via the pseudo
+     element below — a definition you cannot tap is the problem being fixed. */
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: var(--text-3);
+  position: relative;
+}
+.tip-trigger::after {
+  content: "";
+  position: absolute;
+  inset: -15px;
+}
+.tip-trigger:hover,
+.tip-trigger[aria-expanded="true"] {
+  color: var(--primary);
+}
+.tip-trigger svg {
+  width: 13px;
+  height: 13px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 2;
+}
+.tip-bubble {
+  position: absolute;
+  z-index: 60;
+  top: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: max-content;
+  max-width: min(44ch, 78vw);
+  background: var(--surface);
+  color: var(--text-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-lg);
+  padding: var(--sp-2) var(--sp-3);
+  font-family: "Fira Sans", sans-serif;
+  font-size: var(--fs-2);
+  line-height: var(--lh-2);
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: normal;
+  white-space: normal;
+  text-align: left;
+}
+/* Near the right edge a centred bubble would overflow the viewport; on narrow
+   screens it pins to the trigger's left instead. */
+@media (max-width: 640px) {
+  .tip-bubble {
+    left: auto;
+    right: 0;
+    transform: none;
+    max-width: min(44ch, 86vw);
+  }
 }
 
 /* ── Hand-off ──────────────────────────────────────────────────────────────────
@@ -1325,18 +1506,18 @@ textarea {
   white-space: nowrap;
 }
 .ptag.lf {
-  background: rgba(37, 99, 235, 0.1);
+  background: color-mix(in srgb, var(--primary) 10%, var(--surface));
   color: var(--primary-deep);
 }
 .ptag.st {
   text-transform: capitalize;
 }
 .ptag.st-proposed {
-  background: rgba(217, 119, 6, 0.13);
+  background: color-mix(in srgb, var(--amber) 13%, var(--surface));
   color: var(--accent);
 }
 .ptag.st-prototyping {
-  background: rgba(5, 150, 105, 0.13);
+  background: color-mix(in srgb, var(--green) 13%, var(--surface));
   color: var(--green);
 }
 .ptag.st-shelved {
@@ -1344,20 +1525,20 @@ textarea {
   color: var(--text-3);
 }
 .ptag.st-shipped {
-  background: rgba(124, 58, 237, 0.13);
+  background: color-mix(in srgb, var(--violet) 13%, var(--surface));
   color: var(--violet);
 }
 /* validated: a prototype whose loop proved out in testing — the lead candidate. A verdict
    above "prototyping" (still iterating) but short of "shipped" (done). Cyan reads as spotlight. */
 .ptag.st-validated {
-  background: rgba(8, 145, 178, 0.14);
+  background: color-mix(in srgb, var(--cyan) 14%, var(--surface));
   color: #0891b2;
   font-weight: 600;
 }
 /* building: the committed lead in production — the pick. A DECISION above the evidence
    ladder (it can precede validated), so it reads strongest: solid indigo, spotlighted. */
 .ptag.st-building {
-  background: rgba(55, 48, 163, 0.14);
+  background: color-mix(in srgb, var(--violet) 14%, var(--surface));
   color: var(--primary-deep);
   font-weight: 700;
 }
@@ -1372,16 +1553,16 @@ textarea {
   color: #fff;
 }
 .ptag.badge-retention-safe {
-  background: rgba(37, 99, 235, 0.12);
+  background: color-mix(in srgb, var(--primary) 12%, var(--surface));
   color: var(--primary-deep);
   box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.4);
 }
 .ptag.badge-cashflow {
-  background: rgba(5, 150, 105, 0.13);
+  background: color-mix(in srgb, var(--green) 13%, var(--surface));
   color: var(--green);
 }
 .ptag.badge-cheapest-build {
-  background: rgba(8, 145, 178, 0.12);
+  background: color-mix(in srgb, var(--cyan) 12%, var(--surface));
   color: var(--cyan);
 }
 .pcard h2 {
@@ -1407,7 +1588,7 @@ textarea {
     border-color 0.12s;
 }
 .plink:hover {
-  background: rgba(37, 99, 235, 0.07);
+  background: color-mix(in srgb, var(--primary) 7%, var(--surface));
   border-color: var(--primary);
 }
 .pone {
@@ -1436,7 +1617,7 @@ textarea {
   letter-spacing: 0.5px;
   text-transform: uppercase;
   color: var(--primary);
-  background: rgba(37, 99, 235, 0.08);
+  background: color-mix(in srgb, var(--primary) 8%, var(--surface));
   padding: var(--sp-0) var(--sp-2);
   border-radius: var(--r-sm);
   margin-right: var(--sp-2);
@@ -1444,7 +1625,7 @@ textarea {
 }
 .pfields .prisk .plabel {
   color: var(--accent);
-  background: rgba(217, 119, 6, 0.1);
+  background: color-mix(in srgb, var(--amber) 10%, var(--surface));
 }
 .pscores {
   display: flex;
@@ -1477,11 +1658,11 @@ textarea {
   opacity: 0.75;
 }
 .ptag.prov-market-backed {
-  background: rgba(5, 150, 105, 0.13);
+  background: color-mix(in srgb, var(--green) 13%, var(--surface));
   color: var(--green);
 }
 .ptag.prov-design-derived {
-  background: rgba(8, 145, 178, 0.12);
+  background: color-mix(in srgb, var(--cyan) 12%, var(--surface));
   color: var(--cyan);
 }
 .pdots-row {
@@ -1550,7 +1731,7 @@ textarea {
   color: var(--primary-deep);
 }
 .bcard {
-  background: #fff;
+  background: var(--surface);
   border: 1px solid var(--border-soft);
   border-radius: var(--r-md);
   overflow: hidden;
@@ -1653,19 +1834,19 @@ textarea {
   color: var(--cyan);
 }
 .btag.green {
-  background: rgba(5, 150, 105, 0.12);
+  background: color-mix(in srgb, var(--green) 12%, var(--surface));
   color: var(--green);
 }
 .btag.blue {
-  background: rgba(37, 99, 235, 0.12);
+  background: color-mix(in srgb, var(--primary) 12%, var(--surface));
   color: var(--primary);
 }
 .btag.indigo {
-  background: rgba(79, 70, 229, 0.12);
+  background: color-mix(in srgb, var(--violet) 12%, var(--surface));
   color: #4f46e5;
 }
 .btag.amber {
-  background: rgba(217, 119, 6, 0.13);
+  background: color-mix(in srgb, var(--amber) 13%, var(--surface));
   color: var(--accent);
 }
 .btag.gray {
@@ -1673,7 +1854,7 @@ textarea {
   color: var(--text-3);
 }
 .btag.purple {
-  background: rgba(124, 58, 237, 0.12);
+  background: color-mix(in srgb, var(--violet) 12%, var(--surface));
   color: var(--violet);
 }
 .btag.pink {
@@ -1681,7 +1862,7 @@ textarea {
   color: #db2777;
 }
 .btag.cyan {
-  background: rgba(8, 145, 178, 0.12);
+  background: color-mix(in srgb, var(--cyan) 12%, var(--surface));
   color: var(--cyan);
 }
 .bfig {
@@ -1690,7 +1871,7 @@ textarea {
   font-weight: 700;
   padding: var(--sp-0) var(--sp-2);
   border-radius: var(--r-sm);
-  background: rgba(5, 150, 105, 0.1);
+  background: color-mix(in srgb, var(--green) 10%, var(--surface));
   color: var(--green);
 }
 .bcard h2 {
@@ -1760,10 +1941,33 @@ textarea {
 }
 
 /* ── Data tables (explorer views) ── */
+/* A wide table scrolls inside its own card at EVERY width, not only on mobile.
+   The containment used to start at 1080px, so Comparables — 12 columns — could
+   still push the desktop page sideways; adding a definition control to each
+   header was enough to tip it over. The page must never scroll horizontally, so
+   the rule that guarantees it cannot be width-conditional. */
 .dtable {
-  width: 100%;
+  display: block;
+  width: max-content;
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
   border-collapse: collapse;
   font-size: var(--fs-3);
+  /* Edge fades marking "there is more this way" — see the mobile block for how
+     the background-attachment trick works. */
+  background:
+    linear-gradient(to right, var(--surface) 30%, rgba(255, 255, 255, 0)) left center,
+    linear-gradient(to left, var(--surface) 30%, rgba(255, 255, 255, 0)) right center,
+    linear-gradient(to right, rgba(20, 33, 58, 0.13), rgba(20, 33, 58, 0)) left center,
+    linear-gradient(to left, rgba(20, 33, 58, 0.13), rgba(20, 33, 58, 0)) right center;
+  background-repeat: no-repeat;
+  background-size:
+    36px 100%,
+    36px 100%,
+    12px 100%,
+    12px 100%;
+  background-attachment: local, local, scroll, scroll;
 }
 .dtable th {
   text-align: left;
@@ -1776,7 +1980,7 @@ textarea {
   border-bottom: 1px solid var(--border);
   position: sticky;
   top: 0;
-  background: #fff;
+  background: var(--surface);
   cursor: default;
 }
 .dtable td {
@@ -2043,14 +2247,7 @@ textarea {
     display: flex;
   }
 
-  /* wide data tables scroll within their card instead of the whole page */
-  .dtable {
-    display: block;
-    width: max-content;
-    max-width: 100%;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-  }
+  /* the base .dtable rule already scrolls in-container at every width */
   /* …and the card holding one has to be allowed to shrink. A grid item's implicit
      `min-width: auto` is its min-content size, which a `max-content` table inflates
      to the full table width — the track (and the page) then blow past 375px and the
@@ -2123,21 +2320,25 @@ textarea {
   border-radius: var(--r-pill);
   white-space: nowrap;
 }
+/* The tier ramp is ONE hue at three weights — scale is ordered, so the chips are
+   shades of the focus colour rather than three unrelated blues. Text comes from
+   the token so it inverts with the mode; AAA stays deliberately muted because it
+   is context, not a benchmark. */
 .tier-chip.t-hobby {
-  background: #e7edfa;
-  color: #1e40af;
+  background: color-mix(in srgb, var(--primary) 10%, var(--surface));
+  color: var(--primary-deep);
 }
 .tier-chip.t-small {
-  background: #dbeafe;
-  color: #1d4ed8;
+  background: color-mix(in srgb, var(--primary) 14%, var(--surface));
+  color: var(--primary-deep);
 }
 .tier-chip.t-est {
-  background: #e0e7ff;
-  color: #4338ca;
+  background: color-mix(in srgb, var(--primary) 12%, var(--surface));
+  color: var(--primary-deep);
 }
 .tier-chip.t-aaa {
-  background: #eef2f7;
-  color: #64748b;
+  background: var(--surface-2);
+  color: var(--text-3);
 }
 
 /* Phase 2 — grouped platform selector (Browser vs PC hierarchy) */
@@ -2239,7 +2440,7 @@ textarea {
   color: var(--primary-deep);
 }
 .rev-panel {
-  background: #fff;
+  background: var(--surface);
   border: 1px solid var(--border-soft);
   border-radius: var(--radius);
   padding: var(--sp-5) var(--sp-5);
@@ -2308,7 +2509,7 @@ textarea {
   color: var(--green);
 }
 .traj-decaying {
-  background: rgba(194, 98, 10, 0.13);
+  background: color-mix(in srgb, var(--amber) 13%, var(--surface));
   color: var(--accent);
 }
 .traj-plateau {
@@ -2316,7 +2517,7 @@ textarea {
   color: var(--text-3);
 }
 .traj-new {
-  background: rgba(37, 99, 235, 0.1);
+  background: color-mix(in srgb, var(--primary) 10%, var(--surface));
   color: var(--primary);
 }
 
@@ -2337,22 +2538,22 @@ a.est-chip:hover {
   text-decoration: underline;
 }
 .est-chip.team-solo {
-  background: #e7f3ec;
+  background: color-mix(in srgb, var(--green) 13%, var(--surface));
   color: var(--green);
   border-color: #cbe7d6;
 }
 .est-chip.team-small {
-  background: #eaf5ee;
+  background: color-mix(in srgb, var(--green) 11%, var(--surface));
   color: var(--green);
   border-color: #d6ebdd;
 }
 .est-chip.team-mid {
-  background: #fdf1e5;
+  background: color-mix(in srgb, var(--amber) 13%, var(--surface));
   color: var(--accent);
   border-color: #f0dcc8;
 }
 .est-chip.team-large {
-  background: #f6e9e6;
+  background: color-mix(in srgb, var(--red) 12%, var(--surface));
   color: #a23b2d;
   border-color: #ecd3cd;
 }
@@ -2406,7 +2607,7 @@ a.est-chip:hover {
   font-size: var(--fs-1);
   font-weight: 600;
   color: var(--primary);
-  background: rgba(37, 99, 235, 0.07);
+  background: color-mix(in srgb, var(--primary) 7%, var(--surface));
   border: 1px solid var(--border);
   border-radius: var(--r-sm);
   padding: var(--sp-1) var(--sp-2);
@@ -2417,7 +2618,7 @@ a.est-chip:hover {
     border-color 0.12s;
 }
 .project-btn:hover {
-  background: rgba(37, 99, 235, 0.14);
+  background: color-mix(in srgb, var(--primary) 14%, var(--surface));
   border-color: var(--primary);
 }
 
@@ -2426,7 +2627,7 @@ a.est-chip:hover {
   display: flex;
   align-items: flex-start;
   gap: var(--sp-3);
-  background: rgba(37, 99, 235, 0.06);
+  background: color-mix(in srgb, var(--primary) 6%, var(--surface));
   border: 1px solid var(--border);
   box-shadow: inset 3px 0 0 var(--primary);
   border-radius: var(--radius);
@@ -2475,7 +2676,7 @@ a.est-chip:hover {
   margin-bottom: var(--sp-4);
 }
 .band-tile {
-  background: #fff;
+  background: var(--surface);
   border: 1px solid var(--border-soft);
   border-radius: var(--radius);
   padding: var(--sp-3) var(--sp-4);
@@ -2542,7 +2743,7 @@ a.est-chip:hover {
   padding: var(--sp-0) var(--sp-2);
   border-radius: var(--r-pill);
   white-space: nowrap;
-  background: #e7f3ec;
+  background: color-mix(in srgb, var(--green) 13%, var(--surface));
   color: var(--green);
   border: 1px solid #cbe7d6;
 }
@@ -2576,7 +2777,7 @@ a.est-chip:hover {
   font-weight: 400;
 }
 .lb-focus {
-  border: 1px solid #d4d2f2;
+  border: 1px solid color-mix(in srgb, var(--primary) 30%, var(--surface));
   box-shadow: inset 4px 0 0 var(--primary-deep);
   border-radius: var(--radius);
   background: linear-gradient(180deg, #f4f3fd, var(--surface));
@@ -2752,7 +2953,7 @@ a.est-chip:hover {
   white-space: nowrap;
 }
 .supply-rising {
-  background: rgba(194, 98, 10, 0.14);
+  background: color-mix(in srgb, var(--amber) 14%, var(--surface));
   color: var(--accent);
 }
 .supply-steady {
@@ -2760,7 +2961,7 @@ a.est-chip:hover {
   color: var(--text-3);
 }
 .supply-cooling {
-  background: rgba(37, 99, 235, 0.1);
+  background: color-mix(in srgb, var(--primary) 10%, var(--surface));
   color: var(--primary);
 }
 .supply-quiet {
@@ -2774,7 +2975,7 @@ a.est-chip:hover {
   font-weight: 700;
   letter-spacing: 0.02em;
   color: var(--accent);
-  background: rgba(194, 98, 10, 0.12);
+  background: color-mix(in srgb, var(--amber) 12%, var(--surface));
   border: 1px solid rgba(194, 98, 10, 0.3);
   border-radius: var(--r-sm);
   padding: var(--sp-0) var(--sp-2);
@@ -2797,7 +2998,7 @@ a.est-chip:hover {
   font-size: var(--fs-1);
   font-weight: 700;
   color: var(--accent);
-  background: rgba(194, 98, 10, 0.12);
+  background: color-mix(in srgb, var(--amber) 12%, var(--surface));
   border: 1px solid rgba(194, 98, 10, 0.3);
   border-radius: var(--r-sm);
   padding: 0 var(--sp-1);
@@ -2844,7 +3045,7 @@ a.conv-chip:hover {
   text-decoration: underline;
 }
 .conv-strong {
-  background: #e7f3ec;
+  background: color-mix(in srgb, var(--green) 13%, var(--surface));
   color: var(--green);
   border-color: #cbe7d6;
 }
@@ -2853,7 +3054,7 @@ a.conv-chip:hover {
   color: var(--text-3);
 }
 .conv-deliberation {
-  background: #fdf1e5;
+  background: color-mix(in srgb, var(--amber) 13%, var(--surface));
   color: var(--accent);
   border-color: #f0dcc8;
 }
@@ -2864,7 +3065,7 @@ a.conv-chip:hover {
   font-weight: 700;
   letter-spacing: 0.03em;
   color: var(--green);
-  background: #e7f3ec;
+  background: color-mix(in srgb, var(--green) 13%, var(--surface));
   border: 1px solid #cbe7d6;
   border-radius: var(--r-sm);
   padding: 0 var(--sp-1);
@@ -2892,7 +3093,7 @@ a.conv-chip:hover {
   border-radius: var(--r-sm);
 }
 .prov-receipt:hover {
-  background: rgba(37, 99, 235, 0.07);
+  background: color-mix(in srgb, var(--primary) 7%, var(--surface));
   border-color: var(--primary);
 }
 
@@ -2915,7 +3116,7 @@ a.conv-chip:hover {
   border: 1px solid var(--border);
 }
 .pscope-chip.clock {
-  background: rgba(37, 99, 235, 0.08);
+  background: color-mix(in srgb, var(--primary) 8%, var(--surface));
   color: var(--primary-deep);
   border-color: var(--border);
 }
@@ -2938,17 +3139,54 @@ a.conv-chip:hover {
   vertical-align: middle;
 }
 .route-1 {
-  background: rgba(37, 99, 235, 0.12);
+  background: color-mix(in srgb, var(--primary) 12%, var(--surface));
   color: var(--primary-deep);
   border: 1px solid rgba(37, 99, 235, 0.28);
 }
 .route-23 {
-  background: #e7f3ec;
+  background: color-mix(in srgb, var(--green) 13%, var(--surface));
   color: var(--green);
   border: 1px solid #cbe7d6;
 }
 .route-both {
-  background: #fdf1e5;
+  background: color-mix(in srgb, var(--amber) 13%, var(--surface));
   color: var(--accent);
   border: 1px solid #f0dcc8;
+}
+
+/* ── Dark: the few rules the token layer cannot reach ──────────────────────────
+   Everything above now draws from tokens or color-mix, so dark is almost purely
+   the :root override near the top of this file. These are the leftovers that are
+   genuinely structural rather than tint, and they live at the END on purpose:
+   they must win the cascade against the component rules they correct. */
+@media (prefers-color-scheme: dark) {
+  /* The rail must stay darker than the page, or it stops reading as a rail. */
+  .rail {
+    background: linear-gradient(180deg, #080d15, #05080e);
+  }
+  /* Active nav used a light-mode gradient wash keyed to white. */
+  .nav-item.active,
+  .edition.active {
+    background: color-mix(in srgb, var(--primary) 16%, var(--surface));
+    color: var(--primary-deep);
+  }
+  /* The selected segment reads as RAISED on light; on dark it reads as recessed,
+     so it takes the deeper surface rather than the lighter one. */
+  .seg-btn.active {
+    background: var(--surface-2);
+    color: var(--primary-deep);
+  }
+  /* White-on-amber badges fail AA in both modes; on dark the fill is light enough
+     that the text must go dark instead. */
+  .nav-item .badge,
+  .badge {
+    color: #14213a;
+  }
+  /* Empty-state art plate: a light gradient on a dark page is a hole. */
+  .empty .big-ic {
+    background: linear-gradient(160deg, var(--surface-2), var(--bg-1));
+  }
+  ::selection {
+    background: color-mix(in srgb, var(--primary) 32%, transparent);
+  }
 }
