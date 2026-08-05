@@ -1,7 +1,15 @@
 import { useEffect, useState } from "react";
-import { useDrawer, NavToggle, NavScrim, DrawerClose } from "../components/MobileNav.tsx";
+import {
+  useDrawer,
+  useIsDrawer,
+  drawerPanelProps,
+  NavToggle,
+  NavScrim,
+  DrawerClose,
+} from "../components/MobileNav.tsx";
 import { Capsule } from "../components/Capsule.tsx";
 import { describeLoadError } from "../lib/loadError.ts";
+import { TabList } from "../components/Tabs.tsx";
 import type {
   Overview,
   Platform,
@@ -184,11 +192,11 @@ const Skel = ({ h = 300 }: { h?: number }) => (
   </div>
 );
 const head = (icon: JSX.Element, title: string, sub?: string) => (
-  <h3>
+  <h2>
     {icon}
     {title}
     {sub && <span className="sub">{sub}</span>}
-  </h3>
+  </h2>
 );
 const deltaCls = (d: number) => (d > 3 ? "delta-up" : d < -3 ? "delta-dn" : "delta-fl");
 const TRAJ_LABEL: Record<string, string> = {
@@ -243,13 +251,13 @@ function QuadrantCard({
   if (points.length < 3) return null;
   return (
     <div className="card hero">
-      <h3>
+      <h2>
         {I.gaps}Demand vs. Supply
         <span className="sub">
           top-left = underserved (few titles, high demand) · bubble = {weightName} · colour = supply
           momentum
         </span>
-      </h3>
+      </h2>
       <div className="q-legend">
         {SUPPLY_LEGEND.map(([k, c, label]) => (
           <span key={k} className="q-legend-item">
@@ -663,7 +671,7 @@ function DevelopersView({ rows, platform }: { rows: DeveloperRow[]; platform: Pl
       <div className="card">
         <div className="empty">
           <div className="big-ic">{I.developers}</div>
-          <h3>No developer data yet</h3>
+          <h2>No developer data yet</h2>
           <p>
             CrazyGames doesn't expose developer names — Poki does. Once the Poki crawl runs, repeat
             publishers show up here.
@@ -1363,24 +1371,28 @@ function ComparablesCard({
   const soloN = rows.filter(isSoloReachable).length;
   return (
     <div className="card">
-      <h3>
+      <h2>
         {I.gems}Indie comparables
         <span className="sub">the realistic peer set — indie-tier games, most recent first</span>
-        <span className="seg" role="tablist" aria-label="Cohort" style={{ marginLeft: "auto" }}>
+        <span className="seg" role="group" aria-label="Cohort">
           <button
             className={"seg-btn" + (cohort === "all" ? " active" : "")}
+            type="button"
+            aria-pressed={cohort === "all"}
             onClick={() => setCohort("all")}
           >
             All ({rows.length})
           </button>
           <button
             className={"seg-btn" + (cohort === "solo" ? " active" : "")}
+            type="button"
+            aria-pressed={cohort === "solo"}
             onClick={() => setCohort("solo")}
           >
             Solo-reachable ({soloN})
           </button>
         </span>
-      </h3>
+      </h2>
       {cohort === "solo" && (
         <p className="view-head">
           Studios a <b>1–2 or 3–10 person</b> team could realistically match, by researched
@@ -1494,19 +1506,23 @@ function GenreEconCard({ data }: { data: SteamOverview }) {
   }, [trimmed, searching]);
   return (
     <div className="card">
-      <h3>
+      <h2>
         {I.money}
         {lens === "genre" ? "Genre economics" : "Sub-genre economics"}
         <span className="sub">owners × realized price — what a market is worth at this scale</span>
-        <span className="seg" role="tablist" aria-label="Lens" style={{ marginLeft: "auto" }}>
+        <span className="seg" role="group" aria-label="Lens">
           <button
             className={"seg-btn" + (lens === "genre" ? " active" : "")}
+            type="button"
+            aria-pressed={lens === "genre"}
             onClick={() => setLens("genre")}
           >
             Genre
           </button>
           <button
             className={"seg-btn" + (lens === "tag" ? " active" : "")}
+            type="button"
+            aria-pressed={lens === "tag"}
             onClick={() => setLens("tag")}
             disabled={!tagRows.length}
             title={SUBGENRE_TIP}
@@ -1515,22 +1531,26 @@ function GenreEconCard({ data }: { data: SteamOverview }) {
           </button>
         </span>
         {lens === "genre" && (
-          <span className="seg" role="tablist" aria-label="Cohort">
+          <span className="seg" role="group" aria-label="Cohort">
             <button
               className={"seg-btn" + (cohort === "indie" ? " active" : "")}
+              type="button"
+              aria-pressed={cohort === "indie"}
               onClick={() => setCohort("indie")}
             >
               Indie
             </button>
             <button
               className={"seg-btn" + (cohort === "all" ? " active" : "")}
+              type="button"
+              aria-pressed={cohort === "all"}
               onClick={() => setCohort("all")}
             >
               All tiers
             </button>
           </span>
         )}
-      </h3>
+      </h2>
       {lens === "genre" && cohort === "all" && (
         <p className="view-head">
           All tiers include AAA — owners/revenue are dominated by mega-hits; demand context only,{" "}
@@ -1670,7 +1690,7 @@ function SteamEmpty() {
   return (
     <div className="empty">
       <div className="big-ic">{I.steam}</div>
-      <h3>No Steam data yet</h3>
+      <h2>No Steam data yet</h2>
       <p>
         Nothing has been crawled into this catalog, so there is no market to read. The figures,
         charts and rankings below would all be computed from an empty set — they are hidden rather
@@ -1787,6 +1807,7 @@ export function Radar({
   onProject?: (seed: RevenueSeed) => void;
 }) {
   const drawer = useDrawer();
+  const isDrawer = useIsDrawer();
   const [platform, setPlatform] = useState<Platform>(DEFAULT_PLATFORM);
   const [view, setView] = useState<View>("overview");
   const [steamView, setSteamView] = useState<SteamSection>("overview");
@@ -1845,27 +1866,36 @@ export function Radar({
   }, [view, platform]);
 
   const gems = ov ? ov.scatter.filter((p) => p.gem).length : 0;
+  // These were <a> with an onClick and no href. An anchor without href is not in
+  // the tab order and does not fire on Enter, so the ENTIRE section navigation —
+  // Genre Economics, Comparables, Market Gaps, the leaderboard, the engine picker
+  // — was unreachable by keyboard or screen reader. They look and behave like
+  // buttons, so they are buttons.
   const navItem = (key: View, icon: JSX.Element, label: string, badge?: number) => (
-    <a
+    <button
+      type="button"
       className={"nav-item" + (view === key ? " active" : "")}
+      aria-current={view === key ? "page" : undefined}
       onClick={() => setView(key)}
       key={key}
     >
       {icon}
       {label}
       {badge != null && <span className="badge">{badge}</span>}
-    </a>
+    </button>
   );
   const steamNav = (key: SteamSection, icon: JSX.Element, label: string, badge?: number) => (
-    <a
+    <button
+      type="button"
       className={"nav-item" + (steamView === key ? " active" : "")}
+      aria-current={steamView === key ? "page" : undefined}
       onClick={() => setSteamView(key)}
       key={key}
     >
       {icon}
       {label}
       {badge != null && <span className="badge">{badge}</span>}
-    </a>
+    </button>
   );
 
   const subtitle = isSteam ? (steam ? steam.subtitle : "loading…") : ov ? ov.subtitle : "loading…";
@@ -1873,6 +1903,7 @@ export function Radar({
   return (
     <section className="service" data-svc="radar" hidden={hidden}>
       <aside
+        {...drawerPanelProps(drawer, isDrawer, "Radar sections")}
         className={"side" + (drawer.open ? " open" : "")}
         onClick={(e) => {
           if ((e.target as HTMLElement).closest(".nav-item")) drawer.closeDrawer();
@@ -1929,33 +1960,29 @@ export function Radar({
       <main className="main">
         <div className="topbar">
           <NavToggle onClick={drawer.openDrawer} />
-          <h2>
+          <h1>
             {isSteam ? "Steam (PC) Market" : "Market Overview"} <small>{subtitle}</small>
-          </h2>
-          <div className="platform-groups" role="tablist" aria-label="Platform">
+          </h1>
+          <div className="platform-groups">
             {PLATFORM_GROUPS.map((grp) => (
-              <div className="seg-group" key={grp.group}>
-                <span className="seg-group-label">{grp.group}</span>
-                <div className="seg">
-                  {grp.items.map((p) => (
-                    <button
-                      key={p.id}
-                      className={"seg-btn" + (platform === p.id ? " active" : "")}
-                      role="tab"
-                      aria-selected={platform === p.id}
-                      onClick={() => setPlatform(p.id)}
-                    >
-                      <span className={"dot " + p.id}></span>
-                      {p.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
+              <TabList
+                key={grp.group}
+                groupLabel={grp.group}
+                label={`Platform — ${grp.group}`}
+                panelId="radar-panel"
+                value={platform}
+                onChange={setPlatform}
+                tabs={grp.items.map((p) => ({
+                  id: p.id,
+                  label: p.label,
+                  mark: <span className={"dot " + p.id} aria-hidden="true"></span>,
+                }))}
+              />
             ))}
           </div>
         </div>
 
-        <div className="content">
+        <div className="content" id="radar-panel" role="tabpanel" aria-label="Market data">
           {err != null && <LoadFailure error={err} onRetry={() => setReloadNonce((n) => n + 1)} />}
           {isSteam ? (
             steam ? (

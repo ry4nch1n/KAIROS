@@ -1,5 +1,12 @@
 import { useEffect, useState } from "react";
-import { useDrawer, NavToggle, NavScrim, DrawerClose } from "../components/MobileNav.tsx";
+import {
+  useDrawer,
+  useIsDrawer,
+  drawerPanelProps,
+  NavToggle,
+  NavScrim,
+  DrawerClose,
+} from "../components/MobileNav.tsx";
 import type { BriefEditionMeta, BriefEdition, BriefNotable, BriefSteering } from "shared";
 import { api } from "../lib/api.ts";
 import { isSameWeek } from "../lib/week.ts";
@@ -98,7 +105,7 @@ function RichCard({ item, kind }: { item: BriefNotable; kind: "notable" | "brows
           {badge && <span className={"btag " + badgeCls}>{badge}</span>}
           {item.figure && <span className="bfig">{item.figure}</span>}
         </div>
-        <h3>{item.name}</h3>
+        <h2>{item.name}</h2>
         {meta && <div className="bmeta">{meta}</div>}
         {item.blurb && <p className="bblurb">{item.blurb}</p>}
         {item.relevance && <p className="brel">{item.relevance}</p>}
@@ -128,7 +135,7 @@ function DemandTracker({ t }: { t: NonNullable<BriefEdition["tracker"]> }) {
         {t.rows.map((r) => (
           <div className="ref-card" key={r.family ?? "_none"}>
             <span className="rtag">{r.family ?? "unclassified"}</span>
-            <h4>{rowSummary(r)}</h4>
+            <h3>{rowSummary(r)}</h3>
             {r.titles.length > 0 && <div className="src">{r.titles.join(" · ")}</div>}
           </div>
         ))}
@@ -139,6 +146,7 @@ function DemandTracker({ t }: { t: NonNullable<BriefEdition["tracker"]> }) {
 
 export function Brief({ hidden }: { hidden: boolean }) {
   const drawer = useDrawer();
+  const isDrawer = useIsDrawer();
   const [list, setList] = useState<BriefEditionMeta[]>([]);
   const [sel, setSel] = useState<string | null>(null);
   const [ed, setEd] = useState<BriefEdition | null>(null);
@@ -169,16 +177,18 @@ export function Brief({ hidden }: { hidden: boolean }) {
   const editionRow = (e: BriefEditionMeta) => {
     const di = dow(e.editionDate);
     return (
-      <a
+      <button
+        type="button"
         key={e.id}
         className={"edition" + (sel === e.editionDate ? " active" : "")}
+        aria-current={sel === e.editionDate ? "page" : undefined}
         onClick={() => setSel(e.editionDate)}
       >
         <span>{fmt(e.editionDate)}</span>
         <span className={"ed-tag " + (di === 4 ? "thu" : di === 1 ? "mon" : "day")}>
           {DAYS_SHORT[di]}
         </span>
-      </a>
+      </button>
     );
   };
 
@@ -186,6 +196,7 @@ export function Brief({ hidden }: { hidden: boolean }) {
   return (
     <section className="service" data-svc="brief" hidden={hidden}>
       <aside
+        {...drawerPanelProps(drawer, isDrawer, "Brief editions")}
         className={"side" + (drawer.open ? " open" : "")}
         onClick={(e) => {
           if ((e.target as HTMLElement).closest(".edition")) drawer.closeDrawer();
@@ -222,12 +233,12 @@ export function Brief({ hidden }: { hidden: boolean }) {
       <main className="main">
         <div className="topbar">
           <NavToggle onClick={drawer.openDrawer} />
-          <h2>
+          <h1>
             Indie &amp; Gaming Brief{" "}
             <small>
               {ed ? `Edition ${ed.editionDate} · ${DAYS_LONG[dow(ed.editionDate)]}` : "…"}
             </small>
-          </h2>
+          </h1>
           <div className="filters">
             {ed && ed.sourceCount > 0 && (
               <div className="chip">
@@ -250,7 +261,7 @@ export function Brief({ hidden }: { hidden: boolean }) {
                   <path d="M7 9h7M7 13h7M7 17h4" />
                 </svg>
               </div>
-              <h3>No brief editions yet</h3>
+              <h2>No brief editions yet</h2>
               <p>Editions appear here automatically as they're published.</p>
             </div>
           ) : !p ? (
@@ -326,7 +337,7 @@ export function Brief({ hidden }: { hidden: boolean }) {
                     {p.tooling.items.map((t, i) => (
                       <div className="ref-card" key={i}>
                         {t.group && <span className="rtag">{t.group}</span>}
-                        <h4>{t.headline}</h4>
+                        <h3>{t.headline}</h3>
                         {t.version_or_date && <div className="src">{t.version_or_date}</div>}
                         {t.detail && <p>{t.detail}</p>}
                         {t.relevance && (

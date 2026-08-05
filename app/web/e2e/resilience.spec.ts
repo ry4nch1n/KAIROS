@@ -28,10 +28,19 @@ test.describe("Radar resilience", () => {
 
     await page.goto("/");
 
-    // Shell + rail still render; Radar shows its graceful "Failed to load" card.
+    // Shell + rail still render; Radar shows its graceful failure card.
     await expect(page.locator(".rail")).toBeVisible();
     await expect(page.locator(RADAR)).toBeVisible();
-    await expect(page.locator(RADAR).getByText(/Failed to load/i)).toBeVisible();
+
+    // Asserted by ROLE and RECOVERY, not by copy. The old assertion pinned the
+    // string "Failed to load", which was the defect: that message named a JS
+    // error class and offered no way out. What must hold is that the failure is
+    // announced as an alert and carries a retry — both survive a rewording.
+    const alert = page.locator(RADAR).getByRole("alert");
+    await expect(alert).toBeVisible();
+    await expect(alert.getByRole("button", { name: /try again/i })).toBeVisible();
+    // And it must not leak an exception class at the reader.
+    await expect(alert.locator(".lf-head b")).not.toHaveText(/Error|TypeError/);
 
     // The rest of the app stays navigable despite the failed call.
     await page.getByRole("button", { name: "Revenue Model", exact: true }).click();

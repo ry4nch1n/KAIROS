@@ -1,5 +1,12 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { useDrawer, NavToggle, NavScrim, DrawerClose } from "../components/MobileNav.tsx";
+import {
+  useDrawer,
+  useIsDrawer,
+  drawerPanelProps,
+  NavToggle,
+  NavScrim,
+  DrawerClose,
+} from "../components/MobileNav.tsx";
 import type { LibraryItem, Pitch, PrototypeVerdict } from "shared";
 import { api } from "../lib/api.ts";
 import { routeLean } from "../lib/routeLean.ts";
@@ -204,7 +211,7 @@ function PitchCard({ p, verdict }: { p: Pitch; verdict: PrototypeVerdict | null 
           </div>
           {/* codeName is an internal art-capsule name; the card shows the title only (they now
               agree, so the old grey echo was just confusing). codeName stays in the data for art gen. */}
-          <h3>{p.title}</h3>
+          <h2>{p.title}</h2>
           <div className="bmeta">
             {ladder(p.platformLadder)} · {fmtDate(p.pitchDate)}
             {(() => {
@@ -355,7 +362,7 @@ function LibCard({ it }: { it: LibraryItem }) {
         ))}
         <span className={"ptag st st-" + it.status}>{it.status}</span>
       </div>
-      <h3>{it.title}</h3>
+      <h2>{it.title}</h2>
       {it.date && <div className="bmeta">Published {fmtDate(it.date)}</div>}
       {it.summary && (
         <p className="bblurb" ref={blurbRef}>
@@ -563,16 +570,16 @@ function LeaderboardView({ pitches }: { pitches: Pitch[] }) {
   if (!pitches.length)
     return (
       <div className="empty">
-        <h3>No pitches to rank yet</h3>
+        <h2>No pitches to rank yet</h2>
       </div>
     );
 
   return (
     <div className="card">
-      <h3>
+      <h2>
         Candidate leaderboard
         <span className="sub">the pick, the field, the parked</span>
-      </h3>
+      </h2>
 
       {focus.length > 0 && (
         <div className="lb-focus">
@@ -673,13 +680,13 @@ function FamilyCoverageView({ pitches }: { pitches: Pitch[] }) {
   const maxActive = Math.max(1, ...rows.map((r) => r.active));
   return (
     <div className="card">
-      <h3>
+      <h2>
         Loop-family coverage
         <span className="sub">
           how many pitches the Library has bet on per loop family — the supply side of the Phase-0
           read
         </span>
-      </h3>
+      </h2>
       <p className="view-head">
         A family with rising market demand and <b>zero live coverage</b> is the opening worth a new
         pitch. Demand signal per family (from the brief) is coming next — this is the coverage side.
@@ -733,6 +740,7 @@ function FamilyCoverageView({ pitches }: { pitches: Pitch[] }) {
 
 export function Library({ hidden }: { hidden: boolean }) {
   const drawer = useDrawer();
+  const isDrawer = useIsDrawer();
   const [pitches, setPitches] = useState<Pitch[]>([]);
   const [items, setItems] = useState<LibraryItem[]>([]);
   const [active, setActive] = useState<string>(DEFAULT_COLLECTION);
@@ -776,6 +784,7 @@ export function Library({ hidden }: { hidden: boolean }) {
   return (
     <section className="service" data-svc="library" hidden={hidden}>
       <aside
+        {...drawerPanelProps(drawer, isDrawer, "Library collections")}
         className={"side" + (drawer.open ? " open" : "")}
         onClick={(e) => {
           if ((e.target as HTMLElement).closest(".nav-item")) drawer.closeDrawer();
@@ -788,8 +797,10 @@ export function Library({ hidden }: { hidden: boolean }) {
         </div>
         <div className="nav-label">Collections</div>
         {COLLECTIONS.map((c) => (
-          <a
+          <button
+            type="button"
             className={"nav-item" + (c.key === active ? " active" : "")}
+            aria-current={c.key === active ? "page" : undefined}
             key={c.key}
             onClick={() => setActive(c.key)}
           >
@@ -801,11 +812,13 @@ export function Library({ hidden }: { hidden: boolean }) {
             >
               {counts[c.key] || 0}
             </span>
-          </a>
+          </button>
         ))}
         <div className="nav-label">Views</div>
-        <a
+        <button
+          type="button"
           className={"nav-item" + (isLeaderboard ? " active" : "")}
+          aria-current={isLeaderboard ? "page" : undefined}
           onClick={() => setActive("leaderboard")}
         >
           <svg viewBox="0 0 24 24">
@@ -818,16 +831,18 @@ export function Library({ hidden }: { hidden: boolean }) {
           >
             {activePitchCount}
           </span>
-        </a>
-        <a
+        </button>
+        <button
+          type="button"
           className={"nav-item" + (isFamilies ? " active" : "")}
+          aria-current={isFamilies ? "page" : undefined}
           onClick={() => setActive("families")}
         >
           <svg viewBox="0 0 24 24">
             <path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z" />
           </svg>
           Family coverage
-        </a>
+        </button>
         <div className="side-foot">
           {pitches.length > 0
             ? `${pitches.length} pitch${pitches.length === 1 ? "" : "es"} · latest ${totalLatest ? fmtDate(totalLatest) : "—"}`
@@ -839,7 +854,7 @@ export function Library({ hidden }: { hidden: boolean }) {
       <main className="main">
         <div className="topbar">
           <NavToggle onClick={drawer.openDrawer} />
-          <h2>
+          <h1>
             {activeName}{" "}
             <small>
               {isLeaderboard
@@ -848,7 +863,7 @@ export function Library({ hidden }: { hidden: boolean }) {
                   ? "which loop families the Library has bet on — and which openings it hasn't"
                   : "ideas and explorations, next to the market intel that informs them"}
             </small>
-          </h2>
+          </h1>
         </div>
 
         <div className="content">
@@ -902,7 +917,7 @@ function EmptyState({ collectionKey, name }: { collectionKey: string; name: stri
           <path d="M14 17.5h7M17.5 14v7" />
         </svg>
       </div>
-      <h3>No {name.toLowerCase()} yet</h3>
+      <h2>No {name.toLowerCase()} yet</h2>
       <p>{blurb}</p>
       <div className="soon">New pitches and prototypes are published automatically each week.</div>
     </div>

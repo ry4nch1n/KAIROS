@@ -306,6 +306,10 @@ textarea {
   color: var(--text-3);
   padding: var(--sp-4) var(--sp-3) var(--sp-2);
 }
+/* These are <button> now, not <a> — an anchor without href is unreachable by
+   keyboard, which put the whole section nav out of reach. The reset below keeps
+   the appearance identical while gaining the button's semantics: tab order,
+   Enter/Space activation, and a role a screen reader can announce. */
 .nav-item {
   display: flex;
   align-items: center;
@@ -317,6 +321,14 @@ textarea {
   cursor: pointer;
   transition: all 0.18s;
   font-size: var(--fs-3);
+  /* button reset */
+  width: 100%;
+  border: none;
+  background: none;
+  font-family: inherit;
+  text-align: left;
+  /* 44px touch target without inflating the visual row */
+  min-height: 44px;
 }
 .nav-item:hover {
   background: var(--surface-2);
@@ -384,6 +396,12 @@ textarea {
   font-family: "Fira Code";
   font-size: var(--fs-2);
   transition: 0.16s;
+  /* button reset — see .nav-item */
+  width: 100%;
+  border: none;
+  background: none;
+  text-align: left;
+  min-height: 44px;
 }
 .edition:hover {
   background: var(--surface-2);
@@ -432,11 +450,11 @@ textarea {
   gap: var(--sp-4);
   flex-wrap: wrap;
 }
-.topbar h2 {
+.topbar h1 {
   font-size: var(--fs-6);
   font-weight: 600;
 }
-.topbar h2 small {
+.topbar h1 small {
   color: var(--text-3);
   font-weight: 400;
   font-size: var(--fs-3);
@@ -621,7 +639,7 @@ textarea {
   flex-direction: column;
   box-shadow: var(--shadow);
 }
-.card h3 {
+.card h2 {
   font-size: var(--fs-4);
   font-weight: 600;
   display: flex;
@@ -632,14 +650,14 @@ textarea {
   gap: var(--sp-2);
   color: var(--text);
 }
-.card h3 .sub {
+.card h2 .sub {
   font-weight: 400;
   color: var(--text-3);
   font-size: var(--fs-2);
   margin-left: auto;
   font-family: "Fira Code";
 }
-.card h3 svg {
+.card h2 svg {
   width: 16px;
   height: 16px;
   stroke: var(--primary);
@@ -904,7 +922,7 @@ textarea {
   padding: var(--sp-0) var(--sp-2);
   border-radius: var(--r-sm);
 }
-.ref-card h4 {
+.ref-card h3 {
   font-size: var(--fs-4);
   margin: var(--sp-2) 0 var(--sp-1);
   font-weight: 600;
@@ -969,7 +987,7 @@ textarea {
   fill: none;
   stroke-width: 1.5;
 }
-.empty h3 {
+.empty h2 {
   font-size: var(--fs-6);
   color: var(--text);
   font-weight: 600;
@@ -1016,6 +1034,20 @@ textarea {
   background: var(--surface-2);
   padding: var(--sp-1) var(--sp-3);
   border-radius: var(--r-lg);
+}
+
+/* Visually hidden but announced. For the part of a live region that a sighted
+   reader already gets from the layout around it. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
 }
 
 /* ── Truthful states ───────────────────────────────────────────────────────────
@@ -1316,7 +1348,7 @@ textarea {
   background: rgba(8, 145, 178, 0.12);
   color: var(--cyan);
 }
-.pcard h3 {
+.pcard h2 {
   font-size: var(--fs-4);
   font-weight: 700;
   margin: var(--sp-0) 0;
@@ -1625,7 +1657,7 @@ textarea {
   background: rgba(5, 150, 105, 0.1);
   color: var(--green);
 }
-.bcard h3 {
+.bcard h2 {
   font-size: var(--fs-4);
   font-weight: 600;
   margin: var(--sp-0) 0 var(--sp-0);
@@ -1842,10 +1874,10 @@ textarea {
     padding: var(--sp-3) var(--sp-4);
     gap: var(--sp-3);
   }
-  .topbar h2 {
+  .topbar h1 {
     font-size: var(--fs-5);
   }
-  .topbar h2 small {
+  .topbar h1 small {
     display: block;
     margin-left: 0;
     margin-top: var(--sp-0);
