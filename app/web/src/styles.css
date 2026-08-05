@@ -407,13 +407,17 @@ textarea {
   padding: var(--sp-0) var(--sp-2);
   font-weight: 700;
 }
+/* The sidebar footer is PROSE in three of four panels ("Every field here is an
+   assumption…"), so it sets in Fira Sans. Mono is for figures, labels, ticks and
+   chips — a paragraph in a monospace face is mono-as-costume, and at this size it
+   is the most expensive legibility tax in the app. */
 .side-foot {
   margin-top: auto;
-  font-size: var(--fs-1);
+  font-size: var(--fs-2);
+  line-height: var(--lh-2);
   color: var(--text-3);
   padding: var(--sp-3) var(--sp-3) 0;
   border-top: 1px solid var(--border-soft);
-  font-family: "Fira Code";
 }
 .pulse {
   display: inline-block;
@@ -1287,10 +1291,16 @@ textarea {
 .pulse-loading {
   color: var(--text-4);
 }
-.side-foot {
+/* The catalog dot + count is a STATUS LINE, not prose: it gets the flex row and
+   the mono voice. Scoped, because applying either to .side-foot shattered the
+   prose footers into ~10-character columns — every text node and <b> became its
+   own flex item. */
+.side-status {
   display: flex;
   align-items: center;
   gap: var(--sp-1);
+  font-family: "Fira Code";
+  font-size: var(--fs-1);
 }
 
 .empty-next {
@@ -1782,7 +1792,7 @@ textarea {
 .thumb.noimg {
   display: grid;
   place-items: center;
-  background: linear-gradient(135deg, #e7edf6, #dbe3ef);
+  background: var(--surface-2);
 }
 .thumb.noimg .ph {
   position: static;
@@ -1794,28 +1804,26 @@ textarea {
 .thumb.banner {
   display: grid;
   place-items: center;
+  background: var(--plate);
+  box-shadow: inset 0 0 0 1px var(--plate-edge);
 }
 .thumb.banner .bwordmark {
-  color: #fff;
-  font-weight: 700;
-  font-size: var(--fs-4);
-  letter-spacing: 0.3px;
-  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.25);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  color: #c3cfe2;
+  font-family: "Fira Code";
+  font-weight: 600;
+  font-size: var(--fs-2);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
-.pf-signal {
-  background: linear-gradient(135deg, #4f46e5, #7c3aed);
-}
-.pf-crazy {
-  background: linear-gradient(135deg, #7c3aed, #db2777);
-}
-.pf-poki {
-  background: linear-gradient(135deg, #f5a524, #d97706);
-}
-.pf-itch {
-  background: linear-gradient(135deg, #fa5c5c, #db2777);
-}
-.pf-web {
-  background: linear-gradient(135deg, #2563eb, #0891b2);
+.thumb.banner .bwordmark svg {
+  width: 18px;
+  height: 18px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.8;
 }
 .bbody {
   padding: var(--sp-3) var(--sp-4) var(--sp-4);
@@ -3187,7 +3195,28 @@ a.conv-chip:hover {
   .empty .big-ic {
     background: linear-gradient(160deg, var(--surface-2), var(--bg-1));
   }
+  /* On a dark page the plate is nearly the same value as the row it sits on and
+     reads as a hole; a hairline gives it an edge again. */
+  .plate {
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.16);
+  }
   ::selection {
     background: color-mix(in srgb, var(--primary) 32%, transparent);
   }
+}
+
+/* Drawn marks that replaced emoji — same stroke grammar as components/icons.tsx. */
+.ref-shelf {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-2);
+}
+.ref-shelf svg {
+  width: 15px;
+  height: 15px;
+  stroke: var(--text-3);
+  fill: none;
+  stroke-width: 1.8;
+  flex: none;
 }

@@ -1198,6 +1198,8 @@ function DevTable({ rows }: { rows: SteamDeveloperRow[] }) {
 const REVIEWS_TIP =
   "Review count = launch traction the rating hides. Steam shows no overall score until ~10 reviews, so a “quiet” row (below that) is a launch that landed at near-zero visibility — the modal indie outcome, not an error (#109).";
 function NewReleasesTable({ rows }: { rows: SteamNewRelease[] }) {
+  // The capsule column exists only if the set has capsules to show.
+  const anyArt = rows.some((r) => !!r.capsuleUrl);
   return (
     <table className="dtable">
       <thead>
@@ -1226,7 +1228,7 @@ function NewReleasesTable({ rows }: { rows: SteamNewRelease[] }) {
           <tr key={i}>
             <td className="gname">
               <span className="gamecell">
-                <Capsule url={r.capsuleUrl} title={r.title} />
+                {anyArt && <Capsule url={r.capsuleUrl} title={r.title} />}
                 <span>{r.title}</span>
               </span>
             </td>
@@ -1298,6 +1300,10 @@ function ComparablesTable({
   onProject?: (seed: RevenueSeed) => void;
 }) {
   const showTeam = hasTeamCoverage(rows);
+  // Same discipline as showTeam: the capsule column earns its width only when the
+  // set actually has art. Otherwise every row renders an identical dark pill
+  // holding one letter that already appears beside it — noise, not information.
+  const anyArt = rows.some((r) => !!r.capsuleUrl);
   return (
     <table className="dtable">
       <thead>
@@ -1344,7 +1350,7 @@ function ComparablesTable({
             <tr key={i}>
               <td className="gname">
                 <span className="gamecell">
-                  <Capsule url={c.capsuleUrl} title={c.title} />
+                  {anyArt && <Capsule url={c.capsuleUrl} title={c.title} />}
                   <span>{c.title}</span>
                 </span>
               </td>
@@ -1745,7 +1751,7 @@ function CatalogStatus({ loaded, count }: { loaded: boolean; count?: number }) {
   const label =
     state === "loading" ? "Loading catalog…" : state === "ok" ? `${fmt(count!)} games` : "No data";
   return (
-    <div className="side-foot">
+    <div className="side-foot side-status">
       <span className={"pulse pulse-" + state} aria-hidden="true"></span>
       <span role="status">
         {label}

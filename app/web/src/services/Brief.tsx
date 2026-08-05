@@ -55,14 +55,42 @@ const KIND: Record<string, string> = {
 };
 const isUrl = (s?: string | null) => typeof s === "string" && /^https?:\/\//i.test(s.trim());
 
+// Portal marks, drawn in the same 24px / 1.8-stroke grammar as components/icons.tsx.
+const MARK = {
+  pad: (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <rect x="2" y="6" width="20" height="12" rx="4" />
+      <path d="M7 12h3M8.5 10.5v3M15 11.5h.01M17.5 13.5h.01" />
+    </svg>
+  ),
+  trend: (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M3 17l5-5 4 3 8-8" />
+      <path d="M15 7h5v5" />
+    </svg>
+  ),
+  globe: (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <circle cx="12" cy="12" r="9" />
+      <path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18" />
+    </svg>
+  ),
+  shelf: (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M4 4v16M9 4v16M14 5l5 15" />
+      <path d="M3 20h18" />
+    </svg>
+  ),
+};
+
 function platformOf(it: BriefNotable) {
   const s = `${it.source || ""} ${it.name || ""} ${it.kind || ""}`.toLowerCase();
-  if (/crazygames/.test(s)) return { label: "CrazyGames", cls: "pf-crazy", icon: "🕹️" };
-  if (/\bpoki\b/.test(s)) return { label: "Poki", cls: "pf-poki", icon: "🎮" };
-  if (/itch\.io|itch /.test(s)) return { label: "itch.io", cls: "pf-itch", icon: "🎮" };
+  if (/crazygames/.test(s)) return { label: "CrazyGames", cls: "pf-crazy", icon: MARK.pad };
+  if (/\bpoki\b/.test(s)) return { label: "Poki", cls: "pf-poki", icon: MARK.pad };
+  if (/itch\.io|itch /.test(s)) return { label: "itch.io", cls: "pf-itch", icon: MARK.pad };
   if ((it.kind || "") === "Loop signal")
-    return { label: "Loop signal", cls: "pf-signal", icon: "📈" };
-  return { label: it.kind || "Browser", cls: "pf-web", icon: "🌐" };
+    return { label: "Loop signal", cls: "pf-signal", icon: MARK.trend };
+  return { label: it.kind || "Browser", cls: "pf-web", icon: MARK.globe };
 }
 
 function RichCard({ item, kind }: { item: BriefNotable; kind: "notable" | "browser" }) {
@@ -432,7 +460,12 @@ export function Brief({ hidden, onGoto }: { hidden: boolean; onGoto?: (svc: Serv
                 </>
               )}
 
-              {p.reference_shelf && <div className="foot-note">📚 {p.reference_shelf}</div>}
+              {p.reference_shelf && (
+                <div className="foot-note ref-shelf">
+                  {MARK.shelf}
+                  {p.reference_shelf}
+                </div>
+              )}
               <Handoff
                 links={[
                   {

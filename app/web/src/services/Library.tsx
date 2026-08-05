@@ -186,7 +186,7 @@ function PitchCard({ p, verdict }: { p: Pitch; verdict: PrototypeVerdict | null 
         </div>
       )}
       <div className="pcard-head">
-        {p.rank !== null && <span className="prank">{p.rank}</span>}
+        {p.rank !== null && <span className="prank">{p.rank + 1}</span>}
         <div className="pcard-headmain">
           <div className="btags">
             {p.badge && (
