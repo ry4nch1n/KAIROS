@@ -1307,11 +1307,15 @@ textarea {
   color: var(--text-2);
 }
 
+/* The card already carries role="alert" and a red mark; the accent stripe was
+   decoration on top of a signal that already reads, and the stripe is the single
+   most recognizable tell of a generated UI. A tinted ground does the same job in
+   the design's own vocabulary. */
 .load-failure {
   gap: var(--sp-3);
-  box-shadow:
-    inset 3px 0 0 var(--red),
-    var(--shadow);
+  background: color-mix(in srgb, var(--red) 5%, var(--surface));
+  border-color: color-mix(in srgb, var(--red) 25%, var(--surface));
+  box-shadow: var(--shadow);
 }
 .lf-head {
   display: flex;
@@ -2571,10 +2575,12 @@ a.est-chip:hover {
 /* The accent bar is an inset shadow, not a border: a coloured border on a
    rounded card fights the radius and squares off the corner. Same pattern as
    .nav-item.active, which is the house precedent. */
+/* The read strip already announces itself with an uppercase accent title — the
+   stripe said the same thing twice. */
 .read-strip {
-  box-shadow:
-    inset 3px 0 0 var(--accent-soft),
-    var(--shadow);
+  background: color-mix(in srgb, var(--accent) 6%, var(--surface));
+  border-color: color-mix(in srgb, var(--accent) 22%, var(--surface));
+  box-shadow: var(--shadow);
   padding: var(--sp-4) var(--sp-4);
 }
 .read-title {
@@ -2633,7 +2639,6 @@ a.est-chip:hover {
   gap: var(--sp-3);
   background: color-mix(in srgb, var(--primary) 6%, var(--surface));
   border: 1px solid var(--border);
-  box-shadow: inset 3px 0 0 var(--primary);
   border-radius: var(--radius);
   padding: var(--sp-3) var(--sp-4);
   margin-bottom: var(--sp-4);
@@ -2689,20 +2694,17 @@ a.est-chip:hover {
   flex-direction: column;
   gap: var(--sp-0);
 }
-.band-tile.band-pess {
-  box-shadow:
-    inset 0 3px 0 var(--accent),
-    var(--shadow);
+/* Across three tiles the colour IS the key, so it moves onto the LABEL — what a
+   reader actually looks at to tell the columns apart — rather than sitting as a
+   rule above it. */
+.band-pess .band-label {
+  color: var(--accent);
 }
-.band-tile.band-base {
-  box-shadow:
-    inset 0 3px 0 var(--primary),
-    var(--shadow);
+.band-base .band-label {
+  color: var(--primary);
 }
-.band-tile.band-opt {
-  box-shadow:
-    inset 0 3px 0 var(--green),
-    var(--shadow);
+.band-opt .band-label {
+  color: var(--green);
 }
 .band-label {
   font-family: "Fira Code";
@@ -2782,9 +2784,8 @@ a.est-chip:hover {
 }
 .lb-focus {
   border: 1px solid color-mix(in srgb, var(--primary) 30%, var(--surface));
-  box-shadow: inset 4px 0 0 var(--primary-deep);
   border-radius: var(--radius);
-  background: linear-gradient(180deg, #f4f3fd, var(--surface));
+  background: color-mix(in srgb, var(--primary) 7%, var(--surface));
   padding: var(--sp-4) var(--sp-4);
   margin-bottom: var(--sp-2);
 }
@@ -2841,7 +2842,7 @@ a.est-chip:hover {
   overflow: hidden;
 }
 .lb-shelf.lb-parked {
-  box-shadow: inset 3px 0 0 var(--accent);
+  background: color-mix(in srgb, var(--accent) 5%, var(--surface));
 }
 .lb-parked .lb-band-h .t {
   color: var(--accent);

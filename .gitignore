@@ -14,3 +14,4 @@ app/web/test-results/
 # The critique snapshots under .impeccable/critique/ ARE tracked on purpose.
 **/.impeccable/hook.cache.json
 **/.impeccable/live/
+**/.impeccable/shots/
