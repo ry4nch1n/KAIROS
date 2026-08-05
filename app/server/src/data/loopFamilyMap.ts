@@ -39,10 +39,32 @@ const GENRE_TAG: Record<string, Record<string, LoopFamily>> = {
   simulation: { automation: "automation-under-pressure", sandbox: "contained-systemic" },
 };
 
+// Surface-form variants of the keys above. The tables are keyed canonically ("deckbuilding"),
+// but prose writes the same genre several ways — "deckbuilder", "deck-building", "deck builder".
+// This matters mechanically, not just stylistically: `words()` collapses punctuation to spaces,
+// so a hyphenated "Deck-building" arrives as TWO tokens and can never match a single-token key.
+// Verified against the 2026-08-04 edition, where four deckbuilder signals went unclassified for
+// exactly this reason. Same discipline as the tables above — explicit and auditable, never
+// stemmed or guessed; every value must already be a family the tables can emit.
+const SYNONYMS: [string, LoopFamily][] = [
+  ["deckbuilder", "synergy-builder"],
+  ["deck builder", "synergy-builder"],
+  ["deck building", "synergy-builder"],
+  ["synergy engine", "synergy-builder"],
+  // The contract defines synergy-builder as "SPIN/deck synergy-engine roguelites, the Balatro /
+  // Luck-be-a-Landlord lineage", so the slot-machine half of that lineage belongs here too —
+  // without these, CloverPit ("Balatro-style slot-machine roguelite") and Slots & Daggers went
+  // unplaced. `balatro` earns a key because the market uses it as a genre label, not just a title.
+  ["slot machine", "synergy-builder"],
+  ["balatro", "synergy-builder"],
+  ["tower defence", "wave-defense-prep"], // British spelling of the GENRE key
+  ["bullet heaven", "minimal-input-survivors"],
+];
+
 // Every distinct family this map can emit — the test asserts each is a live contract family.
 const TAG_FAMILIES = Object.values(GENRE_TAG).flatMap((m) => Object.values(m));
 export const MAPPED_FAMILIES: readonly LoopFamily[] = [
-  ...new Set<LoopFamily>([...Object.values(GENRE), ...TAG_FAMILIES]),
+  ...new Set<LoopFamily>([...Object.values(GENRE), ...TAG_FAMILIES, ...SYNONYMS.map(([, f]) => f)]),
 ];
 
 // Free-text vocabulary: every genre key plus every genre × tag TAG key standing alone — a
@@ -55,17 +77,33 @@ const words = (s: string | null | undefined) =>
 const TEXT_KEYS: [string, LoopFamily][] = [
   ...Object.entries(GENRE),
   ...Object.values(GENRE_TAG).flatMap((m) => Object.entries(m)),
+  ...SYNONYMS,
 ].map(([k, f]) => [words(k), f as LoopFamily]);
 
-/** Loop family implied by an item's LABEL fields (its own classification, not prose commentary).
- *  Whole-word match, plural tolerated. Exactly one family → that family; no match, or two
- *  families disagreeing → null: no claim, never force-fit. */
-export function loopFamilyFromLabels(labels: (string | null | undefined)[]): LoopFamily | null {
-  const hay = ` ${labels.map(words).filter(Boolean).join(" ")} `;
+/** One pass over a set of fields. Whole-word match, plural tolerated; exactly one family wins,
+ *  while none or several disagreeing → null. That ambiguity guard is what lets the lower-
+ *  confidence prose tier below stay honest. */
+function matchOne(fields: (string | null | undefined)[]): LoopFamily | null {
+  const hay = ` ${fields.map(words).filter(Boolean).join(" ")} `;
   const hits = new Set<LoopFamily>();
   for (const [k, f] of TEXT_KEYS)
     if (hay.includes(` ${k} `) || hay.includes(` ${k}s `)) hits.add(f);
   return hits.size === 1 ? [...hits][0] : null;
+}
+
+/** Loop family implied by an item's LABEL fields, falling back to PROSE when the labels are
+ *  silent. Labels keep precedence — they are the item's own classification — but they are often
+ *  not a genre claim at all: in the News Brief, `category`/`kind` carry EDITORIAL ROLE
+ *  ("Loop reference", "Browser platform"), so a label-only read placed 0 of 12 signals on
+ *  2026-08-04 while the genre sat in the blurb ("Deck-building roguelite…"). Prose is therefore
+ *  consulted second rather than ignored. It is genuinely lower-confidence — a blurb can name a
+ *  genre it is not (a chart summary listing "puzzle, word, card" titles) — so it only runs when
+ *  labels yield nothing, and the single-family guard still applies. */
+export function loopFamilyFromLabels(
+  labels: (string | null | undefined)[],
+  prose?: (string | null | undefined)[],
+): LoopFamily | null {
+  return matchOne(labels) ?? (prose?.length ? matchOne(prose) : null);
 }
 
 /** Loop family for a genre (and optional tag), or null when nothing is curated. A genre × tag
