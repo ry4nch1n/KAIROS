@@ -20,12 +20,56 @@ describe("#12a brief loop-family tagging + rollup", () => {
   it("tags from an item's labels and never force-fits", () => {
     expect(familyOfItem(ed.new_notable![0])).toBe("minimal-input-survivors");
     expect(familyOfItem(ed.new_notable![1])).toBe("automation-under-pressure");
-    expect(familyOfItem(ed.new_notable![3])).toBeNull(); // unmapped labels → no claim
-    // Prose is commentary, not evidence; and two families disagreeing is still null.
+    expect(familyOfItem(ed.new_notable![3])).toBeNull(); // unmapped labels, no prose → no claim
+    expect(familyOfItem({ name: "Idle automation hybrid" })).toBeNull(); // two families → null
+  });
+
+  // Labels alone placed 0 of 12 signals on the real 2026-08-04 edition: this payload's
+  // `category`/`kind` carry an EDITORIAL ROLE ("Loop reference", "Browser platform"), never a
+  // genre, so the genre only ever appears in the blurb. Prose is now a second, lower-confidence
+  // tier — consulted when labels are silent, never over them.
+  it("falls back to prose when labels carry no genre", () => {
+    // The real Talespinner/Blackout Jack/TEKO shape: role label + genre in the blurb.
     expect(
-      familyOfItem({ name: "Smash Karts", kind: "Browser game", blurb: "idle-ish" }),
+      familyOfItem({
+        name: "Talespinner",
+        category: "Loop reference",
+        blurb: "Deck-building roguelite where you play the storyteller",
+      }),
+    ).toBe("synergy-builder");
+    // Labels win when they DO carry a genre, even if the blurb suggests another.
+    expect(
+      familyOfItem({ name: "Conveyor Town", category: "Automation", blurb: "a cozy idle clicker" }),
+    ).toBe("automation-under-pressure");
+  });
+
+  // `words()` collapses punctuation to spaces, so a hyphenated "Deck-building" arrives as two
+  // tokens and could never match the single-token key "deckbuilding". Every surface form the
+  // real editions used must resolve to the same family.
+  it("matches the surface forms real prose actually uses", () => {
+    const f = (blurb: string) => familyOfItem({ name: "x", category: "Loop reference", blurb });
+    expect(f("roguelike deckbuilder shipped a 2.0 update")).toBe("synergy-builder");
+    expect(f("Deck-building roguelite")).toBe("synergy-builder");
+    expect(f("a 500-card synergy engine, combo-driven runs")).toBe("synergy-builder");
+    // The contract defines this family as the "spin/deck … Balatro" lineage — so slots count.
+    expect(f("Balatro-style slot-machine roguelite crossed 1M sales")).toBe("synergy-builder");
+    expect(f("Browser-native tower defence: survive escalating waves")).toBe("wave-defense-prep");
+  });
+
+  // A portal-level note is not a title, so its prose must not be mined for a genre — otherwise
+  // "the top-ten list is puzzle, word, card titles" reads as a puzzle game.
+  it("never infers a family from a platform note's prose", () => {
+    expect(
+      familyOfItem({
+        name: 'CrazyGames "Hot" chart composition',
+        kind: "Browser platform",
+        blurb: "The current top-ten popular list is puzzle, word, card and .io titles",
+      }),
     ).toBeNull();
-    expect(familyOfItem({ name: "Idle automation hybrid" })).toBeNull();
+    // …but a game merely labelled with a genre-bearing role still classifies.
+    expect(
+      familyOfItem({ name: "CloverPit", kind: "Loop signal", blurb: "slot-machine roguelite" }),
+    ).toBe("synergy-builder");
   });
 
   it("parses additive counts only", () => {

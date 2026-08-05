@@ -23,9 +23,25 @@ export function parseFigure(figure?: string | null): { value: number; unit: stri
   return Number.isFinite(n) ? { value: n * (MULT[m[2] ?? ""] ?? 1), unit } : null;
 }
 
-// Family of one item, from its LABEL fields only (blurb/relevance prose is commentary).
+// A signal about the PORTAL rather than a title has no loop family, so its prose must not be
+// mined for one — "the top-ten list is puzzle, word, card titles" is a chart summary, not a
+// puzzle game. The brief marks these with a platform-level label, which is the item's own
+// classification and so outranks its prose. Deliberately narrow: surveying every local edition,
+// `Browser platform` is the ONLY label that reliably means "not a title" — `Market signal`,
+// `Design lesson` and `AI + launch playbook` all name real games (Slay the Spire 2, Two Point
+// Museum). A game occasionally filed under the platform label just stays unclassified: safe.
+const isPlatformNote = (it: BriefNotable): boolean =>
+  /platform/i.test(`${it.category ?? ""} ${it.kind ?? ""}`);
+
+// Family of one item: LABEL fields first, then the blurb. Labels keep precedence, but in this
+// payload they are an editorial role ("Loop reference", "Browser platform"), not a genre — so a
+// label-only read placed 0 of 12 signals on 2026-08-04 while every genre sat in the blurb.
+// `relevance` stays out: it argues why an item matters to the plan, which is commentary.
 export const familyOfItem = (it: BriefNotable): string | null =>
-  loopFamilyFromLabels([it.name, it.category, it.kind]);
+  loopFamilyFromLabels(
+    [it.name, it.category, it.kind],
+    isPlatformNote(it) ? undefined : [it.blurb],
+  );
 
 const dir = (n: number, p: number) => (n > p ? "up" : n < p ? "down" : "flat");
 type Acc = { n: number; titles: string[]; units: Map<string, number[]> };
