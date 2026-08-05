@@ -64,9 +64,6 @@ export function Rail({ active, onSelect }: { active: Service; onSelect: (s: Serv
           </svg>
         </button>
       </div>
-      <div className="rail-foot">
-        <div className="avatar">R</div>
-      </div>
     </nav>
   );
 }

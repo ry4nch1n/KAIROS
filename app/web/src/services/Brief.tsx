@@ -22,7 +22,7 @@ function md(s: string): string {
 }
 const srcLink = {
   fontFamily: "'Fira Code'",
-  fontSize: 11,
+  fontSize: "var(--fs-1)",
   color: "var(--primary)",
   marginTop: 8,
   display: "inline-block",
@@ -119,7 +119,7 @@ function RichCard({ item, kind }: { item: BriefNotable; kind: "notable" | "brows
 function DemandTracker({ t }: { t: NonNullable<BriefEdition["tracker"]> }) {
   return (
     <>
-      <p style={{ fontSize: 13, color: "var(--text-2)", margin: "0 0 4px" }}>
+      <p style={{ fontSize: "var(--fs-3)", color: "var(--text-2)", margin: "0 0 4px" }}>
         {t.total} signals below, grouped by loop family — {t.tagged} placed by the curated map,{" "}
         {t.total - t.tagged} unclassified (no family claimed)
         {t.comparedTo ? `; arrows vs the ${fmt(t.comparedTo)} edition` : ""}.
@@ -266,7 +266,7 @@ export function Brief({ hidden }: { hidden: boolean }) {
                   </div>
                   <div className="card" style={{ gap: 10 }}>
                     {p.top_signals.map((s, i) => (
-                      <div key={i} style={{ display: "flex", gap: 10, fontSize: 13.5 }}>
+                      <div key={i} style={{ display: "flex", gap: 10, fontSize: "var(--fs-3)" }}>
                         <span style={{ color: "var(--primary)" }}>▸</span>
                         <span dangerouslySetInnerHTML={{ __html: md(s) }} />
                       </div>
@@ -316,7 +316,9 @@ export function Brief({ hidden }: { hidden: boolean }) {
                     <span className="n">4</span>Tooling
                   </div>
                   {p.tooling.headline && (
-                    <p style={{ fontSize: 13, color: "var(--text-2)", margin: "0 0 4px" }}>
+                    <p
+                      style={{ fontSize: "var(--fs-3)", color: "var(--text-2)", margin: "0 0 4px" }}
+                    >
                       {p.tooling.headline}
                     </p>
                   )}
@@ -370,9 +372,11 @@ export function Brief({ hidden }: { hidden: boolean }) {
                           </span>
                         )}
                         <div>
-                          <div style={{ fontSize: 13.5, fontWeight: 600 }}>{m.headline}</div>
+                          <div style={{ fontSize: "var(--fs-3)", fontWeight: 600 }}>
+                            {m.headline}
+                          </div>
                           {m.detail && (
-                            <div style={{ fontSize: 12.5, color: "var(--text-3)" }}>
+                            <div style={{ fontSize: "var(--fs-2)", color: "var(--text-3)" }}>
                               {m.detail}
                               {m.source && (
                                 <>
@@ -404,7 +408,10 @@ export function Brief({ hidden }: { hidden: boolean }) {
                   </div>
                   <div className="card" style={{ gap: 10 }}>
                     {p.founder_take.map((para, i) => (
-                      <p key={i} style={{ fontSize: 13.5, lineHeight: 1.55, color: "var(--text)" }}>
+                      <p
+                        key={i}
+                        style={{ fontSize: "var(--fs-3)", lineHeight: 1.55, color: "var(--text)" }}
+                      >
                         {para}
                       </p>
                     ))}

@@ -722,7 +722,7 @@ function FamilyCoverageView({ pitches }: { pitches: Pitch[] }) {
                   <span style={{ color: "var(--text-3, #9ca3af)" }}>—</span>
                 )}
               </td>
-              <td style={{ color: "var(--ink-3, #6b7280)" }}>{r.titles.join(" · ") || "—"}</td>
+              <td style={{ color: "var(--text-3)" }}>{r.titles.join(" · ") || "—"}</td>
             </tr>
           ))}
         </tbody>

@@ -276,9 +276,7 @@ function OverviewView({ ov }: { ov: Overview }) {
         </div>
         <div className="kpi">
           <div className="label">{I.trends}Rising genre</div>
-          <div className="val num" style={{ fontSize: 24, paddingTop: 4 }}>
-            {ov.kpi.risingGenre}
-          </div>
+          <div className="val val-word num">{ov.kpi.risingGenre}</div>
           <span className="delta up num">▲ +{ov.kpi.risingVotesPerDay} votes/day</span>
         </div>
         <div className="kpi accent">
@@ -357,7 +355,7 @@ function OverviewView({ ov }: { ov: Overview }) {
               <tr key={r.label}>
                 <td className="gname">{r.label}</td>
                 <td style={{ maxWidth: 360 }}>{r.definition}</td>
-                <td style={{ color: "var(--ink-3, #6b7280)" }}>{r.examples.join(" · ") || "—"}</td>
+                <td style={{ color: "var(--text-3)" }}>{r.examples.join(" · ") || "—"}</td>
               </tr>
             ))}
           </tbody>
@@ -640,9 +638,7 @@ function TagsView({ ov }: { ov: Overview }) {
                       <i style={{ width: (s.count / setMax) * 100 + "%" }} />
                     </span>
                   </td>
-                  <td style={{ color: "var(--ink-3, #6b7280)" }}>
-                    {s.examples.join(" · ") || "—"}
-                  </td>
+                  <td style={{ color: "var(--text-3)" }}>{s.examples.join(" · ") || "—"}</td>
                   <td className="r">{fmt(s.count)}</td>
                 </tr>
               ))}
@@ -712,8 +708,8 @@ function TrendsView({ ov }: { ov: Overview }) {
             className="empty-inline"
             style={{
               padding: "28px 8px",
-              color: "var(--ink-3, #6b7280)",
-              fontSize: 13,
+              color: "var(--text-3)",
+              fontSize: "var(--fs-3)",
               lineHeight: 1.6,
             }}
           >
@@ -1298,9 +1294,9 @@ function ComparablesTable({
                     AI
                   </span>
                 ) : c.aiDisclosure === false ? (
-                  <span style={{ color: "var(--ink-3, #6b7280)" }}>—</span>
+                  <span style={{ color: "var(--text-3)" }}>—</span>
                 ) : (
-                  <span style={{ color: "var(--ink-3, #6b7280)" }} title="Not checked">
+                  <span style={{ color: "var(--text-3)" }} title="Not checked">
                     ?
                   </span>
                 )}
@@ -1309,7 +1305,7 @@ function ComparablesTable({
               <td className="r">{c.reviewVelocity == null ? "—" : fmt(c.reviewVelocity)}</td>
               <td className="r">{fmtOwners(c.owners)}</td>
               <td className="r">{money(c.priceCents)}</td>
-              <td style={{ color: "var(--ink-3, #6b7280)" }}>{c.developer ?? "—"}</td>
+              <td style={{ color: "var(--text-3)" }}>{c.developer ?? "—"}</td>
               {onProject && (
                 <td className="r">
                   <button
@@ -1550,7 +1546,7 @@ function GenreEconCard({ data }: { data: SteamOverview }) {
                 borderRadius: 9,
                 padding: "8px 11px",
                 fontFamily: "Fira Code",
-                fontSize: 13,
+                fontSize: "var(--fs-3)",
                 color: "var(--text)",
                 background: "var(--surface-2)",
               }}

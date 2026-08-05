@@ -15,7 +15,8 @@
       "!**/build",
       "!**/playwright-report",
       "!**/test-results",
-      "!server/test/fixtures"
+      "!server/test/fixtures",
+      "!**/.impeccable"
     ]
   },
   "formatter": {

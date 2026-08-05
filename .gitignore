@@ -9,3 +9,8 @@ app/web/test-results/
 .env
 .env.*
 *.log
+
+# Impeccable design-tooling runtime state (hook cache, live-server handle).
+# The critique snapshots under .impeccable/critique/ ARE tracked on purpose.
+**/.impeccable/hook.cache.json
+**/.impeccable/live/
