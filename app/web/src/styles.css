@@ -46,6 +46,9 @@
   /* Media plate. Any Steam capsule, screenshot or generated key art mounts on
      this — the one dark surface in a light app. Promoted from a Library one-off
      to a system law so Radar can carry game texture without a second theme. */
+  /* Text printed on a solid semantic fill (badges, counters, pills). Flips with
+     the mode because the fills themselves invert. */
+  --on-fill: #ffffff;
   --plate: #0b0f16;
   --plate-edge: rgba(255, 255, 255, 0.08);
 
@@ -121,6 +124,7 @@
     --text-3: #93a2b9;
     --text-4: #64748b;
 
+    --on-fill: #101828;
     --primary: #7aa2f7;
     --primary-deep: #a9c4ff;
     --accent: #e0a458;
@@ -398,7 +402,7 @@ textarea {
   font-family: "Fira Code";
   font-size: var(--fs-1);
   background: var(--accent-soft);
-  color: #fff;
+  color: var(--on-fill);
   border-radius: var(--r-lg);
   padding: var(--sp-0) var(--sp-2);
   font-weight: 700;
@@ -922,7 +926,7 @@ textarea {
   height: 20px;
   border-radius: var(--r-sm);
   background: var(--primary);
-  color: #fff;
+  color: var(--on-fill);
   display: grid;
   place-items: center;
   font-family: "Fira Code";
@@ -1339,7 +1343,7 @@ textarea {
 }
 .btn-retry {
   background: var(--primary);
-  color: #fff;
+  color: var(--on-fill);
   border: none;
   border-radius: var(--r-md);
   padding: var(--sp-2) var(--sp-4);
@@ -1550,7 +1554,7 @@ textarea {
 }
 .ptag.badge-recommended {
   background: var(--primary);
-  color: #fff;
+  color: var(--on-fill);
 }
 .ptag.badge-retention-safe {
   background: color-mix(in srgb, var(--primary) 12%, var(--surface));
@@ -3178,10 +3182,6 @@ a.conv-chip:hover {
   }
   /* White-on-amber badges fail AA in both modes; on dark the fill is light enough
      that the text must go dark instead. */
-  .nav-item .badge,
-  .badge {
-    color: #14213a;
-  }
   /* Empty-state art plate: a light gradient on a dark page is a hole. */
   .empty .big-ic {
     background: linear-gradient(160deg, var(--surface-2), var(--bg-1));
