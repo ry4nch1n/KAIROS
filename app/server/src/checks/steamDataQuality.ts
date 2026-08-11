@@ -89,3 +89,34 @@ export function assessSteamDataQuality(
     },
   };
 }
+
+// ── Follower capture (#54) ───────────────────────────────────────────────────
+// Its own assertion rather than another SteamQualityCounts field: it is measured at a different
+// moment, by the crawl step (crawler/run.ts), the only place that knows that run's cohort.
+// WHY IT IS A HARD FAILURE: fetchFollowers swallows every error, check:steam never inspected the
+// column and /api/steam exposes no followers field — so 451 consecutive HTTP 429s across four
+// daily crawls all reported "✔ loaded". Velocity needs >=2 snapshots carrying a value, so that
+// silence meant the clock never started. Loud beats green-and-wrong.
+
+/** Below this many eligible titles a 0% rate is not evidence of anything. */
+export const MIN_FOLLOWER_COHORT = 10;
+
+/**
+ * Failure message when follower capture is degenerate, else null. Only asserts once the cohort
+ * is big enough that 0% means "the source is rejecting us" rather than "few coming-soon titles
+ * this run" — a CRAWL_LIMIT-capped run must never trip it. One captured value passes: the
+ * velocity clock only needs the series alive.
+ */
+export function assessFollowerCapture(
+  eligible: number,
+  captured: number,
+  minCohort = MIN_FOLLOWER_COHORT,
+): string | null {
+  if (eligible < minCohort) return null;
+  if (captured > 0) return null;
+  return (
+    `follower capture 0% over ${eligible} eligible coming-soon titles (#54): the follower ` +
+    `source is being rejected upstream, so follower velocity cannot start. ` +
+    `Snapshots were still loaded — re-run \`npm run check:steam\` for the rest of the data-quality gate.`
+  );
+}
