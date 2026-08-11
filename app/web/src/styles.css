@@ -940,6 +940,32 @@ textarea {
   font-family: "Fira Code";
   font-size: var(--fs-1);
 }
+/* Sub-head inside a numbered section (#156, Browser). Quieter than .section-title — no numeral,
+   no fill — so the groups read as divisions of one section rather than three new sections. Wraps
+   at 375px (the note drops to its own line) instead of pushing the page sideways. */
+.sub-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--sp-2);
+  min-width: 0;
+  font-size: var(--fs-1);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  font-weight: 700;
+  color: var(--text-2);
+  border-top: 1px solid var(--border-soft);
+  padding-top: var(--sp-3);
+  margin: 0 0 -6px;
+}
+.sub-title .sub-note {
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 400;
+  color: var(--text-3);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
 .ref-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
