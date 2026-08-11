@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import type { Platform } from "shared";
 import { DEFAULT_PLATFORM, PLATFORM_GROUPS } from "./Radar.tsx";
+import { DEFAULT_MODE } from "./Revenue.tsx";
 
 // Radar's platform selector is a product decision, not an implementation detail:
 // Steam is the primary market the Radar is read for, so it opens on Steam and is
@@ -36,5 +37,18 @@ describe("Radar platform selector", () => {
     const expected: Platform[] = ["steam", "all", "crazygames", "poki"];
     expect([...ids].sort()).toEqual([...expected].sort());
     for (const id of expected) expect(labelOf(id)).toBeTruthy();
+  });
+});
+
+// The dashboard has ONE default platform. Radar and Revenue each keep their own default
+// (Revenue's Browser|Steam switch isn't the same axis as Radar's four-platform selector),
+// so nothing at runtime forces them to agree — this does (#151). Flip one, flip both.
+describe("Revenue platform default", () => {
+  it("opens on Steam", () => {
+    expect(DEFAULT_MODE).toBe("steam");
+  });
+
+  it("agrees with the platform Radar opens on", () => {
+    expect(DEFAULT_MODE).toBe(DEFAULT_PLATFORM === "steam" ? "steam" : "browser");
   });
 });

@@ -80,7 +80,13 @@ const fmtOwners = (n: number | null) =>
         ? Math.round(n / 1e3) + "K"
         : String(n);
 
-type Mode = "browser" | "steam";
+export type Mode = "browser" | "steam";
+
+// The platform Revenue opens on. Steam, to match Radar's DEFAULT_PLATFORM (#135) — the
+// dashboard has one default platform, so switching tabs never lands you on the other one.
+// Exported for the same reason Radar exports its default: the two are pinned together by
+// `platformSelector.test.ts` rather than being two literals that can silently drift.
+export const DEFAULT_MODE: Mode = "steam";
 
 /** Browser | Steam platform switch — mirrors GameRadar's top-of-panel platform selector
  *  (labeled group + coloured dots) so the two dashboards read the same, instead of a bare
@@ -114,7 +120,7 @@ export function Revenue({
   onClearSeed?: () => void;
   onGoto?: (svc: Service) => void;
 }) {
-  const [mode, setMode] = useState<Mode>("browser");
+  const [mode, setMode] = useState<Mode>(DEFAULT_MODE);
   // A comparable projected from Radar is a Steam anchor — front the Steam panel for it.
   useEffect(() => {
     if (seed) setMode("steam");
