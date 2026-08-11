@@ -11,8 +11,20 @@ import {
 } from "../components/MobileNav.tsx";
 import type { LibraryItem, Pitch, PrototypeVerdict } from "shared";
 import { api } from "../lib/api.ts";
+import { artImage, artSrcSet } from "../lib/artImage.ts";
 import { routeLean } from "../lib/routeLean.ts";
 import { loopFamilyCoverage } from "../lib/loopFamily.ts";
+
+// Card art is stored at full generation resolution (1–11 MB PNG) and served through
+// its own Netlify Image CDN at slot size instead — see lib/artImage.ts. These are the
+// rendered box in CSS pixels; artSrcSet adds the 2× variant for high-DPI screens, and
+// the matching width/height attributes reserve the box so `loading="lazy"` can tell
+// which cards are actually off-screen. The grid column is minmax(300px, 1fr), so 460
+// covers a phone card and most desktop columns; the shot sits inside the card padding.
+const CAPSULE_W = 460;
+const CAPSULE_H = 259; // 16:9 — matches the aspect-ratio .pcapsule img already enforces
+const SHOT_W = 560;
+const SHOT_H = 315; // 16:9
 
 // Collections map to a source: "pitches" reads the pitches table; the rest read
 // library_items by kind. New collections just add a row here.
@@ -179,9 +191,13 @@ function PitchCard({ p, verdict }: { p: Pitch; verdict: PrototypeVerdict | null 
       {p.headerUrl && (
         <div className="pcapsule">
           <img
-            src={p.headerUrl}
+            src={artImage(p.headerUrl, CAPSULE_W, CAPSULE_H)}
+            srcSet={artSrcSet(p.headerUrl, CAPSULE_W, CAPSULE_H)}
+            width={CAPSULE_W}
+            height={CAPSULE_H}
             alt={(p.codeName || p.title) + " — header capsule"}
             loading="lazy"
+            decoding="async"
           />
         </div>
       )}
@@ -269,7 +285,15 @@ function PitchCard({ p, verdict }: { p: Pitch; verdict: PrototypeVerdict | null 
       </div>
       {open && p.shotUrl && (
         <figure className="pshot">
-          <img src={p.shotUrl} alt={(p.codeName || p.title) + " — in-game"} loading="lazy" />
+          <img
+            src={artImage(p.shotUrl, SHOT_W, SHOT_H)}
+            srcSet={artSrcSet(p.shotUrl, SHOT_W, SHOT_H)}
+            width={SHOT_W}
+            height={SHOT_H}
+            alt={(p.codeName || p.title) + " — in-game"}
+            loading="lazy"
+            decoding="async"
+          />
           <figcaption>In-game concept</figcaption>
         </figure>
       )}
@@ -355,7 +379,15 @@ function LibCard({ it }: { it: LibraryItem }) {
     <article className="bcard pcard">
       {it.imageUrl && (
         <div className="pcapsule">
-          <img src={it.imageUrl} alt={it.title + " — preview"} loading="lazy" />
+          <img
+            src={artImage(it.imageUrl, CAPSULE_W, CAPSULE_H)}
+            srcSet={artSrcSet(it.imageUrl, CAPSULE_W, CAPSULE_H)}
+            width={CAPSULE_W}
+            height={CAPSULE_H}
+            alt={it.title + " — preview"}
+            loading="lazy"
+            decoding="async"
+          />
         </div>
       )}
       <div className="btags">
