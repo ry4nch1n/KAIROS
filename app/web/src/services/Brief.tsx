@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { Handoff } from "../components/Handoff.tsx";
 import type { Service } from "../components/Rail.tsx";
 import {
@@ -13,6 +13,7 @@ import type { BriefEditionMeta, BriefEdition, BriefNotable, BriefSteering } from
 import { api } from "../lib/api.ts";
 import { isSameWeek } from "../lib/week.ts";
 import { rowSummary } from "../lib/briefTracker.ts";
+import { cardImage, groupBrowserCards } from "../lib/briefCards.ts";
 
 function fmt(date: string): string {
   return new Date(date + "T00:00:00Z").toLocaleDateString("en-US", {
@@ -36,8 +37,6 @@ const srcLink = {
   marginTop: 8,
   display: "inline-block",
 } as const;
-const steamCover = (appid?: string | null) =>
-  appid ? `https://cdn.cloudflare.steamstatic.com/steam/apps/${appid}/header.jpg` : null;
 const CAT: Record<string, string> = {
   "Contained-systemic": "teal",
   "Cozy/management": "green",
@@ -53,7 +52,6 @@ const KIND: Record<string, string> = {
   "Browser platform": "gray",
   "Loop signal": "teal",
 };
-const isUrl = (s?: string | null) => typeof s === "string" && /^https?:\/\//i.test(s.trim());
 
 // Portal marks, drawn in the same 24px / 1.8-stroke grammar as components/icons.tsx.
 const MARK = {
@@ -95,12 +93,7 @@ function platformOf(it: BriefNotable) {
 
 function RichCard({ item, kind }: { item: BriefNotable; kind: "notable" | "browser" }) {
   const [err, setErr] = useState(false);
-  const img =
-    kind === "notable"
-      ? item.cover_url || steamCover(item.steam_appid)
-      : isUrl(item.image_url)
-        ? item.image_url!
-        : null;
+  const img = cardImage(item, kind);
   const badge = kind === "notable" ? item.category : item.kind;
   const badgeCls =
     kind === "notable" ? CAT[item.category || ""] || "gray" : KIND[item.kind || ""] || "cyan";
@@ -343,11 +336,22 @@ export function Brief({ hidden, onGoto }: { hidden: boolean; onGoto?: (svc: Serv
                   <div className="section-title">
                     <span className="n">3</span>Browser
                   </div>
-                  <div className="bcard-grid">
-                    {p.browser.map((n, i) => (
-                      <RichCard key={i} item={n} kind="browser" />
-                    ))}
-                  </div>
+                  {/* Grouped by what each card is evidence FOR (#156): portal-market supply and
+                      browser→store funnel proof point at different routes, and read as one
+                      accumulating "browser" signal when listed flat. */}
+                  {groupBrowserCards(p.browser).map((g) => (
+                    <Fragment key={g.id}>
+                      <div className="sub-title">
+                        {g.label}
+                        <span className="sub-note">{g.note}</span>
+                      </div>
+                      <div className="bcard-grid">
+                        {g.items.map((n, i) => (
+                          <RichCard key={i} item={n} kind="browser" />
+                        ))}
+                      </div>
+                    </Fragment>
+                  ))}
                 </>
               )}
 
