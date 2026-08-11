@@ -255,20 +255,102 @@ export function parseFollowerCount(xml: string | null | undefined): number | nul
 }
 
 /**
+ * Which titles get the follower fetch. COMING-SOON ONLY (#54, narrowed 2026-08-11).
+ *
+ * The first cut fetched every coming-soon OR non-AAA title — ~113 requests/run — and from CI
+ * every single one came back 429 (451 attempts across 4 crawls, 0 successes). Followers only
+ * ever earned their keep on the unreleased cohort anyway: a coming-soon title has NO reviews
+ * and NO owners, so followers are the only demand number it has, whereas on released titles
+ * followers largely track the review count (see the cohort note above). Narrowing to
+ * coming-soon cuts the request count by ~4-5x, which is the right side of the crawl budget and
+ * of politeness toward a host that is currently saying no.
+ */
+export function wantsFollowers(g: RawGame): boolean {
+  return g.comingSoon === true;
+}
+
+// Follower-fetch resilience (#54). Two mechanisms, both scoped to ONE crawl run:
+//  · bounded backoff — steamcommunity.com throttles far harder than the store endpoints, so a
+//    single failure gets a couple of retries on a much longer floor than the 1.5s per-game sleep.
+//  · a circuit breaker — if the host is rejecting us wholesale (the observed 429-on-every-request
+//    mode), retrying the whole cohort burns Actions wall-time for nothing and keeps hammering an
+//    upstream that has already said no. After N consecutive failures we stop attempting for the
+//    rest of the run and log ONE summary line instead of N stack traces.
+export const FOLLOWER_MAX_CONSECUTIVE_FAILURES = 5;
+export const FOLLOWER_RETRY_DELAYS_MS = [4000, 12000]; // floors well above the per-game 1.5s
+
+interface FollowerRunState {
+  attempts: number; // fetches we actually started (post-breaker)
+  captured: number; // fetches that yielded a real number
+  consecutiveFailures: number;
+  tripped: boolean; // breaker open → skip for the remainder of the run
+}
+const followerRun: FollowerRunState = {
+  attempts: 0,
+  captured: 0,
+  consecutiveFailures: 0,
+  tripped: false,
+};
+
+/** Reset the per-run follower breaker. Called at the top of every {@link steamCrawl}. */
+export function resetFollowerRun(): void {
+  followerRun.attempts = 0;
+  followerRun.captured = 0;
+  followerRun.consecutiveFailures = 0;
+  followerRun.tripped = false;
+}
+
+/** Read-only snapshot of the current run's follower stats (for logging + tests). */
+export function followerRunState(): Readonly<FollowerRunState> {
+  return { ...followerRun };
+}
+
+/**
  * Fetch one app's follower count. Returns null on ANY failure — "unknown", never a
  * crawl-breaking throw. Different host from the store endpoints, so it adds zero pressure to
- * the throttle-prone store.steampowered.com; ~1.1 KB and a sub-second median, which the
- * existing 1.5s per-game sleep largely absorbs.
+ * the throttle-prone store.steampowered.com; ~1.1 KB and a sub-second median.
+ *
+ * `fetchXml` / `delaysMs` are injection seams for tests only — production callers pass neither.
+ * A 200 that simply has no community group (parse → null) is NOT a failure: the breaker exists
+ * to detect the host refusing us, not apps without a group.
  */
-export async function fetchFollowers(appid: number): Promise<number | null> {
-  try {
-    return parseFollowerCount(
-      await politeFetch(`${COMMUNITY}/games/${appid}/memberslistxml/?xml=1&p=99999`, 6000),
-    );
-  } catch (e) {
-    console.warn(`  followers ${appid} failed:`, String(e));
-    return null;
+export async function fetchFollowers(
+  appid: number,
+  fetchXml: (url: string) => Promise<string> = (u) => politeFetch(u, 6000),
+  delaysMs: number[] = FOLLOWER_RETRY_DELAYS_MS,
+): Promise<number | null> {
+  if (followerRun.tripped) return null;
+  followerRun.attempts++;
+  const url = `${COMMUNITY}/games/${appid}/memberslistxml/?xml=1&p=99999`;
+  for (let attempt = 0; ; attempt++) {
+    try {
+      const n = parseFollowerCount(await fetchXml(url));
+      followerRun.consecutiveFailures = 0;
+      if (n !== null) followerRun.captured++;
+      return n;
+    } catch (e) {
+      const backoff = delaysMs[attempt];
+      if (backoff === undefined) {
+        console.warn(`  followers ${appid} failed:`, String(e));
+        break;
+      }
+      await sleep(backoff);
+    }
   }
+  followerRun.consecutiveFailures++;
+  if (
+    followerRun.consecutiveFailures >= FOLLOWER_MAX_CONSECUTIVE_FAILURES &&
+    !followerRun.tripped
+  ) {
+    followerRun.tripped = true;
+    console.warn(
+      `  [steam] follower capture DISABLED for the rest of this run — ` +
+        `${followerRun.consecutiveFailures} consecutive failures after retries (#54: ` +
+        `steamcommunity.com is rejecting this runner). ${followerRun.attempts} attempted, ` +
+        `${followerRun.captured} captured.`,
+    );
+  }
+  return null;
 }
 
 /**
@@ -538,12 +620,9 @@ export async function fetchSteamGame(appid: number): Promise<RawGame | null> {
     g.aiDisclosure = d ? d.aiDisclosure : null;
     g.aiDisclosureNote = d?.aiDisclosureNote ?? null;
   }
-  // 5th fetch (#54), gated on tier ONLY — deliberately NOT riding the AI-disclosure cohort.
-  // Different host, ~1/170th the bytes, and followers matter for the whole non-AAA set, not
-  // just the <=120-day slice; AAA stays excluded because it's out of every indie benchmark.
-  // Unreleased titles are ALWAYS fetched regardless of tier: followers are the only demand
-  // signal they have, so skipping them would defeat the coming-soon stream's whole purpose.
-  if (g.comingSoon || g.scaleTier !== "aaa") g.followers = await fetchFollowers(appid);
+  // 5th fetch (#54), gated to the COMING-SOON cohort — see wantsFollowers. Outside it we leave
+  // `followers` undefined, which the loader writes as NULL = "not measured" (never a measured 0).
+  if (wantsFollowers(g)) g.followers = await fetchFollowers(appid);
   return g;
 }
 
@@ -555,6 +634,7 @@ export async function steamCrawl(
   log: (m: string) => void = () => {},
 ): Promise<{ games: RawGame[]; baseUrl: string }> {
   log(`[steam] seeding appids (limit ${limit})…\n`);
+  resetFollowerRun(); // breaker is per-run, not per-process
   const ids = await seedAppIds(limit);
   log(`[steam] ${ids.length} appids\n`);
   const games: RawGame[] = [];
@@ -571,6 +651,10 @@ export async function steamCrawl(
     }
     await sleep(1500); // polite ~1 req-group / 1.5s
   }
-  log(`\n[steam] parsed ${games.length}/${ids.length}\n`);
+  const f = followerRunState();
+  log(
+    `\n[steam] parsed ${games.length}/${ids.length}` +
+      ` · followers ${f.captured}/${f.attempts}${f.tripped ? " (breaker OPEN — see #54)" : ""}\n`,
+  );
   return { games, baseUrl: STORE };
 }

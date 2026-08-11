@@ -5,6 +5,7 @@ import { steamCrawl } from "./steam.ts";
 import { crawlRotation, loadGames } from "./load.ts";
 import { politeFetch, sleep, type SourceAdapter, type RawGame } from "./base.ts";
 import { appDb, applySchema, usingNeon } from "../db/db.ts";
+import { assessFollowerCapture } from "../checks/steamDataQuality.ts";
 
 const ADAPTERS: Record<string, SourceAdapter> = { crazygames, poki };
 
@@ -56,4 +57,27 @@ const res = await loadGames(db, sourceName, baseUrl, raw, date);
 console.log(
   `✔ [${sourceName}] loaded crawlId=${res.crawlId} inserted=${res.inserted}/${raw.length}`,
 );
+
+// Follower-capture gate (#54). Asserted against the DB (the snapshots this run just wrote), not
+// against the crawl log, and only for Steam — the coming-soon cohort is the follower cohort.
+// Deliberately AFTER the load: append-only snapshots are still persisted, we only change the
+// exit code, so a red run never costs a day of data.
+if (sourceName === "steam") {
+  const fc = (
+    await db.query(
+      `SELECT count(*) FILTER (WHERE coming_soon IS TRUE)::int AS eligible,
+              count(*) FILTER (WHERE coming_soon IS TRUE AND followers IS NOT NULL)::int AS captured
+       FROM game_snapshots WHERE crawl_id = $1`,
+      [res.crawlId],
+    )
+  )[0];
+  const eligible = Number(fc?.eligible ?? 0);
+  const captured = Number(fc?.captured ?? 0);
+  console.log(`[steam] followers captured ${captured}/${eligible} eligible (coming-soon cohort)`);
+  const failure = assessFollowerCapture(eligible, captured);
+  if (failure) {
+    console.error(`\n❌ STEAM FOLLOWER-CAPTURE GATE FAILED:\n   - ${failure}`);
+    process.exit(1);
+  }
+}
 process.exit(0);

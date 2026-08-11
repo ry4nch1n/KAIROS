@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { assessSteamDataQuality, DEFAULT_STEAM_QUALITY } from "../src/checks/steamDataQuality.ts";
+import {
+  assessSteamDataQuality,
+  DEFAULT_STEAM_QUALITY,
+  assessFollowerCapture,
+  MIN_FOLLOWER_COHORT,
+} from "../src/checks/steamDataQuality.ts";
 
 // A healthy latest-crawl cohort: enough games, dates parsed, a real indie cohort, and the
 // all-live comparables set populated.
@@ -54,5 +59,28 @@ describe("DQ assessSteamDataQuality — recency/accuracy invariants", () => {
     });
     expect(r.ok).toBe(true);
     expect(DEFAULT_STEAM_QUALITY.minComparables).toBe(3);
+  });
+});
+
+// #54: a wholesale-failing follower fetch used to pass green — fetchFollowers swallows every
+// error, so 451 consecutive HTTP 429s across four crawls looked identical to "no data".
+describe("DQ assessFollowerCapture — the 0%-capture gate (#54)", () => {
+  it("fails loudly on 0% capture over a real eligible cohort", () => {
+    const msg = assessFollowerCapture(28, 0);
+    expect(msg).toMatch(/follower capture 0% over 28 eligible/);
+    expect(msg).toMatch(/#54/);
+  });
+
+  it("passes when even one eligible title carried a value (the velocity clock started)", () => {
+    expect(assessFollowerCapture(28, 1)).toBeNull();
+  });
+
+  it("stays silent on a small / CRAWL_LIMIT-capped cohort — no false alarm", () => {
+    expect(assessFollowerCapture(MIN_FOLLOWER_COHORT - 1, 0)).toBeNull();
+    expect(assessFollowerCapture(0, 0)).toBeNull(); // a run with no coming-soon titles at all
+  });
+
+  it("fires exactly at the cohort floor", () => {
+    expect(assessFollowerCapture(MIN_FOLLOWER_COHORT, 0)).not.toBeNull();
   });
 });

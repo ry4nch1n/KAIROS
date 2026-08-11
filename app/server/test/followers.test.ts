@@ -1,10 +1,17 @@
 // Steam follower capture (#54). Followers = the app community group's member count — the
 // closest public proxy to wishlists. Pure-parser coverage over two REAL captured responses,
 // plus a round-trip proving the snapshot column stores it (and stores absence as NULL).
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { parseFollowerCount } from "../src/crawler/steam.ts";
+import {
+  parseFollowerCount,
+  wantsFollowers,
+  fetchFollowers,
+  resetFollowerRun,
+  followerRunState,
+  FOLLOWER_MAX_CONSECUTIVE_FAILURES,
+} from "../src/crawler/steam.ts";
 import { loadGames } from "../src/crawler/load.ts";
 import { freshMemoryDb } from "../src/db/db.ts";
 import type { RawGame } from "../src/crawler/base.ts";
@@ -60,6 +67,94 @@ describe("parseFollowerCount", () => {
     const frag =
       "<memberList><groupDetails><memberCount>0</memberCount></groupDetails></memberList>";
     expect(parseFollowerCount(frag)).toBe(0);
+  });
+});
+
+// #54 (reopened): the follower cohort was every coming-soon OR non-AAA title (~113 fetches/run)
+// and CI got 429 on all of them. It is now coming-soon only — the cohort where followers are the
+// ONLY demand signal.
+describe("wantsFollowers — the coming-soon cohort", () => {
+  it("fetches for coming-soon titles at any tier", () => {
+    expect(wantsFollowers(game({ comingSoon: true, scaleTier: "hobby" }))).toBe(true);
+    expect(wantsFollowers(game({ comingSoon: true, scaleTier: "aaa" }))).toBe(true);
+  });
+
+  it("skips released titles — followers there largely restate the review count", () => {
+    expect(wantsFollowers(game({ comingSoon: false, scaleTier: "small_indie" }))).toBe(false);
+    expect(wantsFollowers(game({ scaleTier: "est_indie" }))).toBe(false); // comingSoon undefined
+    expect(wantsFollowers(game({ comingSoon: null, scaleTier: "hobby" }))).toBe(false);
+  });
+});
+
+const XML = "<memberList><groupDetails><memberCount>4242</memberCount></groupDetails></memberList>";
+const NO_DELAYS: number[] = []; // no retries: keeps the breaker tests instant
+
+describe("fetchFollowers — backoff + per-run circuit breaker", () => {
+  beforeEach(() => resetFollowerRun());
+
+  it("never throws; a rejecting host yields null", async () => {
+    const boom = async () => {
+      throw new Error("fetch … -> 429");
+    };
+    await expect(fetchFollowers(1, boom, NO_DELAYS)).resolves.toBeNull();
+  });
+
+  it("retries on failure, then succeeds — one attempt, one capture", async () => {
+    let calls = 0;
+    const flaky = async () => {
+      if (++calls === 1) throw new Error("fetch … -> 429");
+      return XML;
+    };
+    expect(await fetchFollowers(1, flaky, [0])).toBe(4242);
+    expect(calls).toBe(2);
+    expect(followerRunState()).toMatchObject({ attempts: 1, captured: 1, consecutiveFailures: 0 });
+  });
+
+  it("opens the breaker after N consecutive failures and stops fetching for the run", async () => {
+    let calls = 0;
+    const boom = async () => {
+      calls++;
+      throw new Error("fetch … -> 429");
+    };
+    for (let i = 0; i < FOLLOWER_MAX_CONSECUTIVE_FAILURES; i++)
+      expect(await fetchFollowers(i, boom, NO_DELAYS)).toBeNull();
+    expect(followerRunState().tripped).toBe(true);
+
+    const callsWhenTripped = calls;
+    for (let i = 0; i < 50; i++) expect(await fetchFollowers(i, boom, NO_DELAYS)).toBeNull();
+    expect(calls).toBe(callsWhenTripped); // not one more request to a host that said no
+    expect(followerRunState().attempts).toBe(FOLLOWER_MAX_CONSECUTIVE_FAILURES);
+  });
+
+  it("a 200 with no community group is 'unknown', not a breaker failure", async () => {
+    const noGroup = async () => "<html>Steam Community :: Error</html>";
+    for (let i = 0; i < FOLLOWER_MAX_CONSECUTIVE_FAILURES * 3; i++)
+      expect(await fetchFollowers(i, noGroup, NO_DELAYS)).toBeNull();
+    expect(followerRunState()).toMatchObject({ tripped: false, captured: 0 });
+  });
+
+  it("an intervening success resets the consecutive-failure run", async () => {
+    const boom = async () => {
+      throw new Error("fetch … -> 429");
+    };
+    const ok = async () => XML;
+    for (let i = 0; i < FOLLOWER_MAX_CONSECUTIVE_FAILURES - 1; i++)
+      await fetchFollowers(i, boom, NO_DELAYS);
+    await fetchFollowers(99, ok, NO_DELAYS);
+    for (let i = 0; i < FOLLOWER_MAX_CONSECUTIVE_FAILURES - 1; i++)
+      await fetchFollowers(i, boom, NO_DELAYS);
+    expect(followerRunState().tripped).toBe(false);
+  });
+
+  it("resetFollowerRun closes the breaker for the next crawl", async () => {
+    const boom = async () => {
+      throw new Error("fetch … -> 429");
+    };
+    for (let i = 0; i < FOLLOWER_MAX_CONSECUTIVE_FAILURES; i++)
+      await fetchFollowers(i, boom, NO_DELAYS);
+    expect(followerRunState().tripped).toBe(true);
+    resetFollowerRun();
+    expect(await fetchFollowers(1, async () => XML, NO_DELAYS)).toBe(4242);
   });
 });
 
