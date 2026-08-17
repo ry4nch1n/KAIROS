@@ -159,23 +159,85 @@ export interface Steerable {
 }
 
 // Too generic to carry an interest; a flag with no significant word matches by family only.
-const STOP = new Set(["game", "games", "the", "and", "for", "with", "new", "more", "very"]);
-const wordsOf = (s: string) =>
+// `like`/`lite` are here as SUFFIXES, not interests: standing alone they are the tail of a
+// compound genre ("Survivor-Like", "Rogue-lite"), so left in the vocabulary they would let any
+// "-like" flag claim any "-like" market. The compound forms below still see them.
+const STOP = new Set([
+  "game",
+  "games",
+  "the",
+  "and",
+  "for",
+  "with",
+  "new",
+  "more",
+  "very",
+  "like",
+  "likes",
+  "lite",
+  "lites",
+]);
+const rawWords = (s: string) =>
   String(s ?? "")
     .toLowerCase()
     .split(/[^a-z0-9]+/)
-    .filter((w) => w.length >= 4 && !STOP.has(w));
+    .filter(Boolean);
+const wordsOf = (s: string) => rawWords(s).filter((w) => w.length >= 4 && !STOP.has(w));
+
+// ── Collapsed vocabulary (#157) ──
+// The word matcher below splits on every non-alphanumeric, so a standing flag reaches the market
+// as separate tokens — "Luck/deck builder synergy games" → [luck, deck, builder, synergy]. Steam
+// writes those same genres CLOSED, as one token with no internal separator ("Deckbuilding",
+// "Roguelike"), which no whole-word test can ever reach. That is why all ten live flags read
+// `unmatched` on 2026-08-14 while `Deckbuilding` (4 games), `Card Battler` (3) and `Roguelike`
+// (16, supply rising) sat in the data. So each side also offers its CLOSED forms: adjacent words
+// joined, then stemmed to one comparison form. Matching stays whole-token EQUALITY, never a
+// substring — a collapsed `includes` would force-fit "card" into "Cardboard", and the no-claim
+// contract in steerRow is exactly what must survive this widening.
+
+/** Drop a suffix only when a real word is left. Without the floor, "sing" stems to "s" and
+ *  collides with everything; both sides run the same function, so only cross-word collisions
+ *  matter and short stems are where they live. */
+const strip = (t: string, re: RegExp) => {
+  const s = t.replace(re, "");
+  return s.length >= 4 ? s : t;
+};
+/** Plural off, then the builder/building suffix pair — how "deck builder" reaches "Deckbuilding". */
+const stem = (t: string) => strip(strip(t, /s$/), /(?:ing|er)$/);
+/** Surface-form folds for the spellings the two sides genuinely differ on. Explicit and auditable,
+ *  in the discipline of data/loopFamilyMap.ts's SYNONYMS — never a guessed stem. Safe because both
+ *  sides fold identically, and the bare tails ("like", "lite") are stopped out above, so the fold
+ *  only ever meets a compound. */
+const VARIANTS: [RegExp, string][] = [
+  // Steam's tag is "Roguelike"; the flag says "Rogue-lites". `?tag=Roguelite` returns zero rows,
+  // so without this fold the largest matching market (16 games) stays unmatched forever.
+  [/lite$/, "like"],
+];
+const fold = (t: string) => VARIANTS.reduce((s, [re, to]) => s.replace(re, to), t);
+/** Comparison forms of ONE label: each significant word, plus every adjacent pair joined — the
+ *  closed compound the other side may be writing as a single word. Called per field, because the
+ *  genre and the tag are separate claims: "Action" × "Deckbuilding" must never yield "actiondeck". */
+const collapsedForms = (s: string): string[] => {
+  const raw = rawWords(s);
+  const out = wordsOf(s).map((w) => fold(stem(w)));
+  for (let i = 0; i + 1 < raw.length; i++) out.push(fold(stem(raw[i] + raw[i + 1])));
+  return out.filter((f) => f.length >= 4);
+};
 
 export const activeFlags = (flags: string[]) =>
   (flags ?? []).filter((f) => typeof f === "string" && f.trim());
 
 /** Flags (verbatim) that match this market. Whole-word, plural-tolerant on the market's own
- *  genre/tag labels, plus the loop-family route when BOTH sides resolve to the same family. */
+ *  genre/tag labels, the same match on both sides' CLOSED compound forms, plus the loop-family
+ *  route when BOTH sides resolve to the same family. The closed route is not a nicety: the family
+ *  route only fires when the market resolves to exactly one family, so `Puzzle × Deckbuilding`
+ *  matched nothing (the genre-level family outvoted the tag) even though the vocabulary was there. */
 export function matchSteering(flags: string[], m: { genre: string; tag: string }): string[] {
   const hay = ` ${`${m.genre} ${m.tag}`
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, " ")
     .trim()} `;
+  const marketForms = new Set([...collapsedForms(m.genre), ...collapsedForms(m.tag)]);
   const family = loopFamilyFor(m.genre, m.tag) ?? loopFamilyFromLabels([m.genre, m.tag]);
   const out: string[] = [];
   for (const flag of flags) {
@@ -186,8 +248,9 @@ export function matchSteering(flags: string[], m: { genre: string; tag: string }
         hay.includes(` ${w}s `) ||
         hay.includes(` ${w.replace(/s$/, "")} `),
     );
+    const byForm = collapsedForms(flag).some((f) => marketForms.has(f));
     const byFamily = family != null && loopFamilyFromLabels([flag]) === family;
-    if ((byWord || byFamily) && !out.includes(flag)) out.push(flag);
+    if ((byWord || byForm || byFamily) && !out.includes(flag)) out.push(flag);
   }
   return out;
 }
