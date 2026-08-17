@@ -35,10 +35,40 @@ describe("matchSteering", () => {
     ]);
   });
 
+  // #157: the live standing flags write compound genres OPEN ("deck builder", "Rogue-lites");
+  // Steam writes them CLOSED ("Deckbuilding", "Roguelike"), so a whole-word test could never
+  // reach them and all ten flags read `unmatched` against real data. These three pairs were
+  // measured live on 2026-08-14 and are the contract for the collapsed-form vocabulary.
+  it("reaches a market that writes the same genre as one closed word", () => {
+    // The genre deliberately maps to a DIFFERENT loop family (Puzzle → route-planning) so the
+    // family route cannot rescue this — it is the vocabulary being tested, nothing else.
+    expect(
+      matchSteering(["Luck/deck builder synergy games"], { genre: "Puzzle", tag: "Deckbuilding" }),
+    ).toEqual(["Luck/deck builder synergy games"]);
+    expect(
+      matchSteering(["Fairy tale setting"], { genre: "Adventure", tag: "Fairy Tale" }),
+    ).toEqual(["Fairy tale setting"]);
+  });
+
+  it("folds the lite↔like variant Steam and the flags spell differently", () => {
+    // `?tag=Roguelite` has zero rows while `Roguelike` has 16 — separator-stripping alone would
+    // leave the single highest-supply matching market unmatched.
+    for (const tag of ["Roguelike", "Roguelite", "Rogue-lite"])
+      expect(matchSteering(["Rogue-lites"], { genre: "Action", tag })).toEqual(["Rogue-lites"]);
+  });
+
   it("makes no claim on a flag that fits nothing", () => {
     const m = { genre: "Puzzle", tag: "Cozy" };
     expect(matchSteering(["submarine documentaries"], m)).toEqual([]);
     expect(matchSteering(["", "   "], m)).toEqual([]);
+    // The widening is whole-token, never a substring: "card" is not "Cardboard", and a bare
+    // "deck" is not a deckbuilder. A collapsed `includes` would force-fit both.
+    expect(
+      matchSteering(["playing card mechanics"], { genre: "Casual", tag: "Cardboard" }),
+    ).toEqual([]);
+    expect(matchSteering(["deck"], { genre: "Puzzle", tag: "Deckbuilding" })).toEqual([]);
+    // A genre tail is a suffix, not an interest — "-lite" must not claim every "-like" market.
+    expect(matchSteering(["Rogue-lites"], { genre: "Action", tag: "Survivor-Like" })).toEqual([]);
   });
 });
 
