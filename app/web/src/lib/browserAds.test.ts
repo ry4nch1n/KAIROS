@@ -1,5 +1,12 @@
 import { describe, it, expect } from "vitest";
-import { projectedDau, browserAdProjection, BROWSER_AD_DEFAULTS, HINTS } from "./browserAds.ts";
+import {
+  projectedDau,
+  browserAdProjection,
+  adCeilingPerSession,
+  BROWSER_AD_DEFAULTS,
+  MIDGAME_CAP_MINUTES,
+  HINTS,
+} from "./browserAds.ts";
 
 describe("browserAdProjection", () => {
   it("turns retention into DAU by geometric decay, and stays finite at a maxed slider", () => {
@@ -45,5 +52,83 @@ describe("browserAdProjection", () => {
     expect(p.netRpmUsd).toBeLessThanOrEqual(3.4);
     // and no assumption ships without the published basis the UI shows beneath it
     for (const k of Object.keys(BROWSER_AD_DEFAULTS)) expect(HINTS[k], k).toBeTruthy();
+  });
+
+  // The defaults are the file's calibration against the one realised figure on record, so the
+  // cap must NOT bite there — otherwise adding it would have silently re-anchored the model.
+  it("leaves the default assumptions unclamped, so the published anchor still holds", () => {
+    const p = browserAdProjection(BROWSER_AD_DEFAULTS);
+    expect(p.midgamePerPlay).toBe(3); // 9 minutes / one ad per 3
+    expect(p.adCeiling).toBeCloseTo(1.8, 10); // × 0.60 conversion
+    expect(p.capBinds).toBe(false);
+    expect(p.effectiveAdsPerSession).toBeCloseTo(BROWSER_AD_DEFAULTS.adsPerSession, 10);
+  });
+});
+
+// The portal's SDK paces midgame video at one per three minutes, so impressions per session are
+// bounded by how long a session lasts rather than chosen. The dial stays editable — other portals
+// publish other terms — but it is clamped to the ceiling, and the clamp is reported.
+describe("the 3-minute midgame pacing cap", () => {
+  const base = {
+    ...BROWSER_AD_DEFAULTS,
+    newPlayersPerDay: 1000,
+    d1Retention: 0,
+    sessionsPerUser: 1,
+  };
+
+  it("counts whole midgame ads only, at one per three minutes", () => {
+    expect(MIDGAME_CAP_MINUTES).toBe(3);
+    const at = (sessionMinutes: number) =>
+      adCeilingPerSession({ sessionMinutes, oneMinuteConversion: 1, rewardedPerSession: 0 })
+        .midgamePerPlay;
+    expect([at(0), at(2.9), at(3), at(4), at(5.9), at(9)]).toEqual([0, 0, 1, 1, 1, 3]);
+  });
+
+  it("clamps a short session to what it can actually serve, and says the clamp bound", () => {
+    // a ~4-minute loop toy: one midgame ad, not the 1.6 the dial asks for
+    const p = browserAdProjection({ ...base, sessionMinutes: 4, oneMinuteConversion: 1 });
+    expect(p.midgamePerPlay).toBe(1);
+    expect(p.adCeiling).toBeCloseTo(1, 10);
+    expect(p.capBinds).toBe(true);
+    expect(p.effectiveAdsPerSession).toBeCloseTo(1, 10);
+    // and the revenue moves by exactly that ratio, nothing else
+    const uncapped = browserAdProjection({ ...base, sessionMinutes: 99, oneMinuteConversion: 1 });
+    expect(p.netUsdPerDay).toBeCloseTo(uncapped.netUsdPerDay / 1.6, 10);
+  });
+
+  it("leaves a dial that sits under the ceiling exactly where the user set it", () => {
+    const p = browserAdProjection({
+      ...base,
+      sessionMinutes: 30,
+      oneMinuteConversion: 1,
+      adsPerSession: 2,
+    });
+    expect(p.adCeiling).toBeCloseTo(10, 10);
+    expect(p.capBinds).toBe(false);
+    expect(p.effectiveAdsPerSession).toBe(2);
+    expect(p.netUsdPerDay).toBeCloseTo((1000 * 2 * 2.5 * 0.5) / 1000, 10);
+  });
+
+  it("serves no midgame ad under three minutes — only player-initiated rewarded video", () => {
+    const short = { ...base, sessionMinutes: 2, oneMinuteConversion: 1 };
+    const p = browserAdProjection(short);
+    expect([p.midgamePerPlay, p.adCeiling, p.netUsdPerDay]).toEqual([0, 0, 0]);
+    // rewarded sits outside the pacing rule, so it still counts on a sub-3-minute session
+    const withRewarded = browserAdProjection({ ...short, rewardedPerSession: 0.5 });
+    expect(withRewarded.midgamePerPlay).toBe(0);
+    expect(withRewarded.adCeiling).toBeCloseTo(0.5, 10);
+    expect(withRewarded.effectiveAdsPerSession).toBeCloseTo(0.5, 10);
+    expect(withRewarded.netUsdPerDay).toBeGreaterThan(0);
+  });
+
+  it("gates impressions on the players who reach one minute of play", () => {
+    // conversion is the portal's own definition of a converted play, and a player who never
+    // reaches the first minute never reaches the first ad either
+    const p = browserAdProjection({ ...base, sessionMinutes: 6, oneMinuteConversion: 0.5 });
+    expect(p.midgamePerPlay).toBe(2);
+    expect(p.adCeiling).toBeCloseTo(1, 10); // 2 × 0.50
+    const full = browserAdProjection({ ...base, sessionMinutes: 6, oneMinuteConversion: 1 });
+    expect(full.adCeiling).toBeCloseTo(2, 10);
+    expect(p.netUsdPerDay).toBeCloseTo(full.netUsdPerDay / 1.6, 10); // 1.0 vs the 1.6 dial
   });
 });

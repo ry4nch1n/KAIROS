@@ -93,8 +93,21 @@ test.describe("mobile — layout fits at 375px", () => {
   }
 
   // Revenue has a Browser|Steam mode toggle; the loop above only covers the default
-  // (Browser) panel. The Steam panel reuses the same .kpi-row/.rev-panel classes, so
-  // it must clear the same bar — including Unity's extra two-input Pro-seats row.
+  // one (Steam, pinned to Radar's default platform). The other panel reuses the same
+  // .kpi-row/.rev-panel classes, so it must clear the same bar — including Unity's
+  // extra two-input Pro-seats row on Steam, and the Browser panel's long assumption
+  // list, which grew a session-length and conversion row with the ad-ceiling model.
+  test("revenue Browser sub-tab fits (its full assumption list)", async ({ page }) => {
+    await page.goto("/");
+    await page.getByRole("button", { name: "Revenue Model", exact: true }).click();
+    await expect(page.locator(panel("revenue"))).toBeVisible();
+
+    await page.locator(`${panel("revenue")} .seg-btn`, { hasText: "Browser" }).click();
+    await expect(page.locator(panel("revenue")).getByText(/Ad ceiling/)).toBeVisible();
+    await settle(page);
+    await assertFits(page, panel("revenue"), "revenue/browser");
+  });
+
   test("revenue Steam sub-tab fits (incl. Unity's extra input row)", async ({ page }) => {
     await page.goto("/");
     await page.getByRole("button", { name: "Revenue Model", exact: true }).click();

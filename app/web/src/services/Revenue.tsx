@@ -33,6 +33,7 @@ import {
 import {
   BROWSER_AD_DEFAULTS,
   HINTS,
+  MIDGAME_CAP_MINUTES,
   browserAdProjection,
   type BrowserAdInputs,
 } from "../lib/browserAds.ts";
@@ -64,7 +65,10 @@ const AD_FIELDS: [keyof BrowserAdInputs, string, number][] = [
   ["newPlayersPerDay", "New players/day from the portal", 100],
   ["d1Retention", "Next-day retention", 0.01],
   ["sessionsPerUser", "Sessions per player per day", 0.1],
+  ["sessionMinutes", "Minutes played per session", 0.5],
+  ["oneMinuteConversion", "Players reaching one minute", 0.05],
   ["adsPerSession", "Ads shown per session", 0.1],
+  ["rewardedPerSession", "Rewarded ads per session", 0.1],
   ["ecpmUsd", "Gross eCPM (USD per 1,000 ads)", 0.25],
   ["revShare", "Developer rev-share", 0.05],
   ["eurPerUsd", "EUR per USD", 0.01],
@@ -329,6 +333,26 @@ function BrowserPanel({
             ))}
             {/* targetBandUsd falls back to the default rate if this is cleared to 0 */}
             <Num label="FX rate (SGD per USD)" v={rate} step={0.01} set={setRate} />
+            {/* Session length, not the dial, decides how many midgame ads fit: the portal SDK
+                paces them one per three minutes. The dial stays editable — portal terms differ —
+                but it is clamped to that ceiling, and the clamp is stated when it binds. */}
+            <p className="rev-note">
+              <b>Ad ceiling.</b> A {+ads.sessionMinutes.toFixed(1)}-minute session allows{" "}
+              {p.midgamePerPlay} midgame {p.midgamePerPlay === 1 ? "ad" : "ads"} at one per{" "}
+              {MIDGAME_CAP_MINUTES} minutes; counting only the {pct(ads.oneMinuteConversion)} of
+              players who reach a minute of play, that is <b>{p.adCeiling.toFixed(2)}</b> monetised
+              impressions per session.{" "}
+              {p.capBinds ? (
+                <b>
+                  Clamped: {ads.adsPerSession.toFixed(2)} ads/session is more than this session
+                  length can serve, so {p.effectiveAdsPerSession.toFixed(2)} is used.
+                </b>
+              ) : (
+                <>
+                  Your {ads.adsPerSession.toFixed(2)} ads/session sits under it and applies as set.
+                </>
+              )}
+            </p>
             <p className="rev-note">
               {Math.round(p.dau).toLocaleString("en-US")} DAU ×{" "}
               {Math.round(p.sessionsPerDay).toLocaleString("en-US")} sessions/day →{" "}
