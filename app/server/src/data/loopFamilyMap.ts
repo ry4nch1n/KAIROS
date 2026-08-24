@@ -59,6 +59,11 @@ const SYNONYMS: [string, LoopFamily][] = [
   ["balatro", "synergy-builder"],
   ["tower defence", "wave-defense-prep"], // British spelling of the GENRE key
   ["bullet heaven", "minimal-input-survivors"],
+  // The market names this loop by its subject, not by the word "automation": "factory builder",
+  // "production chain" (#163). `production` is the looser of the two — a blurb can use it about
+  // development ("back in production") rather than the loop; revisit if it ever fires on one.
+  ["factory", "automation-under-pressure"],
+  ["production", "automation-under-pressure"],
 ];
 
 // Every distinct family this map can emit — the test asserts each is a live contract family.

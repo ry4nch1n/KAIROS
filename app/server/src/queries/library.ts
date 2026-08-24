@@ -11,7 +11,7 @@ import type {
 } from "shared";
 import { CONTRACT, assertPitchInput, validateBriefPayload } from "../../../shared/src/contract.ts";
 import { num } from "./shared.ts";
-import { buildDemandTracker } from "./briefFamily.ts";
+import { buildDemandTracker, fetchSteamTaxonomy } from "./briefFamily.ts";
 
 // ── Brief ──
 export async function getBriefEditions(db: Querier): Promise<BriefEditionMeta[]> {
@@ -114,8 +114,12 @@ export async function getBriefEdition(
   const prev = pr
     ? { payload: parsePayload(pr.payload), editionDate: isoDate(pr.edition_date) }
     : null;
+  // Third classification tier (#163): the crawled genre/tags behind each item's steam_appid, so a
+  // patch note that never names its genre still places. ONE query for both editions — the fold
+  // and its direction comparison must classify by the same rules.
+  const taxonomy = await fetchSteamTaxonomy(db, [payload, prev?.payload]);
   return {
-    tracker: buildDemandTracker(payload, prev),
+    tracker: buildDemandTracker(payload, prev, taxonomy),
     id: num(r.id),
     editionDate:
       typeof r.edition_date === "string"
