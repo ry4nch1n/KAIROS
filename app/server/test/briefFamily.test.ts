@@ -1,6 +1,13 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import type { BriefPayload } from "shared";
-import { buildDemandTracker, familyOfItem, parseFigure } from "../src/queries/briefFamily.ts";
+import {
+  buildDemandTracker,
+  familyOfItem,
+  fetchSteamTaxonomy,
+  parseFigure,
+  type SteamTaxonomy,
+} from "../src/queries/briefFamily.ts";
+import { freshMemoryDb } from "../src/db/db.ts";
 
 // Fixture: the shape the real indie-brief tool publishes (labels + free-text figures), trimmed to
 // the fields the rollup reads — mirrors the seeded editions in server/src/db/seed.ts.
@@ -110,4 +117,118 @@ describe("#12a brief loop-family tagging + rollup", () => {
     for (const p of [undefined, null, {}, { new_notable: [], browser: [] }])
       expect(buildDemandTracker(p as BriefPayload | null).rows).toEqual([]);
   });
+});
+
+// ── #163 appid tier ───────────────────────────────────────────────────────────────────────────
+// Prose has a ceiling: a patch note never names its genre. The third tier looks the item's
+// steam_appid up in the crawl KAIROS already owns (genre + tags) instead of matching more string.
+const tax = (m: Record<string, SteamTaxonomy>) => new Map(Object.entries(m));
+const STS2 = {
+  name: "Slay the Spire 2",
+  category: "Market signal",
+  blurb: "Beta patch v0.110.0 reverts the earlier Silent/Poison rework and polishes card VFX.",
+  steam_appid: "2868840",
+};
+const CRAWLED = tax({
+  // The real shape: the broad genre "Strategy" curates to nothing; the Deckbuilding TAG places it.
+  "2868840": { genre: "Strategy", tags: ["Deckbuilding", "Roguelike"] }, // → synergy-builder
+  "3971650": { genre: "Simulation", tags: ["Automation"] }, // curated genre × tag pair
+  "111": { genre: "Simulation", tags: ["Automation", "Sandbox"] }, // two families → ambiguous
+  "222": { genre: "Adventure", tags: ["Story Rich"] }, // neither genre nor tags are curated
+  "333": { genre: "Idle", tags: [] }, // genre-level entry, no tags at all
+});
+const at = (steam_appid: string | null) => familyOfItem({ name: "x", steam_appid }, CRAWLED);
+
+describe("#163 steam_appid ⇒ crawled genre/tag tier", () => {
+  it("places a patch note whose prose never names a genre", () => {
+    expect(familyOfItem(STS2)).toBeNull(); // the bug: no vocabulary can ever place this
+    expect(familyOfItem(STS2, CRAWLED)).toBe("synergy-builder");
+    expect(at("3971650")).toBe("automation-under-pressure"); // curated genre × tag
+    expect(at("333")).toBe("idle-tycoon"); // genre-level entry, no tags needed
+  });
+
+  it("claims nothing when the appid cannot answer", () => {
+    expect(at("4040404")).toBeNull(); // carried an appid, not in the crawl set
+    expect(at("222")).toBeNull(); // crawled, but neither the genre nor the tags are curated
+    expect(at("111")).toBeNull(); // tags imply two families → ambiguous, never a coin-flip
+    expect(at(null)).toBeNull();
+    expect(at("not-an-appid")).toBeNull();
+    expect(familyOfItem(STS2, undefined)).toBeNull(); // no taxonomy loaded → previous behaviour
+  });
+
+  it("runs last: labels and prose keep precedence", () => {
+    const over = (o: Record<string, string>) =>
+      familyOfItem({ name: "x", steam_appid: "2868840", ...o }, CRAWLED);
+    expect(over({ category: "Automation" })).toBe("automation-under-pressure"); // label wins
+    expect(over({ blurb: "a cozy farming sim" })).toBe("cozy-craft"); // prose wins
+  });
+
+  // "factory builder" — how the market names this loop when it never says "automation".
+  it("reads the factory/production vocabulary", () => {
+    const f = (blurb: string) => familyOfItem({ name: "x", category: "Loop reference", blurb });
+    expect(f("Lazy Witch's Factory is a cute factory builder")).toBe("automation-under-pressure");
+    expect(f("balance production lines under pressure")).toBe("automation-under-pressure");
+    expect(f("a production chain puzzle game")).toBeNull(); // two families disagree → still null
+  });
+
+  it("folds the tier into the rollup and logs its coverage", () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    const withAppids: BriefPayload = {
+      new_notable: [STS2, { name: "Lazy Witch's Factory", steam_appid: "3971650" }],
+      browser: [{ name: "Click Bait", blurb: "rhythm roguelite", steam_appid: "4040404" }],
+    };
+    // Without the taxonomy only the new `factory` key lands (on the item's NAME); Slay the Spire 2
+    // stays unplaced — no vocabulary can read a genre the prose never states.
+    expect([buildDemandTracker(withAppids).total, buildDemandTracker(withAppids).tagged]).toEqual([
+      3, 1,
+    ]);
+    const t = buildDemandTracker(withAppids, null, CRAWLED);
+    expect([t.total, t.tagged]).toEqual([3, 2]);
+    // "rhythm roguelite" has no family in the contract — unclassified is the correct answer.
+    expect(t.rows.map((r) => r.family)).toEqual([
+      "automation-under-pressure",
+      "synergy-builder",
+      null,
+    ]);
+    // Coverage is measured every run, not assumed: the tier only pays where the crawl reaches.
+    expect(log.mock.calls[0][0]).toContain("3/3 items carried a steam_appid, 2 matched");
+    log.mockRestore();
+  });
+
+  it("fetches every appid in one query, canonicalised like the market read", async () => {
+    const db = await freshMemoryDb();
+    await db.query("INSERT INTO sources(name, base_url) VALUES ('steam','x'),('poki','y')");
+    await db.query(
+      `INSERT INTO games(source_id, source_game_id, url, title)
+       SELECT s.id, v.sid, 'u', v.sid FROM sources s
+       JOIN (VALUES ('steam','2868840'),('steam','3971650'),('poki','555')) AS v(src, sid)
+         ON v.src = s.name`,
+    );
+    await db.query(
+      "INSERT INTO game_snapshots(game_id, genre) SELECT id, 'Action Games' FROM games WHERE source_game_id = '2868840'",
+    );
+    await db.query("INSERT INTO tags(name) VALUES ('Deckbuilding'),('roguelike')");
+    await db.query(
+      "INSERT INTO game_tags(game_id, tag_id) SELECT g.id, t.id FROM games g, tags t WHERE g.source_game_id = '2868840'",
+    );
+    const spy = vi.spyOn(db, "query");
+    const m = await fetchSteamTaxonomy(db, [
+      { new_notable: [STS2, { name: "y", steam_appid: "nope" }] },
+      {
+        browser: [
+          { name: "Witch", steam_appid: "3971650" },
+          { name: "p", steam_appid: "555" },
+        ],
+      },
+    ]);
+    expect(spy).toHaveBeenCalledTimes(1); // batched — never one round trip per item
+    // "Action Games" and "Action" are the same market here as in getLoopFamilyMarket.
+    expect(m.get("2868840")).toEqual({ genre: "Action", tags: ["Deckbuilding", "roguelike"] });
+    expect(m.get("3971650")).toEqual({ genre: null, tags: [] }); // crawled, nothing to say yet
+    expect(familyOfItem(STS2, m)).toBe("synergy-builder");
+    expect(m.size).toBe(2); // a browser game's id is not a Steam appid; "nope" never reached SQL
+    // An edition with no appids at all costs no round trip (the call count is unchanged).
+    expect((await fetchSteamTaxonomy(db, [ed, prev, null, undefined])).size).toBe(0);
+    expect(spy).toHaveBeenCalledTimes(1);
+  }, 60000);
 });
