@@ -268,17 +268,52 @@ export function steerRow<T extends Steerable>(row: T, flags: string[]): T {
   return row;
 }
 
+/** How many matched-but-below-the-cut markets the lens names. Enough to see the shape of what
+ *  steering found off-list, bounded so the payload and the banner sentence stay small. */
+export const STEERING_UNLISTED_CAP = 5;
+
 /** What steering did to a ranking, for display. Undefined when no flags are set — the honest
- *  reading of "nothing is steering", not an empty lens implying an inert filter ran. */
-export function steeringLens(flags: string[], rows: Steerable[]): SteeringLens | undefined {
+ *  reading of "nothing is steering", not an empty lens implying an inert filter ran.
+ *
+ *  Read over the FULL ranked set, not the displayed cut (#167). `steerRow` lifts every candidate
+ *  before the sort, so a market can match a flag, receive its lift, and still land below the
+ *  top-N cut. Handed only the cut, the lens called that flag `unmatched` and reported
+ *  `steered: 0` — the banner then told the reader "none of your standing flags matched", which
+ *  is a market verdict ("your lane is empty") rather than the truth ("your lane matched, none
+ *  of it cleared the cut"). Opposite decisions. So `applied` now means "this flag found a
+ *  market", `steeredShown` carries the narrower "…and it reached the list", and `unlisted`
+ *  names the near misses with their rank so the reader can go look.
+ *
+ *  `shownCount` defaults to the whole list: a caller that displays everything it ranks gets the
+ *  same lens it always did. */
+export function steeringLens(
+  flags: string[],
+  ranked: Steerable[],
+  shownCount: number = ranked.length,
+): SteeringLens | undefined {
   const active = activeFlags(flags);
   if (!active.length) return undefined;
-  const hit = new Set(rows.flatMap((r) => r.steering?.flags ?? []));
+  const steeredRows = ranked.filter((r) => r.steering);
+  const hit = new Set(steeredRows.flatMap((r) => r.steering?.flags ?? []));
+  const unlisted = ranked
+    .map((r, i) => ({ r, rank: i + 1 }))
+    .filter(({ r, rank }) => r.steering && rank > shownCount)
+    .slice(0, STEERING_UNLISTED_CAP)
+    .map(({ r, rank }) => ({
+      label: `${r.genre} × ${r.tag}`,
+      genre: r.genre,
+      tag: r.tag,
+      rank,
+      delta: r.steering?.delta ?? 0,
+      flags: r.steering?.flags ?? [],
+    }));
   return {
     flags: active,
     applied: active.filter((f) => hit.has(f)),
     unmatched: active.filter((f) => !hit.has(f)),
-    steered: rows.filter((r) => r.steering).length,
+    steered: steeredRows.length,
+    steeredShown: ranked.slice(0, shownCount).filter((r) => r.steering).length,
+    unlisted,
     weight: STEERING_WEIGHT,
   };
 }

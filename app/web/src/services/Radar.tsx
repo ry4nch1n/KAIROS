@@ -439,14 +439,33 @@ function ScoreBreakdown({ c }: { c: ScoreComponents }) {
 }
 
 /** One sentence saying what the standing flags DID to this ranking — which landed, how many
- *  markets moved, and which matched nothing here. null when nothing is steering. */
+ *  markets moved, and which matched nothing. null when nothing is steering.
+ *
+ *  Three states, and the middle one is the whole point of #167: "nothing you care about is in
+ *  this market" and "what you care about IS here, it just didn't outrank the list" are opposite
+ *  conclusions, and the old copy said the first when the second was true. */
 export function steeringNote(lens?: SteeringLens): string | null {
   if (!lens || !lens.flags.length) return null;
-  const head = lens.applied.length
-    ? `Steered by ${lens.applied.join(", ")} — ${lens.steered} market${lens.steered === 1 ? "" : "s"} lifted +${lens.weight.toFixed(2)} per matching flag.`
-    : "Standing flags are set but none matched this ranking — the order below is unsteered.";
+  const shown = lens.steeredShown ?? lens.steered;
+  const unlisted = lens.unlisted ?? [];
+  const markets = (n: number) => `${n} market${n === 1 ? "" : "s"}`;
+  const per = `+${lens.weight.toFixed(2)} per matching flag`;
+  const named = unlisted.map((u) => `${u.label} (rank ${u.rank})`).join(", ");
+  let head: string;
+  if (!lens.applied.length) {
+    // Nothing matched anywhere in the ranking — the only case where "your flags found nothing"
+    // is a true statement about the market.
+    head =
+      "Standing flags are set but none matched any ranked market — the order below is unsteered.";
+  } else if (shown === 0) {
+    head = `${lens.applied.join(", ")} matched ${markets(lens.steered)} — lifted ${per}, but none climbed into the list below.${named ? ` Closest: ${named}.` : ""}`;
+  } else {
+    head = `Steered by ${lens.applied.join(", ")} — ${markets(lens.steered)} lifted ${per}.${
+      named ? ` Also matched below the list: ${named}.` : ""
+    }`;
+  }
   return lens.unmatched.length && lens.applied.length
-    ? `${head} No match here for ${lens.unmatched.join(", ")}.`
+    ? `${head} No ranked market matched ${lens.unmatched.join(", ")}.`
     : head;
 }
 
