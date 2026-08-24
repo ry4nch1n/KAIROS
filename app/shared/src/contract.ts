@@ -73,7 +73,13 @@ export const CONTRACT = {
   //      spreadsheet. Rendering the capsule in the Game column also makes a row identifiable by
   //      recognition instead of by reading a title string. Nullable — a game with no crawled
   //      thumbnail renders the bare plate. Additive; read defensively.
-  version: 17,
+  // v18: `SteamOverview` gained `upcoming` — the unreleased ("coming soon") cohort, the read half
+  //      of #54's capture (#164). Each `SteamUpcoming` row carries `followers` (an unshipped
+  //      title's only demand number, and the accepted public proxy for wishlists) plus
+  //      `followerVelocity` / `followerWindowDays`, a followers-per-day rate off the last two
+  //      snapshots that carry a reading — `SteamNewRelease.reviewsPerDay`'s idiom, so null (never
+  //      0) below two measured days. Released cohorts are untouched. Additive; read defensively.
+  version: 18,
   pitch: {
     // v2: added visual-card fields — setting, artStyle, codeName, headerUrl, shotUrl.
     // v3: rating rework — scoreFields d1Fit/steamCeiling/buildCost → browserFit/steamFit/buildEase.
