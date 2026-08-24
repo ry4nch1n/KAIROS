@@ -2,8 +2,8 @@ import { describe, it, expect } from "vitest";
 import {
   assessSteamDataQuality,
   DEFAULT_STEAM_QUALITY,
-  assessFollowerCapture,
-  MIN_FOLLOWER_COHORT,
+  assessCaptureYield,
+  MIN_CAPTURE_COHORT,
 } from "../src/checks/steamDataQuality.ts";
 
 // A healthy latest-crawl cohort: enough games, dates parsed, a real indie cohort, and the
@@ -62,25 +62,62 @@ describe("DQ assessSteamDataQuality — recency/accuracy invariants", () => {
   });
 });
 
-// #54: a wholesale-failing follower fetch used to pass green — fetchFollowers swallows every
-// error, so 451 consecutive HTTP 429s across four crawls looked identical to "no data".
-describe("DQ assessFollowerCapture — the 0%-capture gate (#54)", () => {
+// #54 / #158: a wholesale-failing enrichment fetch used to pass green — fetchFollowers swallows
+// every error, so 451 consecutive HTTP 429s across four crawls looked identical to "no data".
+// The assertion is now table-driven so the NEXT optional fetch inherits it instead of re-deriving it.
+describe("DQ assessCaptureYield — the 0%-capture gate (#54, generalised #158)", () => {
+  const row = (over: Partial<Parameters<typeof assessCaptureYield>[0][number]>) => ({
+    key: "followers",
+    eligible: 28,
+    captured: 0,
+    why: "follower velocity cannot start (#54).",
+    ...over,
+  });
+
   it("fails loudly on 0% capture over a real eligible cohort", () => {
-    const msg = assessFollowerCapture(28, 0);
-    expect(msg).toMatch(/follower capture 0% over 28 eligible/);
-    expect(msg).toMatch(/#54/);
+    const r = assessCaptureYield([row({})]);
+    expect(r.ok).toBe(false);
+    expect(r.failures.join(" ")).toMatch(/followers capture 0% over 28 eligible/);
+    expect(r.failures.join(" ")).toMatch(/#54/);
   });
 
   it("passes when even one eligible title carried a value (the velocity clock started)", () => {
-    expect(assessFollowerCapture(28, 1)).toBeNull();
+    const r = assessCaptureYield([row({ captured: 1 })]);
+    expect(r.ok).toBe(true);
+    expect(r.lines.join(" ")).toMatch(/followers 1\/28 eligible \(4%\)/);
   });
 
   it("stays silent on a small / CRAWL_LIMIT-capped cohort — no false alarm", () => {
-    expect(assessFollowerCapture(MIN_FOLLOWER_COHORT - 1, 0)).toBeNull();
-    expect(assessFollowerCapture(0, 0)).toBeNull(); // a run with no coming-soon titles at all
+    expect(assessCaptureYield([row({ eligible: MIN_CAPTURE_COHORT - 1 })]).ok).toBe(true);
+    // a run with no coming-soon titles at all
+    const empty = assessCaptureYield([row({ eligible: 0 })]);
+    expect(empty.ok).toBe(true);
+    expect(empty.lines.join(" ")).toMatch(/not asserted/);
   });
 
-  it("fires exactly at the cohort floor", () => {
-    expect(assessFollowerCapture(MIN_FOLLOWER_COHORT, 0)).not.toBeNull();
+  it("fires exactly at the cohort floor, and honours a per-enrichment floor", () => {
+    expect(assessCaptureYield([row({ eligible: MIN_CAPTURE_COHORT })]).ok).toBe(false);
+    // a raised floor makes the same cohort un-assertable rather than red
+    expect(assessCaptureYield([row({ eligible: MIN_CAPTURE_COHORT, minCohort: 50 })]).ok).toBe(
+      true,
+    );
+  });
+
+  it("evaluates every enrichment in one pass — a quiet one never hides the others", () => {
+    const r = assessCaptureYield([
+      row({ key: "followers", captured: 12 }),
+      row({ key: "ai_disclosure", eligible: 40, captured: 0, why: "readings collapse (#110)." }),
+      row({ key: "release_state", eligible: 200, captured: 200, minCohort: 50, why: "x." }),
+    ]);
+    expect(r.ok).toBe(false);
+    expect(r.failures).toHaveLength(1);
+    expect(r.failures[0]).toMatch(/ai_disclosure/);
+    // reported whether or not they passed — the visibility half of #158
+    expect(r.lines).toHaveLength(3);
+    expect(r.lines.join(" ")).toMatch(/release_state 200\/200 eligible \(100%\)/);
+  });
+
+  it("reports nothing and passes on an empty table", () => {
+    expect(assessCaptureYield([])).toEqual({ ok: true, failures: [], lines: [] });
   });
 });
