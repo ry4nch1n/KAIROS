@@ -77,6 +77,60 @@ describe("matchSteering", () => {
   });
 });
 
+// #173: the stemmer collapsed a QUALIFIER to a generic root — `builder` → `build`, `players` →
+// `play` — and both roots are everyday Steam tag vocabulary, so a deck-builder flag claimed every
+// Base-Building market and a flag about players claimed 4 Player Local. These three markets were
+// measured on the #172 draft, where they inflated `applied` and filled `unlisted` with noise.
+describe("a stemmed root does not claim a generic market (#173)", () => {
+  const FLAGS = [
+    "Luck/deck builder synergy games",
+    "Blackjack or playing card mechanics",
+    "Living playing card/toy soldiers setting",
+    "Players acceptance on AI use in video games",
+  ];
+
+  it("refuses the markets the collapse invented", () => {
+    for (const m of [
+      { genre: "Adventure", tag: "Base-Building" }, // builder → build → Building
+      { genre: "Action", tag: "4 Player Local" }, // players/playing → play → Player
+      { genre: "Casual", tag: "Free to Play" }, // …and → Play
+    ])
+      expect(matchSteering(FLAGS, m)).toEqual([]);
+  });
+
+  it("still reaches the closed compounds #157 shipped it for", () => {
+    // The qualifier survives the join, so the compound route is untouched — only the bare root
+    // it used to also emit is gone.
+    expect(matchSteering(FLAGS, { genre: "Puzzle", tag: "Deckbuilding" })).toEqual([FLAGS[0]]);
+    expect(matchSteering(["Rogue-lites"], { genre: "Action", tag: "Roguelike" })).toEqual([
+      "Rogue-lites",
+    ]);
+    expect(
+      matchSteering(["Fairy tale setting"], { genre: "Adventure", tag: "Fairy Tale" }),
+    ).toEqual(["Fairy tale setting"]);
+  });
+
+  it("leaves the #172 lens aggregation exactly as it was", () => {
+    // Fewer markets carry a match now; how the lens counts and names them must not change.
+    const ranked = [gap("Adventure", "Base-Building", 2), gap("Puzzle", "Deckbuilding", 1)].map(
+      (g) => steerRow(g, [FLAGS[0]]),
+    );
+    expect(ranked[0].steering).toBeUndefined();
+    const lens = steeringLens([FLAGS[0]], ranked, 1)!;
+    expect(lens).toMatchObject({ applied: [FLAGS[0]], steered: 1, steeredShown: 0 });
+    expect(lens.unlisted).toEqual([
+      {
+        label: "Puzzle × Deckbuilding",
+        genre: "Puzzle",
+        tag: "Deckbuilding",
+        rank: 2,
+        delta: STEERING_WEIGHT,
+        flags: [FLAGS[0]],
+      },
+    ]);
+  });
+});
+
 describe("steerRow", () => {
   it("no flags set → the ranking is untouched (scores, components, order, keys)", () => {
     const unsteered = rank([]);

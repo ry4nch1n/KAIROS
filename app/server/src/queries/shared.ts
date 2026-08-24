@@ -176,6 +176,12 @@ const STOP = new Set([
   "likes",
   "lite",
   "lites",
+  // Every game has players; "Player" in a Steam tag is a player-count/mode label ("4 Player
+  // Local", "Single-player"), never the interest a flag is expressing (#173). Stopped for the
+  // same reason as "game" — and, like the tails above, the compound forms below still see it,
+  // so a "Single-player" flag still reaches a "Singleplayer" market.
+  "player",
+  "players",
 ]);
 const rawWords = (s: string) =>
   String(s ?? "")
@@ -214,15 +220,53 @@ const VARIANTS: [RegExp, string][] = [
   [/lite$/, "like"],
 ];
 const fold = (t: string) => VARIANTS.reduce((s, [re, to]) => s.replace(re, to), t);
-/** Comparison forms of ONE label: each significant word, plus every adjacent pair joined — the
- *  closed compound the other side may be writing as a single word. Called per field, because the
- *  genre and the tag are separate claims: "Action" × "Deckbuilding" must never yield "actiondeck". */
-const collapsedForms = (s: string): string[] => {
-  const raw = rawWords(s);
-  const out = wordsOf(s).map((w) => fold(stem(w)));
-  for (let i = 0; i + 1 < raw.length; i++) out.push(fold(stem(raw[i] + raw[i + 1])));
-  return out.filter((f) => f.length >= 4);
+// ── Qualifier discipline (#173) ──
+// A stem is only trustworthy when the token it came from carried its own qualifier. "deck
+// builder" → `deckbuild` does; a bare "builder" → `build` does not, and `build` is common enough
+// in Steam's tag vocabulary that the flag then claimed every Base-Building market — as `players`
+// → `play` claimed Free to Play. That is a force-fit, exactly what steerRow promises not to do.
+// So the three kinds of form are kept apart rather than poured into one set: a word as written
+// and a joined pair each carry their qualifier and may meet anything, while a root left by
+// stemming a SINGLE word may only meet a joined pair — the closed compound it was invented to
+// reach. `deckbuild` (pair) still finds `Deckbuilding` (word, stemmed); `build` no longer finds
+// `Building`. Structural, so there is no list of generic roots for anyone to maintain.
+interface Forms {
+  /** Significant words as written (folded) — the qualifier intact. */
+  word: Set<string>;
+  /** Adjacent words joined then stemmed: the closed compound the other side may write as one. */
+  compound: Set<string>;
+  /** What stemming left of a single word, when it changed it. Generic by construction. */
+  root: Set<string>;
+}
+const keep = (into: Set<string>, f: string) => {
+  if (f.length >= 4) into.add(f);
 };
+/** Comparison forms of ONE label. Called per field, because the genre and the tag are separate
+ *  claims: "Action" × "Deckbuilding" must never yield "actiondeck". */
+const formsOf = (s: string): Forms => {
+  const forms: Forms = { word: new Set(), compound: new Set(), root: new Set() };
+  for (const w of wordsOf(s)) {
+    const plain = fold(w);
+    keep(forms.word, plain);
+    const root = fold(stem(w));
+    if (root !== plain) keep(forms.root, root);
+  }
+  const raw = rawWords(s);
+  for (let i = 0; i + 1 < raw.length; i++) keep(forms.compound, fold(stem(raw[i] + raw[i + 1])));
+  return forms;
+};
+const mergeForms = (a: Forms, b: Forms): Forms => ({
+  word: new Set([...a.word, ...b.word]),
+  compound: new Set([...a.compound, ...b.compound]),
+  root: new Set([...a.root, ...b.root]),
+});
+const shares = (a: Set<string>, b: Set<string>) => [...a].some((f) => b.has(f));
+/** Whole-token EQUALITY on a shared comparison form, never a substring — with a stemmed root
+ *  admitted only against the other side's compounds (#173). */
+const formsMatch = (a: Forms, b: Forms) =>
+  shares(new Set([...a.word, ...a.compound]), new Set([...b.word, ...b.compound])) ||
+  shares(a.root, b.compound) ||
+  shares(a.compound, b.root);
 
 export const activeFlags = (flags: string[]) =>
   (flags ?? []).filter((f) => typeof f === "string" && f.trim());
@@ -237,7 +281,7 @@ export function matchSteering(flags: string[], m: { genre: string; tag: string }
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, " ")
     .trim()} `;
-  const marketForms = new Set([...collapsedForms(m.genre), ...collapsedForms(m.tag)]);
+  const marketForms = mergeForms(formsOf(m.genre), formsOf(m.tag));
   const family = loopFamilyFor(m.genre, m.tag) ?? loopFamilyFromLabels([m.genre, m.tag]);
   const out: string[] = [];
   for (const flag of flags) {
@@ -248,7 +292,7 @@ export function matchSteering(flags: string[], m: { genre: string; tag: string }
         hay.includes(` ${w}s `) ||
         hay.includes(` ${w.replace(/s$/, "")} `),
     );
-    const byForm = collapsedForms(flag).some((f) => marketForms.has(f));
+    const byForm = formsMatch(formsOf(flag), marketForms);
     const byFamily = family != null && loopFamilyFromLabels([flag]) === family;
     if ((byWord || byForm || byFamily) && !out.includes(flag)) out.push(flag);
   }
