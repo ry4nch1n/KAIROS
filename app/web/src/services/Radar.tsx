@@ -528,12 +528,44 @@ function GapList({ gaps }: { gaps: Overview["gaps"] }) {
   );
 }
 
-// Loop-family market rollup (#108) — the crawled market re-keyed onto the plan's loop families,
-// beside Market Gaps. Local mirror of the server shape; `.dtable` scrolls in its own container.
+// Loop-family market rollup (#108; cross-platform since #67) — browser demand beside Steam
+// economics with a route lean per row. Local mirror of the server shape; `.dtable` scrolls in its
+// own container, so the added columns never push the page sideways on a phone.
 interface LoopFamilyMarketData {
-  rows: { family: string; supplyN: number; appetite: number; supplyTrend: SupplyTrend }[];
+  rows: {
+    family: string;
+    supplyN: number;
+    appetite: number | null;
+    supplyTrend: SupplyTrend;
+    steam?: {
+      games: number;
+      medianPriceCents: number;
+      medianRevenuePerGame: number;
+      supplyTrend: SupplyTrend;
+    } | null;
+    routeLean?: "browser" | "steam" | "contested" | null;
+  }[];
   uncovered: string[];
 }
+// [chip label, chip class, tooltip]. Named for the revenue SHAPE, not an internal route label.
+const MARKET_LEAN: Record<string, [string, string, string]> = {
+  browser: ["portal-ad lean", "route-23", "Browser demand leads; Steam economics don't."],
+  steam: ["premium lean", "route-1", "Steam revenue per game leads — a premium sale."],
+  contested: ["contested", "route-both", "Both surfaces read comparably strong."],
+};
+const LEAN_TIP =
+  "Each surface is scored against its own cross-family median, then the two are compared; a surface whose supply is crowding is discounted, so a hot family with a closing door can't read as open.";
+const Trend = ({ t }: { t: SupplyTrend }) => (
+  <span className={"supply supply-" + t}>{SUPPLY_LABEL[t] || t}</span>
+);
+const LeanChip = ({ lean }: { lean?: string | null }) => {
+  const m = lean ? MARKET_LEAN[lean] : null;
+  return m ? (
+    <span className={"route-chip " + m[1]} title={m[2] + " " + LEAN_TIP}>
+      {m[0]}
+    </span>
+  ) : null;
+};
 function LoopFamilyMarketCard({ platform }: { platform: Platform }) {
   const [data, setData] = useState<LoopFamilyMarketData | null>(null);
   useEffect(() => {
@@ -550,7 +582,7 @@ function LoopFamilyMarketCard({ platform }: { platform: Platform }) {
   if (!data) return <Skel h={200} />;
   return (
     <div className="card">
-      {head(I.gaps, "Market by loop family", "the crawled market spoken in the plan's families")}
+      {head(I.gaps, "Market by loop family", "browser demand beside Steam economics")}
       {data.rows.length ? (
         <table className="dtable">
           <thead>
@@ -565,19 +597,37 @@ function LoopFamilyMarketCard({ platform }: { platform: Platform }) {
                 Supply trend
                 <Tip text={SUPPLY_TIP} />
               </th>
+              <th className="r">Steam games</th>
+              <th className="r">
+                Steam median rev/game
+                <Tip text="Median revenue per released non-AAA Steam game in this family (owners bucket × price)" />
+              </th>
+              <th className="r">Steam median price</th>
+              <th>
+                Steam supply trend
+                <Tip text={SUPPLY_TIP} />
+              </th>
             </tr>
           </thead>
           <tbody>
             {data.rows.map((r) => (
               <tr key={r.family}>
-                <td className="gname">{r.family}</td>
-                <td className="r">{fmt(r.supplyN)}</td>
-                <td className="r">{fmt(r.appetite)}</td>
+                <td className="gname">
+                  {r.family}
+                  <LeanChip lean={r.routeLean} />
+                </td>
+                <td className="r">{r.supplyN ? fmt(r.supplyN) : "—"}</td>
+                <td className="r">{r.appetite == null ? "—" : fmt(r.appetite)}</td>
                 <td>
                   <span className={"supply supply-" + r.supplyTrend}>
                     {SUPPLY_LABEL[r.supplyTrend] || r.supplyTrend}
                   </span>
                 </td>
+                {/* No Steam coverage prints "—", never a 0: absent is not "earns nothing". */}
+                <td className="r">{r.steam ? fmt(r.steam.games) : "—"}</td>
+                <td className="r">{r.steam ? proxy(r.steam.medianRevenuePerGame) : "—"}</td>
+                <td className="r">{r.steam ? money(r.steam.medianPriceCents) : "—"}</td>
+                <td>{r.steam ? <Trend t={r.steam.supplyTrend} /> : "—"}</td>
               </tr>
             ))}
           </tbody>
