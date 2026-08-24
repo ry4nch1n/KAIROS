@@ -29,6 +29,7 @@ import type {
   SteamOwnershipRow,
   SteamDeveloperRow,
   SteamNewRelease,
+  SteamUpcoming,
   SteamComparable,
   SteamTagLookup,
   ScoreComponents,
@@ -98,6 +99,7 @@ const proxy = (d: number) =>
         ? "$" + Math.round(d / 1e3) + "K"
         : "$" + d;
 const rate = (r: number | null) => (r == null ? "—" : r.toFixed(2));
+const signed = (n: number) => (n > 0 ? "+" : "") + n.toFixed(2);
 const TIER_META: Record<string, { label: string; cls: string }> = {
   hobby: { label: "hobby", cls: "t-hobby" },
   small_indie: { label: "small", cls: "t-small" },
@@ -1253,6 +1255,58 @@ function NewReleasesTable({ rows }: { rows: SteamNewRelease[] }) {
   );
 }
 
+const FOLLOWERS_TIP =
+  "Followers of the store page. An unreleased game has no reviews and no owners, so this is its only demand reading — and the accepted public stand-in for the wishlist counts Steam does not publish. Blank means not measured, never zero.";
+const FOLL_DAY_TIP =
+  "Followers gained per day, across the last two days this game was measured. The total says how big the audience already is; only the rate says whether it is still growing. Blank until two days have been measured.";
+function UpcomingTable({ rows }: { rows: SteamUpcoming[] }) {
+  const anyArt = rows.some((r) => !!r.capsuleUrl);
+  if (!rows.length)
+    return (
+      <div className="empty-inline" style={{ padding: "20px 8px", color: "var(--text-3)" }}>
+        No unreleased titles tracked yet — they appear once a crawl reads Steam's upcoming shelf.
+      </div>
+    );
+  return (
+    <table className="dtable">
+      <thead>
+        <tr>
+          <th>Game</th>
+          <th>Genre</th>
+          <th className="r">
+            Followers
+            <Tip text={FOLLOWERS_TIP} />
+          </th>
+          <th className="r">
+            Foll/day
+            <Tip text={FOLL_DAY_TIP} />
+          </th>
+          <th className="r">Price</th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((r, i) => (
+          <tr key={i}>
+            <td className="gname">
+              <span className="gamecell">
+                {anyArt && <Capsule url={r.capsuleUrl} title={r.title} />}
+                <span>{r.title}</span>
+              </span>
+            </td>
+            <td>{r.genre}</td>
+            <td className="r">{r.followers == null ? "—" : fmt(r.followers)}</td>
+            {/* Window in the title: a widened one (a failed fetch day) stays inspectable. */}
+            <td className="r" title={`measured over ${r.followerWindowDays ?? 0} day(s)`}>
+              {r.followerVelocity == null ? "—" : signed(r.followerVelocity)}
+            </td>
+            <td className="r">{money(r.priceCents)}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
 const TEAM_META: Record<string, { label: string; cls: string }> = {
   solo: { label: "Solo", cls: "team-solo" },
   small: { label: "Small", cls: "team-small" },
@@ -1829,6 +1883,14 @@ function SteamView({
         <div className="card">
           {head(I.releases, "Recent releases", "indie cohort, newest first")}
           <NewReleasesTable rows={data.newReleases} />
+        </div>
+        <div className="card">
+          {head(
+            I.releases,
+            "Upcoming — pre-release demand",
+            "unreleased titles, most-followed first · followers stand in for wishlists",
+          )}
+          <UpcomingTable rows={data.upcoming ?? []} />
         </div>
       </>
     );

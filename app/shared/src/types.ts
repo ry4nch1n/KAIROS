@@ -188,6 +188,18 @@ export interface SteamNewRelease {
   capsuleUrl: string | null; // Steam header capsule; null when not crawled
 }
 
+// Unreleased ("coming soon") Steam titles — the pre-release demand cohort (#164). Followers are an
+// unshipped title's only demand number, and #54 measures them on this cohort alone (see queries).
+export interface SteamUpcoming {
+  title: string;
+  genre: string;
+  priceCents: number | null; // announced store price; null until the page carries one
+  followers: number | null; // latest measured follower count (null = not measured, never 0)
+  followerVelocity: number | null; // followers/day across the last two measured snapshots — null with <2
+  followerWindowDays: number | null; // days the velocity is measured over; null when velocity is null
+  capsuleUrl: string | null; // Steam header capsule; null when not crawled
+}
+
 export interface SteamOverview {
   kpi: {
     games: number;
@@ -214,6 +226,7 @@ export interface SteamOverview {
   ownership: SteamOwnershipRow[];
   developers: SteamDeveloperRow[];
   newReleases: SteamNewRelease[];
+  upcoming: SteamUpcoming[]; // unreleased cohort — follower demand + velocity (#164)
   subtitle: string;
 }
 

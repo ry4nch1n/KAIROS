@@ -17,6 +17,7 @@ import type {
   SteamOwnershipRow,
   SteamDeveloperRow,
   SteamNewRelease,
+  SteamUpcoming,
 } from "shared";
 import { teamSizeFor } from "../data/teamSize.ts";
 import { conversionFor } from "../data/genreConversion.ts";
@@ -48,10 +49,9 @@ import { getBriefSteering } from "./library.ts";
 // this predicate covers the ones that aggregate without a date filter. `IS NOT TRUE` is
 // null-safe, so browser rows (which never measure it) are unaffected.
 //
-// Upcoming titles are therefore not yet SHOWN anywhere — deliberately. Excluding them is the
-// honest half; a dedicated, clearly-labelled Upcoming surface (with follower velocity, which
-// needs >=2 snapshots carrying `followers` before it can render anything but "—") is the
-// follow-up. Absence is never a claim: no table implies "released" while holding one of these.
+// Upcoming titles are therefore excluded from every released-cohort analytic — the honest half —
+// and shown ONLY on their own clearly-labelled surface, getSteamUpcoming below (#164). Absence is
+// never a claim: no table implies "released" while holding one of these.
 export const RELEASED_ONLY = "AND l.coming_soon IS NOT TRUE";
 
 /** Pure composition — exported for tests. Steam flavor of the read. */
@@ -718,6 +718,71 @@ export async function getSteamNewReleases(db: Querier): Promise<SteamNewRelease[
   });
 }
 
+// ── Upcoming (unreleased) demand — #164 ─────────────────────────────────────────────────
+// #54 banked follower counts daily and nothing read them; this is the read half. It belongs HERE
+// and not on comparables: an unshipped title has no reviews and no owners, so followers are its
+// only demand number — the public stand-in for the wishlist counts Steam won't publish. Velocity
+// mirrors newReleases' `reviewsPerDay` idiom instead of inventing a second one: a per-day RATE,
+// null (never 0) when unmeasurable, read off the last two snapshots that actually CARRY a value
+// rather than the last two rows — so a day whose follower fetch failed widens the window instead
+// of reporting a fake 0/day, and MIN_WINDOW_DAYS drops a same-day re-crawl whose near-zero window
+// would divide a small delta into a wild rate.
+export const FOLLOWER_HISTORY_DEPTH = 6;
+export const FOLLOWER_MIN_WINDOW_DAYS = 0.5;
+
+/** Pure — exported for tests. `snaps` in any order; nulls, never zeros, when unmeasurable. */
+export function followerTraction(snaps: { followers: unknown; capturedAt: unknown }[]) {
+  const seen = snaps
+    .filter((s) => s.followers != null && s.capturedAt != null) // Number(null) is 0, not NaN
+    .map((s) => ({ f: Number(s.followers), t: new Date(s.capturedAt as string).getTime() }))
+    .filter((s) => Number.isFinite(s.f) && Number.isFinite(s.t))
+    .sort((a, b) => b.t - a.t);
+  const [latest] = seen;
+  if (!latest) return { followers: null, followerVelocity: null, followerWindowDays: null };
+  const prior = seen.find((s) => latest.t - s.t >= FOLLOWER_MIN_WINDOW_DAYS * 86400000);
+  const days = prior ? (latest.t - prior.t) / 86400000 : null;
+  return {
+    followers: latest.f as number | null,
+    followerVelocity: days == null ? null : +((latest.f - prior!.f) / days).toFixed(2),
+    followerWindowDays: days == null ? null : +days.toFixed(2),
+  };
+}
+
+export async function getSteamUpcoming(db: Querier, limit = 40): Promise<SteamUpcoming[]> {
+  // One row per (game, measured snapshot). The LEFT JOIN keeps a never-measured game visible.
+  const rows = await db.query(
+    `SELECT g.id AS game_id, g.title, ${canonSql("l.genre")} AS genre, l.price_cents AS price,
+            g.thumbnail_url AS capsule_url, h.followers, h.captured_at
+     FROM v_latest l JOIN games g ON g.id = l.game_id JOIN sources src ON src.id = g.source_id
+     LEFT JOIN LATERAL (
+       SELECT s.followers, s.captured_at FROM game_snapshots s
+       WHERE s.game_id = g.id AND s.followers IS NOT NULL
+       ORDER BY s.captured_at DESC LIMIT ${FOLLOWER_HISTORY_DEPTH}
+     ) h ON TRUE
+     WHERE g.is_live AND src.name = 'steam' AND l.coming_soon IS TRUE`,
+  );
+  const byGame = new Map<string, SteamUpcoming & { snaps: typeof rows }>();
+  for (const r of rows) {
+    const k = String(r.game_id);
+    const row = byGame.get(k) ?? {
+      title: r.title,
+      genre: r.genre ?? "—",
+      priceCents: r.price == null ? null : num(r.price),
+      capsuleUrl: r.capsule_url ?? null,
+      followers: null,
+      followerVelocity: null,
+      followerWindowDays: null,
+      snaps: [],
+    };
+    row.snaps.push({ followers: r.followers, capturedAt: r.captured_at });
+    byGame.set(k, row);
+  }
+  return [...byGame.values()]
+    .map(({ snaps, ...row }) => ({ ...row, ...followerTraction(snaps) }))
+    .sort((a, b) => (b.followers ?? -1) - (a.followers ?? -1) || a.title.localeCompare(b.title))
+    .slice(0, limit);
+}
+
 async function steamGapExamples(db: Querier): Promise<Map<string, string[]>> {
   const rows = await db.query(
     `SELECT genre, tag, title FROM (
@@ -808,6 +873,7 @@ export async function getSteamOverview(db: Querier): Promise<SteamOverview> {
     developers,
     newReleases,
     tagEconomics,
+    upcoming,
   ] = await Promise.all([
     getScaleTierBreakdown(db, "steam"),
     getSteamGenreEconomics(db, { cohort: "indie" }),
@@ -820,6 +886,7 @@ export async function getSteamOverview(db: Querier): Promise<SteamOverview> {
     getSteamDevelopers(db),
     getSteamNewReleases(db),
     getSteamTagEconomics(db),
+    getSteamUpcoming(db),
   ]);
   const games = tiers.reduce((s, t) => s + t.games, 0);
   const aaa = tiers.find((t) => t.tier === "aaa")?.games ?? 0;
@@ -888,6 +955,7 @@ export async function getSteamOverview(db: Querier): Promise<SteamOverview> {
     ownership,
     developers,
     newReleases,
+    upcoming,
     subtitle: "Steam (PC) · indie-addressable cohort default",
   };
 }
