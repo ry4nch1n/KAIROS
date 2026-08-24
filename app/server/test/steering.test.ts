@@ -3,6 +3,11 @@
 import { describe, expect, it } from "vitest";
 import type { SteamGap } from "shared";
 import { matchSteering, steerRow, steeringLens, STEERING_WEIGHT } from "../src/queries/shared.ts";
+import { freshMemoryDb } from "../src/db/db.ts";
+import { loadGames } from "../src/crawler/load.ts";
+import { STEAM_BASE_URL } from "../src/crawler/steam.ts";
+import type { RawGame } from "../src/crawler/base.ts";
+import * as q from "../src/queries/index.ts";
 
 const gap = (genre: string, tag: string, score: number): SteamGap => ({
   label: `${genre} × ${tag}`,
@@ -115,7 +120,106 @@ describe("steeringLens", () => {
       applied: ["survivors"],
       unmatched: ["submarine documentaries"],
       steered: 1,
+      steeredShown: 1,
+      unlisted: [],
       weight: STEERING_WEIGHT,
     });
+  });
+});
+
+// #167 — the lens is read over the FULL ranked set, not the slice the screen shows. The bug this
+// pins: a market matched a flag, took its lift, and because it still sat below the cut the lens
+// said the flag matched NOTHING. "Your lane is empty" and "your lane is here, a few ranks short"
+// are opposite calls, so the difference has to survive into the payload.
+describe("steeringLens over a cut ranking (#167)", () => {
+  const FLAGS = ["Luck/deck builder synergy games", "submarine documentaries"];
+  // Twelve markets. Only the weakest carries the vocabulary, so even lifted it cannot reach a cut.
+  const deep = (flags: string[]) =>
+    [
+      ...Array.from({ length: 11 }, (_, i) => gap("Casual", `Filler ${i}`, 9 - i * 0.1)),
+      gap("Puzzle", "Deckbuilding", 0.1),
+    ]
+      .map((g) => steerRow(g, flags))
+      .sort((a, b) => b.score - a.score);
+
+  it("counts a matched market that never reached the cut as applied, and names its rank", () => {
+    const lens = steeringLens(FLAGS, deep(FLAGS), 2)!;
+    // The regression: this used to read applied: [], steered: 0, both flags unmatched.
+    expect(lens.applied).toEqual(["Luck/deck builder synergy games"]);
+    expect(lens.unmatched).toEqual(["submarine documentaries"]);
+    expect(lens.steered).toBe(1);
+    expect(lens.steeredShown).toBe(0); // …while staying honest that nothing on screen moved
+    expect(lens.unlisted).toEqual([
+      {
+        label: "Puzzle × Deckbuilding",
+        genre: "Puzzle",
+        tag: "Deckbuilding",
+        rank: 12,
+        delta: STEERING_WEIGHT,
+        flags: ["Luck/deck builder synergy games"],
+      },
+    ]);
+    expect(deep(FLAGS).slice(0, 2)).toEqual(deep([]).slice(0, 2)); // the cut is read, not re-ordered
+  });
+
+  it("a flag that matches nothing anywhere is still unmatched, cut or no cut", () => {
+    const flags = ["submarine documentaries"];
+    expect(steeringLens(flags, deep(flags), 2)).toMatchObject({
+      applied: [],
+      unmatched: flags,
+      steered: 0,
+      steeredShown: 0,
+      unlisted: [],
+    });
+  });
+});
+
+// …and the same property through the real wiring, since the defect was in what getSteamOverview
+// HANDED the lens, not in the lens itself.
+describe("GET /api/steam steering lens is wired to the full ranking (#167)", () => {
+  const g = (id: string, genre: string, tag: string, owners: number, rating: number): RawGame => ({
+    url: `https://store.steampowered.com/app/${id}`,
+    title: `Game ${id}`,
+    thumbnailUrl: null,
+    developer: "Dev",
+    description: null,
+    engine: null,
+    orientation: null,
+    mobile: false,
+    genre,
+    tags: [tag],
+    rating,
+    votes: 5000,
+    featured: false,
+    releaseDate: "2024-01-01",
+    plays: owners,
+    ownersEst: owners,
+    priceCents: 1500,
+    discountPct: 0,
+    ccu: 100,
+    medianPlaytimeMin: 600,
+    metacritic: null,
+    scaleTier: "small_indie",
+    sourceGameId: id,
+  });
+
+  it("reports a matched-but-unlisted market instead of calling the flag unmatched", async () => {
+    const db = await freshMemoryDb();
+    const games: RawGame[] = [];
+    for (let i = 0; i < 9; i++)
+      for (const n of [1, 2])
+        games.push(g(`f${i}-${n}`, "Casual", `Filler ${i}`, 400_000 - i * 20_000, 4.6));
+    // The deck market is the weakest of the ten — even lifted it cannot climb into the top 8.
+    for (const n of [1, 2]) games.push(g(`d${n}`, "Puzzle", "Deckbuilding", 1_000, 2.0));
+    await loadGames(db, "steam", STEAM_BASE_URL, games, "2026-06-30T00:00:00.000Z");
+    await q.setBriefSteering(db, ["Luck/deck builder synergy games"]);
+
+    const ov = await q.getSteamOverview(db);
+    expect(ov.opportunity.length).toBe(8);
+    expect(ov.opportunity.some((o) => o.label === "Puzzle × Deckbuilding")).toBe(false);
+    expect(ov.steering!.steeredShown).toBe(0);
+    expect(ov.steering!.applied).toEqual(["Luck/deck builder synergy games"]);
+    expect(ov.steering!.steered).toBe(1);
+    expect(ov.steering!.unlisted![0]).toMatchObject({ label: "Puzzle × Deckbuilding", rank: 10 });
   });
 });

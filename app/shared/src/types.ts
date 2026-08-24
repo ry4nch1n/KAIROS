@@ -128,12 +128,27 @@ export interface SteeringMatch {
   delta: number; // score added = weight × flags.length
 }
 
+// A market steering matched and lifted that still fell below the displayed cut (#167) — the
+// half of the story a top-N list structurally cannot show.
+export interface SteeringUnlisted {
+  label: string; // "Genre × Tag"
+  genre: string;
+  tag: string;
+  rank: number; // 1-based position in the FULL ranked set
+  delta: number; // score it gained from steering
+  flags: string[]; // the standing flags that matched it
+}
+
 // What steering did to a whole ranking (#12b). `unmatched` is the honest half.
+// Read over the full ranked set, not the displayed cut (#167): `applied` means "this flag found
+// a market", `steeredShown` is the narrower "…and that market reached the list".
 export interface SteeringLens {
   flags: string[]; // all standing flags in play
-  applied: string[]; // flags that matched at least one market
-  unmatched: string[]; // flags that matched nothing in this ranking
-  steered: number; // # of ranked rows that got a lift
+  applied: string[]; // flags that matched at least one market anywhere in the ranking
+  unmatched: string[]; // flags that matched nothing at all
+  steered: number; // # of ranked rows that got a lift (whole ranking)
+  steeredShown?: number; // …of which, how many are inside the displayed cut (#167)
+  unlisted?: SteeringUnlisted[]; // matched markets below the cut, best-ranked first, capped
   weight: number; // score added per matching flag
 }
 

@@ -804,8 +804,14 @@ async function steamGapExamples(db: Querier): Promise<Map<string, string[]>> {
   return m;
 }
 
-// Steam opportunity: indie genre×tag with high demand (owners) + quality, low supply, monetizable.
-export async function getSteamOpportunity(db: Querier): Promise<SteamGap[]> {
+/** How many opportunity rows the Radar shows. The cut is a display decision, not an analysis
+ *  one — the ranking below it still exists, and the steering lens reads it (#167). */
+export const OPPORTUNITY_TOP_N = 8;
+
+// Steam opportunity, FULL ranked candidate set — every genre×tag that cleared the supply floor,
+// steered and sorted but not cut. `getSteamOpportunity` is this list's top slice; the steering
+// lens needs the rest, because a market steering lifted can still land below the cut (#167).
+export async function rankSteamOpportunity(db: Querier): Promise<SteamGap[]> {
   const supply = await genreSupplyTrend(db, "steam");
   // Standing flags add a visible score term BEFORE the sort and the top-8 cut (#12b), so
   // steering can surface a market the raw score kept off the list. None set → no-op.
@@ -855,8 +861,12 @@ export async function getSteamOpportunity(db: Querier): Promise<SteamGap[]> {
       supplyRising: supply.get(r.genre)?.trend === "rising",
     }))
     .map((g) => steerRow(g, flags)) // standing flags re-score the ranking (#12b)
-    .sort((a, b) => b.score - a.score)
-    .slice(0, 8);
+    .sort((a, b) => b.score - a.score);
+}
+
+// The displayed opportunity list — the ranked set's top slice.
+export async function getSteamOpportunity(db: Querier): Promise<SteamGap[]> {
+  return (await rankSteamOpportunity(db)).slice(0, OPPORTUNITY_TOP_N);
 }
 
 // Composed Steam screen payload: KPIs + tier mix + cohorts + comparables + all sub-sections.
@@ -866,7 +876,7 @@ export async function getSteamOverview(db: Querier): Promise<SteamOverview> {
     indie,
     all,
     comparables,
-    opportunity,
+    opportunityRanked,
     quadrant,
     pricing,
     ownership,
@@ -879,7 +889,7 @@ export async function getSteamOverview(db: Querier): Promise<SteamOverview> {
     getSteamGenreEconomics(db, { cohort: "indie" }),
     getSteamGenreEconomics(db, { cohort: "all" }),
     getSteamComparables(db, 14),
-    getSteamOpportunity(db),
+    rankSteamOpportunity(db),
     getSteamGenreQuadrant(db),
     getSteamPricing(db),
     getSteamOwnership(db),
@@ -928,6 +938,7 @@ export async function getSteamOverview(db: Querier): Promise<SteamOverview> {
          AND g.release_date >= CURRENT_DATE - INTERVAL '90 days'`,
     )
   )[0];
+  const opportunity = opportunityRanked.slice(0, OPPORTUNITY_TOP_N);
   return {
     kpi: {
       games,
@@ -941,9 +952,14 @@ export async function getSteamOverview(db: Querier): Promise<SteamOverview> {
       aiDisclosureSample: num(ai.n),
     },
     read: composeSteamRead({ opportunity, indie }),
-    // Read over the ranked-AND-cut list, so a flag whose only match fell below the cut reports
-    // as matching nothing you can SEE, rather than as a silent win.
-    steering: steeringLens((await getBriefSteering(db)).flags, opportunity),
+    // Read over the FULL ranked set with the cut passed in, so `applied` means "this flag found
+    // a market" and a match that landed below the cut is named with its rank instead of being
+    // reported as no match at all (#167).
+    steering: steeringLens(
+      (await getBriefSteering(db)).flags,
+      opportunityRanked,
+      OPPORTUNITY_TOP_N,
+    ),
     tiers,
     indie,
     all,

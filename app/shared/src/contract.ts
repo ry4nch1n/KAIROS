@@ -79,7 +79,18 @@ export const CONTRACT = {
   //      `followerVelocity` / `followerWindowDays`, a followers-per-day rate off the last two
   //      snapshots that carry a reading — `SteamNewRelease.reviewsPerDay`'s idiom, so null (never
   //      0) below two measured days. Released cohorts are untouched. Additive; read defensively.
-  version: 18,
+  // v19: the steering lens stops being computed over the DISPLAYED cut and is read over the full
+  //      ranked candidate set (#167). `steerRow` lifts every candidate before the sort, so a
+  //      market could match a standing flag, take its lift, and still land below the top-8 cut —
+  //      handed only the cut, the lens called that flag `unmatched` and reported `steered: 0`,
+  //      which reads as a market verdict ("nothing in your lane") when the truth was "your lane
+  //      matched, none of it cleared the cut". `SteeringLens.applied`/`steered`/`unmatched` now
+  //      describe the whole ranking; two additive fields carry the narrower reading —
+  //      `steeredShown` (lifted markets inside the displayed cut) and `unlisted` (the
+  //      matched-but-below-the-cut markets, each with its rank, capped at 5). Matching itself is
+  //      untouched — `steerRow`'s no-force-fit contract is unchanged. Additive; read defensively
+  //      (an older payload simply lacks the two new fields).
+  version: 19,
   pitch: {
     // v2: added visual-card fields — setting, artStyle, codeName, headerUrl, shotUrl.
     // v3: rating rework — scoreFields d1Fit/steamCeiling/buildCost → browserFit/steamFit/buildEase.
