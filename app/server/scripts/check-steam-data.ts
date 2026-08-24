@@ -4,7 +4,13 @@
 // Wired as the final step of the daily crawl. Run locally: npm run check:steam
 import { appDb } from "../src/db/db.ts";
 import { getSteamComparables } from "../src/queries/index.ts";
-import { assessSteamDataQuality } from "../src/checks/steamDataQuality.ts";
+import {
+  assessCaptureYield,
+  assessSteamDataQuality,
+  DEFAULT_STEAM_QUALITY,
+  type CaptureCohort,
+} from "../src/checks/steamDataQuality.ts";
+import { STEAM_AI_DISCLOSURE_MAX_AGE_DAYS } from "../src/crawler/steam.ts";
 
 // Golden appids: known-correct classifications that must hold regardless of thresholds.
 const GOLDEN_INDIE = new Set(["1145360"]); // Hades (self-pub megahit) → NOT aaa
@@ -23,13 +29,26 @@ const GOLDEN_AAA = new Set(["730", "578080"]); // CS2 (Valve), PUBG (Krafton) �
        FROM v_latest l JOIN games g ON g.id = l.game_id JOIN sources s ON s.id = g.source_id
        WHERE g.is_live AND s.name = 'steam'
      ), fresh AS (
-       SELECT * FROM steam WHERE captured_at::date = (SELECT max(captured_at::date) FROM steam)
+       SELECT *,
+              -- Mirrors wantsAiDisclosure() in crawler/steam.ts: non-AAA, dated, released within
+              -- the max-age window (+1 day of slack for future-dating). Both sides read the SAME
+              -- persisted columns, so the two cohorts coincide; keep them in step if either moves.
+              (scale_tier IS DISTINCT FROM 'aaa' AND release_date IS NOT NULL
+               AND release_date BETWEEN (CURRENT_DATE - $1::int) AND (CURRENT_DATE + 1)) AS ai_wanted
+       FROM steam WHERE captured_at::date = (SELECT max(captured_at::date) FROM steam)
      )
      SELECT count(*)::int AS crawled,
             count(*) FILTER (WHERE release_date IS NOT NULL)::int AS with_date,
             count(*) FILTER (WHERE rating IS NOT NULL)::int AS rated,
-            count(*) FILTER (WHERE scale_tier IS NULL OR scale_tier <> 'aaa')::int AS indie
+            count(*) FILTER (WHERE scale_tier IS NULL OR scale_tier <> 'aaa')::int AS indie,
+            -- capture-yield cohorts (#158): eligible vs actually-carrying-a-value, per enrichment
+            count(*) FILTER (WHERE coming_soon IS NOT NULL)::int AS release_state_captured,
+            count(*) FILTER (WHERE coming_soon IS TRUE)::int AS upcoming,
+            count(*) FILTER (WHERE coming_soon IS TRUE AND followers IS NOT NULL)::int AS followers_captured,
+            count(*) FILTER (WHERE ai_wanted)::int AS ai_eligible,
+            count(*) FILTER (WHERE ai_wanted AND ai_disclosure IS NOT NULL)::int AS ai_captured
      FROM fresh`,
+      [STEAM_AI_DISCLOSURE_MAX_AGE_DAYS],
     )
   )[0];
 
@@ -51,6 +70,49 @@ const GOLDEN_AAA = new Set(["730", "578080"]); // CS2 (Valve), PUBG (Krafton) �
     indie: m.indie,
     comparables: m.comparables,
   });
+
+  // ── Capture yield (#158) ──────────────────────────────────────────────────
+  // One row per OPTIONAL enrichment the Steam crawler attempts. Eligibility mirrors the
+  // crawler's own gating predicate, so `captured/eligible` answers "did the fetch this run
+  // actually made come back with anything", not "is the column populated across all time".
+  // Adding the next enrichment = adding a row here plus its two counts above.
+  // NOT listed, deliberately: teamSize is a static lookup table (data/teamSize.ts), not a
+  // capture; reviewVelocity is derived from the `votes` series, whose fill the ratedFill floor
+  // above already guards more tightly than 0%; featuredRank (homepage_position) is a
+  // CrazyGames signal and belongs to a browser-source gate that does not exist yet.
+  const n = (v: unknown) => Number(v ?? 0);
+  const cohorts: CaptureCohort[] = [
+    {
+      key: "followers",
+      eligible: n(agg.upcoming),
+      captured: n(agg.followers_captured),
+      why:
+        "follower velocity cannot start — it needs >=2 snapshots carrying a value, and a " +
+        "coming-soon title has no reviews and no owners to fall back on (#54).",
+    },
+    {
+      key: "ai_disclosure",
+      eligible: n(agg.ai_eligible),
+      captured: n(agg.ai_captured),
+      why: 'every reading collapses to "not checked", which reads identically to "no disclosure" (#110).',
+    },
+    {
+      // The release-state marker is what makes the `followers` row above mean anything: if it
+      // goes null wholesale the coming-soon cohort silently empties and the follower assertion
+      // no-ops instead of failing. Floored at the crawl-size threshold, since a smaller cohort
+      // is already a failure by minCrawled.
+      key: "release_state",
+      eligible: n(agg.crawled),
+      captured: n(agg.release_state_captured),
+      minCohort: DEFAULT_STEAM_QUALITY.minCrawled,
+      why:
+        "every market analytic silently includes unreleased titles AND the follower cohort " +
+        "empties, taking its own 0%-capture assertion down with it (#54).",
+    },
+  ];
+  const capture = assessCaptureYield(cohorts);
+  console.log("Capture yield (latest crawl cohort):", capture.lines.join(" · "));
+  res.failures.push(...capture.failures);
 
   // Golden spot-checks (only assert for appids actually present in the crawl).
   const golden = await db.query(

@@ -90,33 +90,73 @@ export function assessSteamDataQuality(
   };
 }
 
-// ── Follower capture (#54) ───────────────────────────────────────────────────
-// Its own assertion rather than another SteamQualityCounts field: it is measured at a different
-// moment, by the crawl step (crawler/run.ts), the only place that knows that run's cohort.
-// WHY IT IS A HARD FAILURE: fetchFollowers swallows every error, check:steam never inspected the
-// column and /api/steam exposes no followers field — so 451 consecutive HTTP 429s across four
-// daily crawls all reported "✔ loaded". Velocity needs >=2 snapshots carrying a value, so that
-// silence meant the clock never started. Loud beats green-and-wrong.
+// ── Capture yield (#54, generalised by #158) ─────────────────────────────────
+// The class of bug: an OPTIONAL enrichment fetch fails wholesale, every per-item error is
+// swallowed as "unknown", and the run still reports `✔ loaded` because a row inserts fine with
+// a null column. #54 was the canonical instance — 451 consecutive HTTP 429s across four daily
+// crawls, all green, found by hand four days late.
+//
+// The assertion that catches it: measure CAPTURE YIELD (captured / eligible) against the DB
+// rows the crawl just wrote — never against log text — and fail on 0% over a cohort large
+// enough for 0% to mean something. One table row per guarded enrichment, so the NEXT optional
+// fetch is guarded by adding four fields, not by re-deriving the reasoning.
+//
+// WHY IT LIVES IN THE GATE (check:steam) AND NOT IN crawler/run.ts (#158): #54's first cut
+// exited non-zero from the crawl step, which runs BEFORE the data-quality gate — so one quiet
+// enrichment skipped every other check that day. Generalising multiplies that, so the yield
+// pass now reports alongside the rest of the gate. The crawl still ends red (crawl.yml fails on
+// the gate step), and loads are append-only, so a red run never costs a day of data.
 
 /** Below this many eligible titles a 0% rate is not evidence of anything. */
-export const MIN_FOLLOWER_COHORT = 10;
+export const MIN_CAPTURE_COHORT = 10;
+
+/** One guarded enrichment: what was attemptable, what arrived, and what silence costs. */
+export interface CaptureCohort {
+  /** Enrichment id, as it reads in the gate output — e.g. "followers". */
+  key: string;
+  /** Rows the crawler would have attempted this enrichment for (its own gating predicate). */
+  eligible: number;
+  /** Of those, rows that came back carrying a value (column IS NOT NULL). */
+  captured: number;
+  /** Sample floor below which 0% is not evidence. Defaults to {@link MIN_CAPTURE_COHORT}. */
+  minCohort?: number;
+  /** One line: what a silent 0% costs downstream, with the issue ref. Shown on failure. */
+  why: string;
+}
+
+export interface CaptureYieldResult {
+  ok: boolean;
+  failures: string[];
+  /** Per-enrichment `key captured/eligible (pct)`, reported whether or not it passed. */
+  lines: string[];
+}
 
 /**
- * Failure message when follower capture is degenerate, else null. Only asserts once the cohort
- * is big enough that 0% means "the source is rejecting us" rather than "few coming-soon titles
- * this run" — a CRAWL_LIMIT-capped run must never trip it. One captured value passes: the
- * velocity clock only needs the series alive.
+ * Assess every guarded enrichment in one pass. A cohort under its floor is REPORTED but never
+ * asserted — a CRAWL_LIMIT-capped run, or a day with few coming-soon titles, must not false-
+ * alarm. One captured value passes: these are trend series, so the bar is that the clock is
+ * running, not that every fetch landed. A softer band (warn under 50%) can follow once there is
+ * a baseline to calibrate against; 0% needs no calibration and is always wrong.
  */
-export function assessFollowerCapture(
-  eligible: number,
-  captured: number,
-  minCohort = MIN_FOLLOWER_COHORT,
-): string | null {
-  if (eligible < minCohort) return null;
-  if (captured > 0) return null;
-  return (
-    `follower capture 0% over ${eligible} eligible coming-soon titles (#54): the follower ` +
-    `source is being rejected upstream, so follower velocity cannot start. ` +
-    `Snapshots were still loaded — re-run \`npm run check:steam\` for the rest of the data-quality gate.`
-  );
+export function assessCaptureYield(cohorts: CaptureCohort[]): CaptureYieldResult {
+  const failures: string[] = [];
+  const lines: string[] = [];
+
+  for (const c of cohorts) {
+    const floor = c.minCohort ?? MIN_CAPTURE_COHORT;
+    const yieldPct = c.eligible ? c.captured / c.eligible : 0;
+    const belowFloor = c.eligible < floor;
+    lines.push(
+      `${c.key} ${c.captured}/${c.eligible} eligible` +
+        (c.eligible ? ` (${pct(yieldPct)})` : "") +
+        (belowFloor ? " — under the assertion floor, not asserted" : ""),
+    );
+    if (belowFloor || c.captured > 0) continue;
+    failures.push(
+      `${c.key} capture 0% over ${c.eligible} eligible rows: the source returned nothing ` +
+        `usable, so ${c.why} Snapshots were still loaded — this gate detects, it does not prevent.`,
+    );
+  }
+
+  return { ok: failures.length === 0, failures, lines };
 }
