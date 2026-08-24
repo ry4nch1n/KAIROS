@@ -664,8 +664,7 @@ describe("#108 getLoopFamilyMarket", () => {
     expect(covered.size).toBeGreaterThan(0);
 
     for (const r of m.rows) {
-      expect(r.supplyN).toBeGreaterThan(0);
-      expect(r.genres.length).toBeGreaterThan(0);
+      expect(r.supplyN > 0).toBe(r.genres.length > 0); // a Steam-only row carries neither (#67)
       expect(["rising", "steady", "cooling", "quiet"]).toContain(r.supplyTrend);
     }
 
@@ -677,5 +676,28 @@ describe("#108 getLoopFamilyMarket", () => {
 
     // A Steam-only family is uncovered on the browser platform.
     expect(m.uncovered).toContain("contained-systemic");
+  });
+
+  it("#67 sets Steam economics and a route lean beside the browser read", async () => {
+    const st = (pull: number | null, crowding = false) => ({ pull, crowding });
+    expect(q.marketRouteLean(2, false, st(0.5))).toBe("browser");
+    expect(q.marketRouteLean(0.5, false, st(2))).toBe("steam");
+    expect(q.marketRouteLean(1, false, st(1))).toBe("contested");
+    expect(q.marketRouteLean(1.3, true, st(1))).toBe("contested"); // crowding damps the lead away
+    expect(q.marketRouteLean(1, false, st(null))).toBe("browser"); // an absent surface IS the lean
+    expect(q.marketRouteLean(null, false, st(1))).toBe("steam");
+    expect(q.marketRouteLean(null, false, st(null))).toBeNull();
+
+    const m = await q.getLoopFamilyMarket(db, "all");
+    expect(m.rows.some((r) => r.steam)).toBe(true);
+    for (const r of m.rows) {
+      // No Steam coverage is null, NEVER a zero-economics row; no browser supply is a null
+      // appetite, and such a family is a row on Steam's strength alone rather than whitespace.
+      expect(r.steam === null || r.steam.games > 0).toBe(true);
+      expect(r.supplyN > 0).toBe(r.appetite != null);
+      expect(r.routeLean).toBe(r.steam ? (r.supplyN ? r.routeLean : "steam") : "browser");
+    }
+    // The single-surface read makes no cross-platform claim.
+    expect((await q.getLoopFamilyMarket(db, "steam")).rows.every((r) => !r.routeLean)).toBe(true);
   });
 });

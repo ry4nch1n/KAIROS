@@ -479,24 +479,35 @@ export async function getMarketGaps(db: Querier, platform: Platform): Promise<Ma
 // disambiguated by tag while a clean default (Idle, Cooking) is never yanked off by a minority tag.
 // Payload types live here (not shared/types.ts) to fit the file cap; additive, read defensively —
 // no contract bump (this CONSUMES the enum, it doesn't change it).
+/** A family's Steam side (#67). `null` = Steam holds no games in it; never a zero-economics row. */
+export interface LoopFamilySteam {
+  games: number; // released, non-AAA Steam games mapped to this family
+  medianPriceCents: number;
+  medianRevenuePerGame: number; // USD — owners bucket × price, the Comparables estimator
+  supplyTrend: SupplyTrend;
+}
 export interface LoopFamilyMarketRow {
   family: string; // a CONTRACT.pitch.loopFamilies value
-  supplyN: number; // distinct games (genre grain — no tag double-count)
-  appetite: number; // supply-weighted median votes/reviews
+  supplyN: number; // distinct games (genre grain — no tag double-count); 0 = Steam-only family
+  appetite: number | null; // supply-weighted median votes; null where the browser has no coverage
   supplyTrend: SupplyTrend;
   genres: string[]; // mapped genres that fed this family
+  steam: LoopFamilySteam | null;
+  routeLean: MarketRouteLean; // null on a single-surface read
 }
 export interface LoopFamilyMarket {
   platform: Platform;
   subtitle: string;
   rows: LoopFamilyMarketRow[]; // covered families, sorted by supply-weighted demand
-  uncovered: string[]; // loopFamilies values no mapped row hit
+  uncovered: string[]; // loopFamilies values NEITHER surface hit
 }
 export async function getLoopFamilyMarket(
   db: Querier,
   platform: Platform,
 ): Promise<LoopFamilyMarket> {
-  const [genreRows, pairRows, supply] = await Promise.all([
+  // A Steam-platform read has one surface: scoring Steam against itself would manufacture a lean.
+  const cross = platform !== "steam";
+  const [genreRows, pairRows, supply, steamEcon] = await Promise.all([
     // Per-genre spine: distinct games (supply) + median votes (demand).
     db.query(
       `SELECT ${canonSql("l.genre")} AS genre, count(DISTINCT g.id)::int AS supply_n,
@@ -518,25 +529,15 @@ export async function getLoopFamilyMarket(
        GROUP BY ${canonSql("l.genre")}, ${canonSql("t.name")}`,
     ),
     genreSupplyTrend(db, platform),
+    cross ? steamFamilyEconomics(db) : new Map<string, LoopFamilySteam>(),
   ]);
+  const byGenre = foldFamilies(genreRows, pairRows);
 
-  // Genre-level default per genre (null = the map makes no genre-level claim).
-  const genreDefault = new Map<string, string | null>();
-  for (const r of genreRows) genreDefault.set(r.genre, loopFamilyFor(r.genre));
-  // For genres with NO default, the family of their dominant mapped tag; a genre WITH one keeps it.
-  const bestPair = new Map<string, { family: string; n: number }>();
-  for (const r of pairRows) {
-    if (genreDefault.get(r.genre)) continue;
-    const fam = loopFamilyFor(r.genre, r.tag);
-    if (!fam) continue;
-    const cur = bestPair.get(r.genre);
-    if (!cur || num(r.pair_n) > cur.n) bestPair.set(r.genre, { family: fam, n: num(r.pair_n) });
-  }
   // acc.weighted = Σ appetite·supply → a supply-weighted family demand.
   type Acc = { supplyN: number; weighted: number; recent: number; prior: number; genres: string[] };
   const fams = new Map<string, Acc>();
   for (const r of genreRows) {
-    const family = genreDefault.get(r.genre) ?? bestPair.get(r.genre)?.family ?? null;
+    const family = byGenre.get(r.genre);
     if (!family) continue;
     const sup = num(r.supply_n);
     const acc = fams.get(family) ?? { supplyN: 0, weighted: 0, recent: 0, prior: 0, genres: [] };
@@ -548,22 +549,155 @@ export async function getLoopFamilyMarket(
     acc.genres.push(r.genre);
     fams.set(family, acc);
   }
+  // A family Steam covers but no browser genre reaches is a ROW, not whitespace — "nobody ships
+  // this in the browser" is the cross-platform finding, which no-coverage hid.
+  const blank = (): Acc => ({ supplyN: 0, weighted: 0, recent: 0, prior: 0, genres: [] });
+  for (const f of steamEcon.keys()) if (!fams.has(f)) fams.set(f, blank());
+
+  const appetiteOf = (a: Acc) => (a.supplyN ? Math.round(a.weighted / a.supplyN) : null);
+  const bMed = median([...fams.values()].map(appetiteOf).filter((v): v is number => v != null));
+  const sMed = median([...steamEcon.values()].map((s) => s.medianRevenuePerGame));
+  const pull = (v: number | null | undefined, m: number) => (v != null && m > 0 ? v / m : null);
 
   const rows = [...fams.entries()]
-    .map(([family, a]) => ({
-      family,
-      supplyN: a.supplyN,
-      appetite: a.supplyN ? Math.round(a.weighted / a.supplyN) : 0,
-      supplyTrend: classifySupply(a.recent, a.prior),
-      genres: a.genres.sort(),
-    }))
-    .sort((x, y) => y.appetite * y.supplyN - x.appetite * x.supplyN || y.supplyN - x.supplyN);
+    .map(([family, a]) => {
+      const steam = steamEcon.get(family) ?? null;
+      const appetite = appetiteOf(a);
+      const supplyTrend = classifySupply(a.recent, a.prior);
+      return {
+        family,
+        supplyN: a.supplyN,
+        appetite,
+        supplyTrend,
+        genres: a.genres.sort(),
+        steam,
+        routeLean: cross
+          ? marketRouteLean(pull(appetite, bMed), supplyTrend === "rising", {
+              pull: pull(steam?.medianRevenuePerGame, sMed),
+              crowding: steam?.supplyTrend === "rising",
+            })
+          : null,
+      };
+    })
+    .sort(
+      (x, y) =>
+        (y.appetite ?? 0) * y.supplyN - (x.appetite ?? 0) * x.supplyN ||
+        (y.steam?.games ?? 0) - (x.steam?.games ?? 0) ||
+        x.family.localeCompare(y.family),
+    );
 
-  // Contract families no mapped row reached — the whitespace signal.
+  // Contract families NEITHER surface reached — the whitespace signal.
   const covered = new Set(rows.map((r) => r.family));
   const uncovered = CONTRACT.pitch.loopFamilies.filter((f) => !covered.has(f));
   return { platform, subtitle: subtitleFor(platform), rows, uncovered };
 }
+
+// The map's own rule, shared by BOTH surfaces above (#67): joining them on families only means
+// anything if both were folded the same way. Genre-level default wins, else dominant mapped tag.
+function foldFamilies(
+  genreRows: { genre: string }[],
+  pairRows: { genre: string; tag: string; pair_n: unknown }[],
+): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const r of genreRows) {
+    const d = loopFamilyFor(r.genre);
+    if (d) out.set(r.genre, d);
+  }
+  const best = new Map<string, number>();
+  for (const r of pairRows) {
+    if (loopFamilyFor(r.genre)) continue; // a genre WITH a default keeps it
+    const fam = loopFamilyFor(r.genre, r.tag);
+    if (fam && num(r.pair_n) > (best.get(r.genre) ?? 0)) {
+      best.set(r.genre, num(r.pair_n));
+      out.set(r.genre, fam);
+    }
+  }
+  return out;
+}
+
+// Steam economics per loop family (#67). A family median cannot be averaged out of per-genre
+// medians, so the genre→family map is pushed INTO the query (unnest) and percentiles run over the
+// games. Cohort = the other Steam economics surfaces': released, non-AAA (inlined, not imported
+// from ./steam.ts: no module cycle).
+async function steamFamilyEconomics(db: Querier): Promise<Map<string, LoopFamilySteam>> {
+  const out = new Map<string, LoopFamilySteam>();
+  const from = `FROM v_latest l JOIN games g ON g.id = l.game_id JOIN sources src ON src.id = g.source_id`;
+  const [genreRows, pairRows, supply] = await Promise.all([
+    db.query(`SELECT DISTINCT ${canonSql("l.genre")} AS genre ${from}
+              WHERE g.is_live AND l.genre IS NOT NULL ${pf("steam")}`),
+    db.query(
+      `SELECT ${canonSql("l.genre")} AS genre, ${canonSql("t.name")} AS tag,
+              count(DISTINCT g.id)::int AS pair_n ${from}
+       JOIN game_tags gt ON gt.game_id = g.id JOIN tags t ON t.id = gt.tag_id
+       WHERE g.is_live AND l.genre IS NOT NULL ${pf("steam")}
+       GROUP BY ${canonSql("l.genre")}, ${canonSql("t.name")}`,
+    ),
+    genreSupplyTrend(db, "steam"),
+  ]);
+  const byGenre = foldFamilies(genreRows, pairRows);
+  if (!byGenre.size) return out;
+  const genres = [...byGenre.keys()];
+  const rows = await db.query(
+    `SELECT m.family AS family, count(*)::int AS games,
+            percentile_cont(0.5) WITHIN GROUP (ORDER BY l.price_cents)::float AS med_price,
+            percentile_cont(0.5) WITHIN GROUP (
+              ORDER BY coalesce(l.owners_est, 0) * coalesce(l.price_cents, 0))::float AS med_rev
+     ${from}
+     JOIN unnest($1::text[], $2::text[]) AS m(genre, family) ON m.genre = ${canonSql("l.genre")}
+     WHERE g.is_live AND l.genre IS NOT NULL ${pf("steam")}
+       AND (l.scale_tier IS NULL OR l.scale_tier <> 'aaa') AND l.coming_soon IS NOT TRUE
+     GROUP BY m.family`,
+    [genres, genres.map((g) => byGenre.get(g) as string)],
+  );
+  const flow = new Map<string, { recent: number; prior: number }>();
+  for (const [genre, family] of byGenre) {
+    const f = flow.get(family) ?? { recent: 0, prior: 0 };
+    f.recent += supply.get(genre)?.recent ?? 0;
+    f.prior += supply.get(genre)?.prior ?? 0;
+    flow.set(family, f);
+  }
+  for (const r of rows) {
+    const f = flow.get(r.family) ?? { recent: 0, prior: 0 };
+    out.set(r.family, {
+      games: num(r.games),
+      medianPriceCents: Math.round(num(r.med_price)),
+      medianRevenuePerGame: Math.round(num(r.med_rev) / 100),
+      supplyTrend: classifySupply(f.recent, f.prior),
+    });
+  }
+  return out;
+}
+
+/** The revenue shape a SEGMENT leans toward: portal-ad/catalogue, premium sale, or neither. */
+export type MarketRouteLean = "browser" | "steam" | "contested" | null;
+const LEAN_MARGIN = 1.25; // inside this ratio the surfaces are contested, not decided
+const CROWDING_DAMP = 0.8; // a flooding surface is worth less than its raw number claims
+
+/** Market-level route lean (#67), the market companion to the pitch-level compass (PR #66). A
+ *  pitch carries two co-equal fit SCORES; a market has no such pair, so each surface is scored
+ *  against its OWN cross-family median and only those relative strengths meet — units never mix. A
+ *  flooding surface is damped: a family can lead and still be the wrong door if everyone is already
+ *  walking through it. One surface absent IS the lean; both absent → null. */
+export function marketRouteLean(
+  bPull: number | null,
+  bCrowding: boolean,
+  steam: { pull: number | null; crowding: boolean },
+): MarketRouteLean {
+  const b = bPull == null ? null : bPull * (bCrowding ? CROWDING_DAMP : 1);
+  const s = steam.pull == null ? null : steam.pull * (steam.crowding ? CROWDING_DAMP : 1);
+  if (b == null && s == null) return null;
+  if (s == null) return "browser";
+  if (b == null) return "steam";
+  if (b > s * LEAN_MARGIN) return "browser";
+  if (s > b * LEAN_MARGIN) return "steam";
+  return "contested";
+}
+
+const median = (xs: number[]): number => {
+  const s = [...xs].sort((a, b) => a - b);
+  const m = s.length >> 1;
+  return !s.length ? 0 : s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+};
 
 export async function getGenres(db: Querier, platform: Platform): Promise<GenreRow[]> {
   const rows = await db.query(
