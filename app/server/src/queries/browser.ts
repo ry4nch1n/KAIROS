@@ -33,7 +33,10 @@ import {
   classifyTrajectory,
   classifySupply,
   genreSupplyTrend,
+  steerRow,
+  steeringLens,
 } from "./shared.ts";
+import { getBriefSteering } from "./library.ts";
 
 const fmtDate = (d: any) => new Date(d).toISOString().slice(5, 10); // "MM-DD"
 
@@ -472,8 +475,19 @@ export async function getHiddenGems(
   });
 }
 
-export async function getMarketGaps(db: Querier, platform: Platform): Promise<MarketGap[]> {
+/** How many gap rows the browser Radar shows. The cut is a display decision, not an analysis
+ *  one — the ranking below it still exists, and the steering lens reads it (#167/#142). */
+export const GAPS_TOP_N = 6;
+
+// Browser market gaps, FULL ranked candidate set — every genre × tag that cleared the supply
+// floor, steered and sorted but not cut. `getMarketGaps` is this list's top slice; the steering
+// lens needs the rest, because a market steering lifted can still land below the cut (#167).
+export async function rankMarketGaps(db: Querier, platform: Platform): Promise<MarketGap[]> {
   const supply = await genreSupplyTrend(db, platform);
+  // Standing flags add a visible score term BEFORE the sort and the top-N cut (#142), exactly as
+  // on the Steam side — steering can surface a market the raw score kept off the list. The flags
+  // are a global setting, so the same lens reshapes both reads. None set → no-op.
+  const { flags } = await getBriefSteering(db);
   const [rows, gex] = await Promise.all([
     db.query(
       `SELECT ${canonSql("l.genre")} AS genre, ${canonSql("t.name")} AS tag,
@@ -523,8 +537,13 @@ export async function getMarketGaps(db: Querier, platform: Platform): Promise<Ma
       examples: gex.get(`${r.genre} × ${r.tag}`) ?? [],
       supplyRising: supply.get(r.genre)?.trend === "rising",
     }))
-    .sort((a, b) => b.score - a.score)
-    .slice(0, 6);
+    .map((g) => steerRow(g, flags)) // standing flags re-score the ranking (#142)
+    .sort((a, b) => b.score - a.score);
+}
+
+// The displayed gap list — the ranked set's top slice.
+export async function getMarketGaps(db: Querier, platform: Platform): Promise<MarketGap[]> {
+  return (await rankMarketGaps(db, platform)).slice(0, GAPS_TOP_N);
 }
 
 // Loop-family market read (#108). Re-keys the SAME crawl aggregation onto the plan's loop families
@@ -1181,19 +1200,20 @@ async function getTagGlossary(
 }
 
 export async function getOverview(db: Querier, platform: Platform): Promise<Overview> {
-  const [gd, vol, gemRows, tags, heatmap, gaps, landscape, quadrant, pressure, settings] =
+  const [gd, vol, gemRows, tags, heatmap, gapsRanked, landscape, quadrant, pressure, settings] =
     await Promise.all([
       genreVotesByDate(db, platform),
       genreCounts(db, platform),
       gemBase(db, platform),
       getTagFrequency(db, platform),
       getFeatureHeatmap(db, platform),
-      getMarketGaps(db, platform),
+      rankMarketGaps(db, platform),
       getGenreLandscape(db, platform),
       getGenreQuadrant(db, platform),
       genreSupplyPressure(db, platform),
       getSettingFacets(db, platform),
     ]);
+  const gaps = gapsRanked.slice(0, GAPS_TOP_N);
   const scatter = await getScatter(db, platform, gemRows);
   const gems = await getHiddenGems(db, platform, gemRows);
   const momentum = await getGenreMomentum(db, platform, gd);
@@ -1221,6 +1241,10 @@ export async function getOverview(db: Querier, platform: Platform): Promise<Over
     scatter,
     heatmap,
     gaps,
+    // Read over the FULL ranked set with the cut passed in, so `applied` means "this flag found
+    // a market" and a match that landed below the cut is named with its rank instead of being
+    // reported as no match at all (#167) — the same wiring as getSteamOverview.
+    steering: steeringLens((await getBriefSteering(db)).flags, gapsRanked, GAPS_TOP_N),
     insights,
     landscape,
     quadrant,

@@ -131,7 +131,16 @@ export const CONTRACT = {
   //      and emits no gaps, and a slot is reported only once past due — never today or later,
   //      never before the first edition ever published. Additive: a reader that does not know
   //      the flag renders one extra row, and brief validation stays advisory either way.
-  version: 23,
+  // v24: the steering lens now also reshapes the BROWSER read (#142). `Overview.gaps` is steered
+  //      by the standing flags before its sort and top-6 cut, each lifted row carries `steering`,
+  //      and `Overview.steering` is the same `SteeringLens` the Steam side already emits — read
+  //      over the full ranked set with the cut passed in, so a match below the list is named with
+  //      its rank rather than reported as no match. Until now the flags reshaped Steam and merely
+  //      captioned the browser, so one setting produced two different verdicts about the same
+  //      interests. STEERING_WEIGHT is deliberately unchanged (0.5) — tuning it is the next
+  //      observation, now that both surfaces are steered and comparable. Additive, and inert with
+  //      no flags set: the browser ranking is then byte-identical to the unsteered one.
+  version: 24,
   pitch: {
     // v2: added visual-card fields — setting, artStyle, codeName, headerUrl, shotUrl.
     // v3: rating rework — scoreFields d1Fit/steamCeiling/buildCost → browserFit/steamFit/buildEase.

@@ -390,7 +390,7 @@ function OverviewView({
         </div>
         <div className="card">
           {head(I.gaps, "Top market gaps", "appetite × quality × supply")}
-          <GapList gaps={ov.gaps} onComparables={onComparables} />
+          <GapList gaps={ov.gaps} lens={ov.steering} onComparables={onComparables} />
         </div>
       </div>
       <div className="card">
@@ -541,17 +541,21 @@ function GapActions({
 
 function GapList({
   gaps,
+  lens,
   onComparables,
 }: {
   gaps: Overview["gaps"];
+  lens?: SteeringLens;
   onComparables?: (f: ComparablesFilter) => void;
 }) {
+  const note = steeringNote(lens);
   return (
     <div className="gaplist">
       <p className="gap-legend">
         opportunity = z(appetite: median votes/title) + z(quality ceiling: P90 rating) − z(supply:
         games)
       </p>
+      {note && <p className="gap-legend">{note}</p>}
       {gaps.map((g, i) => (
         <div className="gap" key={i}>
           <span className="rank num">{i + 1}</span>
@@ -569,6 +573,7 @@ function GapList({
                 supply rising
               </span>
             )}
+            <SteerChip s={g.steering} />
             <ScoreBreakdown c={g.components} />
           </div>
           <div className="gap-stats num">
@@ -2469,7 +2474,11 @@ export function Radar({
                   <>
                     <div className="card">
                       {head(I.gaps, "Market Gaps", "ranked by opportunity score")}
-                      <GapList gaps={ov.gaps} onComparables={jumpToComparables} />
+                      <GapList
+                        gaps={ov.gaps}
+                        lens={ov.steering}
+                        onComparables={jumpToComparables}
+                      />
                     </div>
                     <LoopFamilyMarketCard platform={platform} />
                   </>

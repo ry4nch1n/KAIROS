@@ -325,6 +325,7 @@ export interface MarketGap {
   // The z-score `score` is unchanged — this flags "the door is closing" without silently
   // re-ranking, so a high-score gap that's also crowding fast reads honestly.
   supplyRising: boolean;
+  steering?: SteeringMatch; // set only when a standing flag matched this market (#12b/#142)
 }
 
 export interface HeatCell {
@@ -404,7 +405,8 @@ export interface Overview {
   tags: TagFreq[];
   scatter: ScatterPoint[];
   heatmap: FeatureHeatmap;
-  gaps: MarketGap[];
+  gaps: MarketGap[]; // steered by the standing flags when any are set (#142)
+  steering?: SteeringLens; // what steering did to `gaps` — absent when no flags are set
   insights: Insight[];
   landscape: GenreLandscapePoint[];
   quadrant: QuadrantPoint[];
