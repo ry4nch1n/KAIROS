@@ -113,7 +113,16 @@ export const CONTRACT = {
   //      so every surface showing a band states its cohort. Additive; read defensively.
   //      Same commit: ESTIMATOR_DISAGREE_RATIO 3 → 2 (observed splits sit at 2.1–2.6× and never
   //      flagged), so more rows now carry `estimatorsDisagree` — a threshold change, not a shape one.
-  version: 21,
+  // v22: the market-level Route Lens gained a fourth lean state, `steam-unmapped`, and each row
+  //      now carries `steamGenres` (#179). A family whose Steam side is empty was emitting
+  //      `routeLean: "browser"` whether Steam held no such market or the curated genre→family map
+  //      simply had no key for it — an absent MEASUREMENT read identically to a measured absence,
+  //      and 2 of the 3 live rows were the former. `steam-unmapped` says so explicitly, so the
+  //      panel can no longer claim a lean it never measured; `steamGenres` (the Steam genres that
+  //      fed the row, the mirror of `genres` on the browser side) makes a wrong lean debuggable
+  //      from the payload. Same commit widened the map's key coverage. Additive: an existing
+  //      reader that does not know the new value renders no chip rather than a wrong one.
+  version: 22,
   pitch: {
     // v2: added visual-card fields — setting, artStyle, codeName, headerUrl, shotUrl.
     // v3: rating rework — scoreFields d1Fit/steamCeiling/buildCost → browserFit/steamFit/buildEase.

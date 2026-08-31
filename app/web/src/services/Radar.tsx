@@ -542,13 +542,14 @@ interface LoopFamilyMarketData {
     supplyN: number;
     appetite: number | null;
     supplyTrend: SupplyTrend;
+    steamGenres?: string[];
     steam?: {
       games: number;
       medianPriceCents: number;
       medianRevenuePerGame: number;
       supplyTrend: SupplyTrend;
     } | null;
-    routeLean?: "browser" | "steam" | "contested" | null;
+    routeLean?: "browser" | "steam" | "contested" | "steam-unmapped" | null;
   }[];
   uncovered: string[];
 }
@@ -557,6 +558,14 @@ const MARKET_LEAN: Record<string, [string, string, string]> = {
   browser: ["portal-ad lean", "route-23", "Browser demand leads; Steam economics don't."],
   steam: ["premium lean", "route-1", "Steam revenue per game leads — a premium sale."],
   contested: ["contested", "route-both", "Both surfaces read comparably strong."],
+  // #179: NOT a fourth lean — the absence of one. No live Steam genre maps into this family, so
+  // there is nothing to compare the browser side against; saying "portal-ad lean" here would be
+  // reporting a hole in the map as a market finding.
+  "steam-unmapped": [
+    "no Steam read",
+    "route-unmapped",
+    "No live Steam genre maps into this family, so the Steam side was never measured — this is a gap in the loop-family map, not evidence that Steam has no such market.",
+  ],
 };
 const LEAN_TIP =
   "Each surface is scored against its own cross-family median, then the two are compared; a surface whose supply is crowding is discounted, so a hot family with a closing door can't read as open.";
@@ -565,12 +574,24 @@ const Trend = ({ t }: { t: SupplyTrend }) => (
 );
 const LeanChip = ({ lean }: { lean?: string | null }) => {
   const m = lean ? MARKET_LEAN[lean] : null;
+  // The scoring tip only applies to a lean that was actually scored.
   return m ? (
-    <span className={"route-chip " + m[1]} title={m[2] + " " + LEAN_TIP}>
+    <span
+      className={"route-chip " + m[1]}
+      title={lean === "steam-unmapped" ? m[2] : m[2] + " " + LEAN_TIP}
+    >
       {m[0]}
     </span>
   ) : null;
 };
+/** Why a Steam cell is blank — or, when it isn't, which genres fed it. */
+const steamCellTip = (steam: unknown, steamGenres?: string[]) =>
+  steamGenres?.length
+    ? `Steam genres mapped into this family: ${steamGenres.join(", ")}`
+    : steam
+      ? undefined
+      : "No live Steam genre maps into this family — nothing was measured on the Steam side.";
+
 function LoopFamilyMarketCard({ platform }: { platform: Platform }) {
   const [data, setData] = useState<LoopFamilyMarketData | null>(null);
   useEffect(() => {
@@ -628,8 +649,11 @@ function LoopFamilyMarketCard({ platform }: { platform: Platform }) {
                     {SUPPLY_LABEL[r.supplyTrend] || r.supplyTrend}
                   </span>
                 </td>
-                {/* No Steam coverage prints "—", never a 0: absent is not "earns nothing". */}
-                <td className="r">{r.steam ? fmt(r.steam.games) : "—"}</td>
+                {/* No Steam coverage prints "—", never a 0: absent is not "earns nothing". The
+                    title says WHICH absence — unmapped, or mapped and genuinely empty (#179). */}
+                <td className="r" title={steamCellTip(r.steam, r.steamGenres)}>
+                  {r.steam ? fmt(r.steam.games) : "—"}
+                </td>
                 <td className="r">{r.steam ? proxy(r.steam.medianRevenuePerGame) : "—"}</td>
                 <td className="r">{r.steam ? money(r.steam.medianPriceCents) : "—"}</td>
                 <td>{r.steam ? <Trend t={r.steam.supplyTrend} /> : "—"}</td>

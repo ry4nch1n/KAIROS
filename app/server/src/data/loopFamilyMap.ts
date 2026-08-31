@@ -28,13 +28,43 @@ const GENRE: Record<string, LoopFamily> = {
   driving: "route-planning",
   automation: "automation-under-pressure",
   "tower defense": "wave-defense-prep",
+  // Coverage pass (#179). The representative set above matched only 5 LIVE radar genres, so the
+  // market read returned 3 of 9 families and two of those leaned "browser" off an unmapped Steam
+  // side. Every key below is a genre the crawlers actually return whose loop one family holds
+  // outright. What stays absent is deliberate and is the larger half of this pass: portal
+  // UMBRELLAS that name a shelf rather than a loop (Action, Arcade, Adventure, Casual, Skill,
+  // Brain, Multiplayer, New/Flash/Nitrome) and genres whose loop NO family holds (Sports,
+  // Fighting, Battle Royale, .io, Shooting, Card, Board, Word, Beauty, Trivia, Survival). An
+  // unmapped genre is a smaller error than a force-fit one — that is this file's whole discipline.
+  racing: "route-planning", // near-synonym of `driving`, which was already a key; the sharpest
+  car: "route-planning", //    instance of the gap — Racing led the week on votes/day and fed nothing
+  escape: "contained-systemic", // escape rooms: ONE closed space, solved by working its system
+  tycoon: "idle-tycoon", // the family names this loop outright
+  decoration: "cozy-craft", // arrange/decorate a space — cozy CREATION, the no-stakes make loop
+  restaurant: "cozy-craft", // the same serve-and-prep loop the `cooking` key already carries
 };
 
 // Genre × tag overrides — a sub-genre reading differently than its bare genre; [genre][tag],
 // consulted before the genre-level table. Where the tag axis earns its keep.
+//
+// Surface form matters here the way SYNONYMS describes below, and for the same mechanical reason:
+// `normalizeKey` lowercases and collapses whitespace but does NOT touch hyphens, so a hyphenated
+// key can only ever match a hyphenated tag. Browser portals emit slugs ("tower-defense"); Steam
+// emits prose ("Tower Defense", "Looter Shooter"). Both forms are therefore listed (#179) — one
+// tag vocabulary, spelled the two ways the two crawlers actually deliver it.
+//
+// Not widened here: `action`, the largest genre on BOTH surfaces (Steam 1,026 / browser 708). The
+// fold gives a genre to exactly ONE family, so a tag key under a grab-bag genre re-attributes the
+// whole genre's supply and economics to that family. Under `strategy` (a genre whose mapped tag is
+// its loop) that is the intended disambiguation; under `action` it would be a fabrication.
 const GENRE_TAG: Record<string, Record<string, LoopFamily>> = {
-  strategy: { "tower-defense": "wave-defense-prep" },
-  shooter: { extraction: "extraction-lite", "looter-shooter": "extraction-lite" },
+  strategy: { "tower-defense": "wave-defense-prep", "tower defense": "wave-defense-prep" },
+  shooter: {
+    extraction: "extraction-lite",
+    "looter-shooter": "extraction-lite",
+    "looter shooter": "extraction-lite",
+    "extraction shooter": "extraction-lite",
+  },
   action: { "survivor-like": "minimal-input-survivors", deckbuilding: "synergy-builder" },
   simulation: { automation: "automation-under-pressure", sandbox: "contained-systemic" },
 };
