@@ -14,11 +14,79 @@ import { num } from "./shared.ts";
 import { buildDemandTracker, fetchSteamTaxonomy } from "./briefFamily.ts";
 
 // ── Brief ──
-export async function getBriefEditions(db: Querier): Promise<BriefEditionMeta[]> {
+
+// Cadence inference (#180). Nothing records a missed edition, so the only way to tell
+// "no edition on Thursday" from "quiet week" is to derive the expected cadence from what
+// the history did and diff the slots against it.
+const CADENCE_WEEKS = 6; // trailing window, complete Mon-start weeks only
+const CADENCE_HIT_RATIO = 0.6; // a weekday is cadence if it published in >=60% of them
+const DAY_MS = 86_400_000;
+const WEEKDAY_KEYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
+
+const utcDay = (iso: string) => new Date(`${iso}T00:00:00Z`);
+const isoOf = (d: Date) => d.toISOString().slice(0, 10);
+const shiftDays = (iso: string, n: number) => isoOf(new Date(utcDay(iso).getTime() + n * DAY_MS));
+// Same lowercase 3-letter form the `weekday` column already stores — derived one way only,
+// so a gap row and a published row can never disagree about what day they name.
+const weekdayOf = (iso: string) => WEEKDAY_KEYS[utcDay(iso).getUTCDay()];
+const mondayOf = (iso: string) => shiftDays(iso, -((utcDay(iso).getUTCDay() + 6) % 7));
+
+const gapRow = (date: string): BriefEditionMeta => ({
+  id: 0,
+  editionDate: date,
+  weekday: weekdayOf(date),
+  briefType: "",
+  sourceCount: 0,
+  missing: true,
+});
+
+// Slots the trailing cadence expected and that never published, newest first.
+export function deriveBriefGaps(
+  editions: BriefEditionMeta[],
+  now: Date = new Date(),
+): BriefEditionMeta[] {
+  const today = isoOf(now);
+  const dates = [...new Set(editions.filter((e) => !e.missing).map((e) => e.editionDate))].sort();
+  if (!dates.length) return [];
+
+  // Window = the CADENCE_WEEKS complete weeks before the current (partial) one. Too short a
+  // history cannot establish a cadence — say nothing rather than invent gaps.
+  const windowStart = shiftDays(mondayOf(today), -7 * CADENCE_WEEKS);
+  const firstEdition = dates[0];
+  if (firstEdition > windowStart) return [];
+
+  const published = new Set(dates);
+  const weeks: string[] = [];
+  for (let i = 0; i < CADENCE_WEEKS; i++) weeks.push(shiftDays(windowStart, 7 * i));
+
+  const hits = new Map<string, number>();
+  for (const monday of weeks)
+    for (let d = 0; d < 7; d++) {
+      const day = shiftDays(monday, d);
+      if (published.has(day)) hits.set(weekdayOf(day), (hits.get(weekdayOf(day)) ?? 0) + 1);
+    }
+  const cadence = WEEKDAY_KEYS.filter(
+    (k) => (hits.get(k) ?? 0) / CADENCE_WEEKS >= CADENCE_HIT_RATIO,
+  );
+  if (!cadence.length) return [];
+
+  // Scan the window plus the current partial week so a miss surfaces on its first slot —
+  // but only past-due ones, never today or the future, never before the first edition.
+  const gaps: BriefEditionMeta[] = [];
+  for (const monday of [...weeks, shiftDays(windowStart, 7 * CADENCE_WEEKS)])
+    for (let d = 0; d < 7; d++) {
+      const day = shiftDays(monday, d);
+      if (day < firstEdition || day >= today) continue;
+      if (cadence.includes(weekdayOf(day)) && !published.has(day)) gaps.push(gapRow(day));
+    }
+  return gaps.reverse();
+}
+
+export async function getBriefEditions(db: Querier, now?: Date): Promise<BriefEditionMeta[]> {
   const rows = await db.query(
     `SELECT id, edition_date, weekday, brief_type, source_count FROM brief_editions ORDER BY edition_date DESC`,
   );
-  return rows.map((r) => ({
+  const editions: BriefEditionMeta[] = rows.map((r) => ({
     id: num(r.id),
     editionDate:
       typeof r.edition_date === "string"
@@ -28,6 +96,11 @@ export async function getBriefEditions(db: Querier): Promise<BriefEditionMeta[]>
     briefType: r.brief_type,
     sourceCount: num(r.source_count),
   }));
+  // Gaps ride in the same list, in date order, so every reader of the edition list sees the
+  // misses without asking a second question.
+  return [...editions, ...deriveBriefGaps(editions, now)].sort((a, b) =>
+    a.editionDate < b.editionDate ? 1 : a.editionDate > b.editionDate ? -1 : 0,
+  );
 }
 
 export interface PublishInput {

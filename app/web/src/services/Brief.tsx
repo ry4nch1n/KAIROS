@@ -180,7 +180,9 @@ export function Brief({ hidden, onGoto }: { hidden: boolean; onGoto?: (svc: Serv
     api.briefEditions().then((l) => {
       setList(l);
       setLoaded(true);
-      if (l.length) setSel(l[0].editionDate);
+      // A gap row is not selectable — the first REAL edition is what opens.
+      const first = l.find((e) => !e.missing);
+      if (first) setSel(first.editionDate);
     });
     api.briefSteering().then(setSteering, () => setSteering(null));
   }, []);
@@ -197,8 +199,38 @@ export function Brief({ hidden, onGoto }: { hidden: boolean; onGoto?: (svc: Serv
   const now = new Date();
   const thisWeek = list.filter((e) => isSameWeek(e.editionDate, now));
   const earlier = list.filter((e) => !isSameWeek(e.editionDate, now));
+  const gaps = list.filter((e) => e.missing);
+  const last = list.find((e) => !e.missing);
+  const daysAgo = last
+    ? Math.max(
+        0,
+        Math.round(
+          (Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()) -
+            new Date(`${last.editionDate}T00:00:00Z`).getTime()) /
+            86_400_000,
+        ),
+      )
+    : null;
+  // The header states the gap in words — a greyed row is easy to skim past, and one missed
+  // slot is the threshold, not several (#180).
+  const headline =
+    daysAgo === null
+      ? null
+      : `last edition ${daysAgo === 0 ? "today" : daysAgo === 1 ? "1 day ago" : `${daysAgo} days ago`}` +
+        (gaps.length
+          ? ` · ${gaps.length} expected edition${gaps.length === 1 ? "" : "s"} missing`
+          : "");
   const editionRow = (e: BriefEditionMeta) => {
     const di = dow(e.editionDate);
+    // A missed slot is not a row you can open — it is the absence of one. Static, greyed
+    // text, in its own date order, so the list stops being a record of only what succeeded.
+    if (e.missing)
+      return (
+        <div className="edition gap" key={`gap-${e.editionDate}`}>
+          <span>{fmt(e.editionDate)}</span>
+          <span className="gap-note">no edition · {DAYS_SHORT[di]}</span>
+        </div>
+      );
     return (
       <button
         type="button"
@@ -230,6 +262,9 @@ export function Brief({ hidden, onGoto }: { hidden: boolean; onGoto?: (svc: Serv
           <b>News Brief</b>
           <span>indie + gaming</span>
         </div>
+        {headline && (
+          <div className={"cadence-note" + (gaps.length ? " alert" : "")}>{headline}</div>
+        )}
         {thisWeek.length > 0 && <div className="nav-label">This week</div>}
         {thisWeek.map(editionRow)}
         {earlier.length > 0 && <div className="nav-label">Earlier</div>}
