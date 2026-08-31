@@ -862,6 +862,9 @@ textarea {
 .gap {
   display: flex;
   align-items: center;
+  /* The row gained cross-link buttons (#69). Without wrapping, a 375px screen pushes the
+     last item past the viewport edge — the page must never scroll sideways. */
+  flex-wrap: wrap;
   gap: var(--sp-3);
   padding: var(--sp-3) var(--sp-3);
   background: var(--bg-1);
@@ -899,6 +902,23 @@ textarea {
 }
 .gap-stats b {
   color: var(--text);
+}
+/* The gap row's cross-link strip (#69). */
+.gap-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1);
+  margin-left: var(--sp-2);
+}
+/* Says which market a jumped-in comparables set is narrowed to, and offers the way out. */
+.filter-chip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: var(--fs-1);
+  color: var(--text-3);
+  margin: var(--sp-1) 0 var(--sp-2);
 }
 .gap-legend {
   font-size: var(--fs-1);
