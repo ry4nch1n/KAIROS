@@ -308,7 +308,13 @@ function QuadrantCard({
 }
 
 /* ───────────── views ───────────── */
-function OverviewView({ ov }: { ov: Overview }) {
+function OverviewView({
+  ov,
+  onComparables,
+}: {
+  ov: Overview;
+  onComparables?: (f: ComparablesFilter) => void;
+}) {
   return (
     <>
       <ReadStrip lines={ov.read} />
@@ -384,7 +390,7 @@ function OverviewView({ ov }: { ov: Overview }) {
         </div>
         <div className="card">
           {head(I.gaps, "Top market gaps", "appetite × quality × supply")}
-          <GapList gaps={ov.gaps} />
+          <GapList gaps={ov.gaps} onComparables={onComparables} />
         </div>
       </div>
       <div className="card">
@@ -487,7 +493,59 @@ function SteerChip({ s }: { s?: SteeringMatch }) {
   );
 }
 
-function GapList({ gaps }: { gaps: Overview["gaps"] }) {
+// A gap → comparables jump (#69). Comparables carry a genre but no tags, so the genre is
+// the only field a row can actually be matched on; the tag rides along for the chip's label
+// so the filter says which market it came from rather than a bare genre. Substring either
+// way, because a browser portal's category and a Steam genre agree in wording more often
+// than they agree exactly.
+export interface ComparablesFilter {
+  genre: string;
+  tag?: string;
+  from: "browser" | "steam";
+}
+export function matchesComparablesFilter(c: SteamComparable, f: ComparablesFilter | null): boolean {
+  if (!f) return true;
+  const a = (c.genre ?? "").trim().toLowerCase();
+  const b = f.genre.trim().toLowerCase();
+  if (!a || !b) return false;
+  return a === b || a.includes(b) || b.includes(a);
+}
+
+const COMPARABLES_TIP =
+  "Open the indie comparables for this market's genre — the realistic peer set that sets its ceiling. Comparables are Steam-only, so this also switches the platform.";
+
+// The cross-link a gap row earns. Its own wrapping strip rather than a bare button, because
+// the row is a flex line and a 375px screen has to stack this under the stats, not push it off
+// the side — and because the sibling "copy pitch seed" affordance lands here next (#69).
+function GapActions({
+  filter,
+  onComparables,
+}: {
+  filter: ComparablesFilter;
+  onComparables?: (f: ComparablesFilter) => void;
+}) {
+  if (!onComparables) return null;
+  return (
+    <div className="gap-actions">
+      <button
+        type="button"
+        className="project-btn"
+        title={COMPARABLES_TIP}
+        onClick={() => onComparables(filter)}
+      >
+        → comparables
+      </button>
+    </div>
+  );
+}
+
+function GapList({
+  gaps,
+  onComparables,
+}: {
+  gaps: Overview["gaps"];
+  onComparables?: (f: ComparablesFilter) => void;
+}) {
   return (
     <div className="gaplist">
       <p className="gap-legend">
@@ -524,6 +582,10 @@ function GapList({ gaps }: { gaps: Overview["gaps"] }) {
               top rating <b>{g.qualityCeil.toFixed(2)}</b>
             </span>
           </div>
+          <GapActions
+            filter={{ genre: g.genre, tag: g.tag, from: "browser" }}
+            onComparables={onComparables}
+          />
           {g.examples?.length ? (
             <div className="gap-examples num">e.g. {g.examples.join(" · ")}</div>
           ) : null}
@@ -1191,7 +1253,15 @@ function EconTable({
   );
 }
 
-function OppList({ gaps, lens }: { gaps: SteamGap[]; lens?: SteeringLens }) {
+function OppList({
+  gaps,
+  lens,
+  onComparables,
+}: {
+  gaps: SteamGap[];
+  lens?: SteeringLens;
+  onComparables?: (f: ComparablesFilter) => void;
+}) {
   const note = steeringNote(lens);
   if (!gaps.length)
     return (
@@ -1240,6 +1310,10 @@ function OppList({ gaps, lens }: { gaps: SteamGap[]; lens?: SteeringLens }) {
               median <b>{money(g.medianPriceCents)}</b>
             </span>
           </div>
+          <GapActions
+            filter={{ genre: g.genre, tag: g.tag, from: "steam" }}
+            onComparables={onComparables}
+          />
           {g.examples?.length ? (
             <div className="gap-examples num">e.g. {g.examples.join(" · ")}</div>
           ) : null}
@@ -1649,13 +1723,20 @@ function ComparablesTable({
 function ComparablesCard({
   rows,
   onProject,
+  filter,
+  onClearFilter,
 }: {
   rows: SteamComparable[];
   onProject?: (seed: RevenueSeed) => void;
+  filter?: ComparablesFilter | null;
+  onClearFilter?: () => void;
 }) {
   const [cohort, setCohort] = useState<"all" | "solo">("all");
-  const shown = cohort === "solo" ? rows.filter(isSoloReachable) : rows;
-  const soloN = rows.filter(isSoloReachable).length;
+  // A jump in from a gap row narrows the set BEFORE the cohort toggle does, so the toggle's
+  // counts describe the market you arrived on rather than the whole catalogue.
+  const inMarket = rows.filter((r) => matchesComparablesFilter(r, filter ?? null));
+  const shown = cohort === "solo" ? inMarket.filter(isSoloReachable) : inMarket;
+  const soloN = inMarket.filter(isSoloReachable).length;
   return (
     <div className="card">
       <h2>
@@ -1668,7 +1749,7 @@ function ComparablesCard({
             aria-pressed={cohort === "all"}
             onClick={() => setCohort("all")}
           >
-            All ({rows.length})
+            All ({inMarket.length})
           </button>
           <button
             className={"seg-btn" + (cohort === "solo" ? " active" : "")}
@@ -1680,6 +1761,18 @@ function ComparablesCard({
           </button>
         </span>
       </h2>
+      {filter && (
+        <p className="filter-chip">
+          <span>
+            showing <b>{filter.genre}</b>
+            {filter.tag ? ` · ${filter.tag}` : ""} — matched on genre
+            {filter.from === "browser" ? ", carried over from a browser market gap" : ""}
+          </span>
+          <button type="button" className="project-btn" onClick={() => onClearFilter?.()}>
+            clear filter
+          </button>
+        </p>
+      )}
       {cohort === "solo" && (
         <p className="view-head">
           Studios a <b>1–2 or 3–10 person</b> team could realistically match, by researched
@@ -1688,6 +1781,11 @@ function ComparablesCard({
       )}
       {shown.length ? (
         <ComparablesTable rows={shown} onProject={onProject} />
+      ) : filter && !inMarket.length ? (
+        <p className="view-head">
+          No comparables in the current set match <b>{filter.genre}</b>. The peer set rolls by
+          recency, so a thin genre can simply have nothing recent — clear the filter to see it all.
+        </p>
       ) : (
         <p className="view-head">No solo-reachable comparables tagged in the current set yet.</p>
       )}
@@ -1999,10 +2097,16 @@ function SteamView({
   data,
   section,
   onProject,
+  filter,
+  onClearFilter,
+  onComparables,
 }: {
   data: SteamOverview;
   section: SteamSection;
   onProject?: (seed: RevenueSeed) => void;
+  filter?: ComparablesFilter | null;
+  onClearFilter?: () => void;
+  onComparables?: (f: ComparablesFilter) => void;
 }) {
   // Applies to every section, not just the overview: with no catalog, Comparables,
   // Pricing and Market Gaps are equally empty, and each would render its own
@@ -2057,7 +2161,14 @@ function SteamView({
       </>
     );
   if (section === "comparables")
-    return <ComparablesCard rows={data.comparables} onProject={onProject} />;
+    return (
+      <ComparablesCard
+        rows={data.comparables}
+        onProject={onProject}
+        filter={filter}
+        onClearFilter={onClearFilter}
+      />
+    );
   if (section === "opportunity")
     return (
       <div className="card">
@@ -2066,7 +2177,7 @@ function SteamView({
           "Opportunity — what to build next",
           "indie genre × tag: high demand, low supply, monetizable",
         )}
-        <OppList gaps={data.opportunity} lens={data.steering} />
+        <OppList gaps={data.opportunity} lens={data.steering} onComparables={onComparables} />
       </div>
     );
   // overview (default) — KPIs + tier distribution + highlights
@@ -2090,7 +2201,11 @@ function SteamView({
         </div>
         <div className="card">
           {head(I.gaps, "Top opportunities", "indie genre × tag")}
-          <OppList gaps={data.opportunity.slice(0, 4)} lens={data.steering} />
+          <OppList
+            gaps={data.opportunity.slice(0, 4)}
+            lens={data.steering}
+            onComparables={onComparables}
+          />
         </div>
       </div>
     </>
@@ -2119,6 +2234,17 @@ export function Radar({
   const [platform, setPlatform] = useState<Platform>(DEFAULT_PLATFORM);
   const [view, setView] = useState<View>("overview");
   const [steamView, setSteamView] = useState<SteamSection>("overview");
+  // The gap → comparables hand-off (#69), the sibling of the Radar → Revenue seed one level
+  // up. Both ends live inside Radar (Market Gaps is a section, Comparables a Steam section),
+  // so the state lifts to this panel rather than the shell. Comparables exist only on Steam,
+  // so a browser gap's jump switches the platform too.
+  const [compFilter, setCompFilter] = useState<ComparablesFilter | null>(null);
+  const jumpToComparables = (f: ComparablesFilter) => {
+    setCompFilter(f);
+    setPlatform("steam");
+    setSteamView("comparables");
+    onSection?.("comparables");
+  };
   // The URL is the source of truth for which section is fronted: a deep link, a
   // hand-edited fragment and Back all arrive here. The panel validates the slug
   // against its own vocabulary and ignores anything it does not own.
@@ -2131,6 +2257,11 @@ export function Radar({
       setView("overview");
     }
   }, [section, hidden]);
+  // A jump-in filter belongs to that visit: leaving Comparables drops it, so arriving later
+  // from the nav shows the whole peer set rather than a silently narrowed one.
+  useEffect(() => {
+    if (steamView !== "comparables") setCompFilter(null);
+  }, [steamView]);
   const [ov, setOv] = useState<Overview | null>(null);
   const [steam, setSteam] = useState<SteamOverview | null>(null);
   const [extra, setExtra] = useState<any>(null);
@@ -2311,13 +2442,21 @@ export function Radar({
           {err != null && <LoadFailure error={err} onRetry={() => setReloadNonce((n) => n + 1)} />}
           {isSteam ? (
             steam ? (
-              <SteamView data={steam} section={steamView} onProject={onProject} />
+              <SteamView
+                data={steam}
+                section={steamView}
+                onProject={onProject}
+                filter={compFilter}
+                onClearFilter={() => setCompFilter(null)}
+                onComparables={jumpToComparables}
+              />
             ) : (
               <Skel />
             )
           ) : (
             <>
-              {view === "overview" && (ov ? <OverviewView ov={ov} /> : <Skel />)}
+              {view === "overview" &&
+                (ov ? <OverviewView ov={ov} onComparables={jumpToComparables} /> : <Skel />)}
               {view === "genres" && (extra ? <GenresView rows={extra} /> : <Skel />)}
               {view === "tags" && (ov ? <TagsView ov={ov} /> : <Skel />)}
               {view === "developers" &&
@@ -2330,7 +2469,7 @@ export function Radar({
                   <>
                     <div className="card">
                       {head(I.gaps, "Market Gaps", "ranked by opportunity score")}
-                      <GapList gaps={ov.gaps} />
+                      <GapList gaps={ov.gaps} onComparables={jumpToComparables} />
                     </div>
                     <LoopFamilyMarketCard platform={platform} />
                   </>

@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { ComparableTeamSize, SteamComparable } from "shared";
-import { hasTeamCoverage, TEAM_COVERAGE_MIN } from "./Radar.tsx";
+import {
+  type ComparablesFilter,
+  hasTeamCoverage,
+  matchesComparablesFilter,
+  TEAM_COVERAGE_MIN,
+} from "./Radar.tsx";
 
 const size: ComparableTeamSize = {
   bucket: "small",
@@ -49,5 +54,28 @@ describe("hasTeamCoverage", () => {
 
   it("shows the column when every visible row resolves (the Solo-reachable cohort)", () => {
     expect(hasTeamCoverage(rows(6, 6))).toBe(true);
+  });
+});
+
+// The gap → comparables jump (#69): what the pre-filter admits.
+const withGenre = (genre: string): SteamComparable => ({ ...comp(false), genre });
+const f = (genre: string): ComparablesFilter => ({ genre, from: "steam" });
+
+describe("matchesComparablesFilter", () => {
+  it("admits every row when no jump set a filter", () => {
+    expect(matchesComparablesFilter(withGenre("Action"), null)).toBe(true);
+  });
+
+  it("matches the gap genre, case- and space-insensitively", () => {
+    expect(matchesComparablesFilter(withGenre("Simulation"), f(" simulation "))).toBe(true);
+    expect(matchesComparablesFilter(withGenre("Action"), f("Simulation"))).toBe(false);
+  });
+
+  it("matches either way round, so a browser category still lands on a Steam genre", () => {
+    expect(matchesComparablesFilter(withGenre("Casual, Puzzle"), f("Puzzle"))).toBe(true);
+  });
+
+  it("admits nothing on a row with no genre — a blank is not a match", () => {
+    expect(matchesComparablesFilter(withGenre(""), f("Puzzle"))).toBe(false);
   });
 });
