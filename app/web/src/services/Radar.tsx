@@ -236,6 +236,10 @@ const TRAJ_LABEL: Record<string, string> = {
   decaying: "▼ decaying",
   new: "· new",
 };
+// Same trajectories, read on an OLD cohort (#176). "new" here means "too few snapshots to
+// judge", not "recently released" — hidden gems are drawn from the whole live catalog, so
+// borrowing the New-Releases wording would assert an age the data doesn't carry.
+const GEM_TRAJ_LABEL: Record<string, string> = { ...TRAJ_LABEL, new: "· no series yet" };
 // Supply-side momentum (B2): new-entrant flow. "rising" = crowding (a warning, so it reads
 // hot/amber, opposite of demand where rising is good); "quiet" = open lane.
 const SUPPLY_LABEL: Record<string, string> = {
@@ -868,7 +872,11 @@ function GemsView({ ov, rows }: { ov: Overview; rows: HiddenGem[] | null }) {
         <EChart option={scatterOption(ov.scatter)} style={{ minHeight: 320 }} />
       </div>
       <div className="card">
-        {head(I.gems, "Hidden gems", rows ? `${rows.length} found` : "…")}
+        {head(
+          I.gems,
+          "Quality discovery missed",
+          rows ? `${rows.length} found · well-rated, barely seen` : "…",
+        )}
         {!rows ? (
           <div className="skeleton" style={{ height: 200 }} />
         ) : (
@@ -879,6 +887,18 @@ function GemsView({ ov, rows }: { ov: Overview; rows: HiddenGem[] | null }) {
                 <th>Genre</th>
                 <th className="r">Rating</th>
                 <th className="r">Votes</th>
+                <th className="r">
+                  Tracked
+                  <Tip text="Days since KAIROS first crawled this title — discovery age, NOT a release date (browser portals don't publish one). A title seen last month and one seen two years ago mean opposite things at the same rating." />
+                </th>
+                <th className="r">
+                  Votes/day
+                  <Tip text="Votes gained per day over the tracked window — separates a game being found late from one that stopped being found." />
+                </th>
+                <th>
+                  Trend
+                  <Tip text="Later-half momentum vs earlier-half: rising / plateau / decaying. Flat means quality alone is not pulling players in." />
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -890,6 +910,13 @@ function GemsView({ ov, rows }: { ov: Overview; rows: HiddenGem[] | null }) {
                     {r.rating.toFixed(2)}
                   </td>
                   <td className="r">{fmt(r.votes)}</td>
+                  <td className="r">{r.daysTracked > 0 ? r.daysTracked + "d" : "<1d"}</td>
+                  <td className="r">{r.votesPerDay > 0 ? "+" + fmt(r.votesPerDay) : "—"}</td>
+                  <td>
+                    <span className={"traj traj-" + r.trajectory}>
+                      {GEM_TRAJ_LABEL[r.trajectory] || r.trajectory}
+                    </span>
+                  </td>
                 </tr>
               ))}
             </tbody>

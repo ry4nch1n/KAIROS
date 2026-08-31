@@ -283,6 +283,13 @@ export interface HiddenGem {
   rating: number;
   votes: number;
   genre: string;
+  // Discovery annotations (#176). High rating × low votes alone cannot tell "under-discovered"
+  // from "shipped, nobody found it, stalled years ago" — these two axes separate them.
+  // `daysTracked` = days since KAIROS first saw the title (crawl discovery, NOT a release date);
+  // `votesPerDay`/`trajectory` = the same age-adjusted momentum New Releases uses.
+  daysTracked: number;
+  votesPerDay: number;
+  trajectory: Trajectory;
 }
 
 export interface MarketGap {
