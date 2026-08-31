@@ -110,7 +110,7 @@ Added 2026-06-30. The primary Phase 2 goal: ingest PC Steam data as a new `'stea
 
 **Mechanism.** `assessSteamDataQuality` (pure, unit-tested — see DQ) encodes the invariants; `server/scripts/check-steam-data.ts` runs them against the live DB plus golden-appid spot-checks and exits non-zero on failure. Wired as the **final step of the daily crawl** (`crawl.yml`) so a degenerate crawl turns the run **red** instead of looking green. Run locally with `npm run check:steam`.
 
-F1–F4 are measured over the **freshest crawl cohort** (games whose latest snapshot is from the most recent crawl day), not the whole append-only DB — legacy rows keep null dates a single crawl can't fix, so all-time measurement would false-fail forever. F5 is the exception: the actual queryable UI output over all live Steam games.
+F1–F4 are measured over the **freshest crawl cohort** (games whose latest snapshot is from the most recent crawl day), not the whole append-only DB — legacy rows keep null dates a single crawl can't fix, so all-time measurement would false-fail forever. That cohort is further scoped to **released titles** (the same `RELEASED_ONLY` predicate the analytics use): the crawl seeds Steam's upcoming shelf, and an unreleased title's honest null `release_date` and null `scale_tier` would otherwise dilute F2 and pad F4 with rows that can't be all-AAA. Unreleased titles are reported as their own count. F5 is the exception: the actual queryable UI output over all live Steam games.
 
 | # | Invariant | Fails when | Status |
 |---|---|---|---|
