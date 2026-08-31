@@ -102,8 +102,9 @@ export async function loadGames(
       const before = await db.query(
         `INSERT INTO game_snapshots(game_id, crawl_id, captured_at, rating, votes, plays, featured, genre,
            price_cents, discount_pct, owners_est, ccu, median_playtime_min, metacritic, scale_tier,
-           ai_disclosure, ai_disclosure_note, homepage_position, trending, followers, coming_soon)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
+           ai_disclosure, ai_disclosure_note, homepage_position, trending, followers, coming_soon,
+           language_count, has_simplified_chinese, store_features)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24::text[])
          ON CONFLICT (game_id, crawl_id) DO NOTHING RETURNING id`,
         [
           gameId,
@@ -127,6 +128,11 @@ export async function loadGames(
           r.trending ?? null,
           r.followers ?? null,
           r.comingSoon ?? null,
+          r.languageCount ?? null,
+          r.hasSimplifiedChinese ?? null,
+          // Copy, so the driver can never hold a reference into the parsed record; an empty
+          // array must survive as an empty array (measured "none"), never collapse to NULL.
+          Array.isArray(r.storeFeatures) ? [...r.storeFeatures] : null,
         ],
       );
       if (before.length) inserted++;

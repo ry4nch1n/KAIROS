@@ -73,6 +73,9 @@ erDiagram
     text ai_disclosure_note
     bigint followers
     boolean coming_soon
+    int language_count
+    boolean has_simplified_chinese
+    text store_features
   }
   tags {
     serial id
@@ -202,6 +205,9 @@ erDiagram
 | `ai_disclosure_note` | `TEXT` |  |
 | `followers` | `BIGINT` |  |
 | `coming_soon` | `BOOLEAN` |  |
+| `language_count` | `INT` |  |
+| `has_simplified_chinese` | `BOOLEAN` |  |
+| `store_features` | `TEXT` |  |
 
 ### `tags`
 
