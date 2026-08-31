@@ -277,3 +277,92 @@ describe("GET /api/steam steering lens is wired to the full ranking (#167)", () 
     expect(ov.steering!.unlisted![0]).toMatchObject({ label: "Puzzle × Deckbuilding", rank: 10 });
   });
 });
+
+// #142 — the same standing flags now reshape the BROWSER read too. Until this landed, one setting
+// produced two verdicts: Steam's ranking moved, `Overview.gaps` merely carried a caption. The
+// tests below are the browser mirror of the Steam ones above, and the FIRST is the load-bearing
+// one: steering that is switched off must leave the ranking exactly as the market data computed it.
+describe("browser market gaps are steered by the standing flags (#142)", () => {
+  const CG = "https://www.crazygames.com";
+  const bg = (id: string, genre: string, tag: string, votes: number, rating: number): RawGame => ({
+    url: `${CG}/game/${id}`,
+    title: `Game ${id}`,
+    thumbnailUrl: null,
+    developer: "Dev",
+    description: null,
+    engine: null,
+    orientation: null,
+    mobile: false,
+    genre,
+    tags: [tag],
+    rating,
+    votes,
+    featured: false,
+    releaseDate: null,
+    plays: votes * 10,
+    ownersEst: null,
+    priceCents: null,
+    discountPct: null,
+    ccu: null,
+    medianPlaytimeMin: null,
+    metacritic: null,
+    scaleTier: null,
+    sourceGameId: id,
+  });
+
+  // Ten markets. Only the weakest carries the flag's vocabulary, so even lifted it cannot climb
+  // into the top 6 — the shape that made the Steam lens lie before #167.
+  const seed = async () => {
+    const db = await freshMemoryDb();
+    const games: RawGame[] = [];
+    for (let i = 0; i < 9; i++)
+      for (const n of [1, 2])
+        games.push(bg(`f${i}-${n}`, "Casual", `Filler ${i}`, 9000 - i * 500, 4.6));
+    for (const n of [1, 2]) games.push(bg(`d${n}`, "Puzzle", "Deckbuilding", 20, 2.0));
+    await loadGames(db, "crazygames", CG, games, "2026-06-30T00:00:00.000Z");
+    return db;
+  };
+
+  it("no flags set → the ranking is identical to the unsteered one", async () => {
+    const db = await seed();
+    const before = await q.getMarketGaps(db, "crazygames");
+    await q.setBriefSteering(db, []); // explicitly "nothing is steering", not merely never set
+    const after = await q.getMarketGaps(db, "crazygames");
+    expect(JSON.stringify(after)).toBe(JSON.stringify(before)); // scores, order, keys — byte-identical
+    expect(after.some((g) => g.steering)).toBe(false);
+    expect(after.some((g) => g.components.steering !== undefined)).toBe(false);
+    expect((await q.getOverview(db, "crazygames")).steering).toBeUndefined();
+  });
+
+  it("a matching flag promotes the gap it matches, and records which flag did it", async () => {
+    const db = await seed();
+    const unsteered = await q.rankMarketGaps(db, "crazygames");
+    const deckBefore = unsteered.findIndex((g) => g.label === "Puzzle × Deckbuilding");
+    await q.setBriefSteering(db, ["Luck/deck builder synergy games"]);
+    const steered = await q.rankMarketGaps(db, "crazygames");
+    const deck = steered.find((g) => g.label === "Puzzle × Deckbuilding")!;
+    expect(deck.steering).toEqual({
+      flags: ["Luck/deck builder synergy games"],
+      delta: STEERING_WEIGHT,
+    });
+    expect(deck.score).toBeCloseTo(unsteered[deckBefore].score + STEERING_WEIGHT, 5);
+    // …and nothing the flag did not match moved: steering promotes, it never demotes.
+    for (const g of steered.filter((x) => !x.steering))
+      expect(g.score).toBe(unsteered.find((u) => u.label === g.label)!.score);
+  });
+
+  it("counts moves over the cut list, not the full ranking", async () => {
+    const db = await seed();
+    await q.setBriefSteering(db, ["Luck/deck builder synergy games", "submarine documentaries"]);
+    const ov = await q.getOverview(db, "crazygames");
+    expect(ov.gaps.length).toBe(6);
+    expect(ov.gaps.some((g) => g.label === "Puzzle × Deckbuilding")).toBe(false);
+    const lens = ov.steering!;
+    expect(lens.applied).toEqual(["Luck/deck builder synergy games"]);
+    expect(lens.unmatched).toEqual(["submarine documentaries"]);
+    expect(lens.steered).toBe(1); // matched somewhere in the ranking…
+    expect(lens.steeredShown).toBe(0); // …but nothing the reader can see moved
+    expect(lens.unlisted![0]).toMatchObject({ label: "Puzzle × Deckbuilding", rank: 10 });
+    expect(lens.weight).toBe(STEERING_WEIGHT);
+  });
+});
