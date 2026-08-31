@@ -11,50 +11,21 @@
 
 Everything hinges on a single discipline: **never overwrite; only append snapshots.** Each crawl writes a new immutable row per game. All "intelligence" (growth, saturation, feature-duration, breakouts, hidden gems) is *derived* from the diff between snapshots. The more snapshots you accumulate, the more signal you have — the system compounds for free.
 
-```
-stable identity (games)  ──1:N──►  daily facts (game_snapshots)  ──►  derived metrics (views)  ──►  insights (NL)
-        ▲ rarely changes                ▲ append-only, the gold              ▲ recomputed each crawl       ▲ LLM + templates
+```mermaid
+flowchart LR
+  ID["stable identity<br/>(games) — rarely changes"] -->|1:N| F["daily facts<br/>(game_snapshots)<br/>append-only, the gold"]
+  F --> D["derived metrics<br/>recomputed each crawl"]
+  D --> I["insights<br/>SQL computes, the LLM only phrases"]
 ```
 
 ---
 
 ## 1. Overall Architecture
 
-```
-┌───────────────────────────────────────────────────────────────────────────┐
-│                            SCHEDULER (daily cron)                           │
-│             GitHub Actions  ·  or VPS cron  ·  or Win Task Scheduler         │
-└───────────────┬───────────────────────────────────────────────────────────┘
-                │ triggers
-        ┌───────▼────────┐   one adapter per site (pluggable)
-        │   CRAWLERS     │   PokiAdapter · CrazyGamesAdapter · (itch/steam…)
-        │  Python +      │   ├─ prefer internal JSON/Next-data endpoints
-        │  Playwright    │   └─ fall back to headless render
-        └───────┬────────┘   polite: 1 req / 2–5s, jitter, backoff, robots
-                │ raw JSON per game (+ thumbnail cached to object storage)
-        ┌───────▼────────┐
-        │   ETL / LOAD   │  normalize → dedupe → upsert identity →
-        │  (Python)      │  INSERT immutable snapshot → diff vs yesterday →
-        │                │  record crawl run + removed/returning games
-        └───────┬────────┘
-                │ writes
-        ┌───────▼─────────────────────────┐        ┌──────────────────────────┐
-        │     POSTGRES (Supabase/Neon)     │◄──────►│   AI ENRICHMENT WORKER    │
-        │  games · game_snapshots ·        │  queue │  Claude: infer loop,      │
-        │  tags · enrichment · crawls ·    │        │  mechanics, audience…     │
-        │  materialized views (metrics)    │        │  cached by content-hash   │
-        └───────┬─────────────────────────┘        └──────────────────────────┘
-                │ SQL / REST (PostgREST) / route handlers
-        ┌───────▼────────┐
-        │   WEB / API    │  Next.js (App Router) + TypeScript
-        │  Vercel        │  REST/tRPC · ISR cache · ECharts + D3 viz
-        └───────┬────────┘
-                │
-        ┌───────▼────────┐
-        │   DASHBOARD    │  Overview · Genre · Tag · Developer · Trend ·
-        │  (browser)     │  Hidden Gems · New Releases · Market Gaps · Detail
-        └────────────────┘
-```
+KAIROS is a modular monolith: crawler adapters append snapshots to one Postgres database,
+analytics queries read them, one API surface serves both entry points, and a single React SPA
+renders every service. The current data flow, route groups, and invariants are generated from the
+code — see **[`docs/reference/architecture.md`](docs/reference/architecture.md)**.
 
 **Why this shape (tradeoffs):**
 
@@ -68,167 +39,18 @@ stable identity (games)  ──1:N──►  daily facts (game_snapshots)  ─�
 
 ## 2. Database Schema (PostgreSQL)
 
-Three layers: **identity** (slow-changing), **facts** (append-only time series), **derived** (views/materialized). Tag/category membership is itself time-series because the spec demands "tag changes" and "category changes" tracking.
+Three layers: **identity** (slow-changing), **facts** (append-only time series), and **derived**
+(the `v_latest` view, which gives the current state of every game). Tables, columns, and an ER
+diagram are generated from `schema.sql` — see **[`docs/reference/schema.md`](docs/reference/schema.md)**.
 
-```sql
--- ─────────────────────────── IDENTITY (slowly-changing) ───────────────────────────
-CREATE TABLE sources (
-  id          SMALLSERIAL PRIMARY KEY,
-  name        TEXT UNIQUE NOT NULL,         -- 'poki', 'crazygames', 'itch', ...
-  base_url    TEXT NOT NULL,
-  active      BOOLEAN DEFAULT TRUE
-);
-
-CREATE TABLE games (
-  id             BIGSERIAL PRIMARY KEY,
-  source_id      SMALLINT REFERENCES sources(id),
-  source_game_id TEXT,                       -- site's own id/slug (stable join key)
-  url            TEXT NOT NULL,
-  title          TEXT NOT NULL,
-  thumbnail_url  TEXT,
-  developer      TEXT,
-  publisher      TEXT,
-  release_date   DATE,
-  description    TEXT,
-  -- stable-ish technical attributes (revise via history table if they change)
-  platform       TEXT,                       -- web, mobile-web, ...
-  engine          TEXT,                      -- Unity, HTML5, Phaser, Three.js (detected)
-  controls        TEXT,
-  multiplayer     TEXT,                      -- single | multi | both
-  screen_orientation TEXT,                   -- landscape | portrait | both
-  mobile_compatible  BOOLEAN,
-  first_seen_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
-  last_seen_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
-  is_live        BOOLEAN DEFAULT TRUE,        -- flipped false when it disappears
-  UNIQUE (source_id, source_game_id)
-);
-CREATE INDEX ON games (developer);
-CREATE INDEX ON games (source_id, is_live);
-
--- ─────────────────────────── FACTS (append-only — the gold) ───────────────────────
-CREATE TABLE crawls (
-  id          BIGSERIAL PRIMARY KEY,
-  source_id   SMALLINT REFERENCES sources(id),
-  started_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
-  finished_at TIMESTAMPTZ,
-  status      TEXT DEFAULT 'running',         -- running|ok|partial|failed
-  games_seen  INT, games_new INT, games_removed INT, games_returned INT,
-  notes       TEXT
-);
-
-CREATE TABLE game_snapshots (
-  id            BIGSERIAL PRIMARY KEY,
-  game_id       BIGINT REFERENCES games(id),
-  crawl_id      BIGINT REFERENCES crawls(id),
-  captured_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
-  -- popularity / quality metrics that move daily
-  rating        NUMERIC(4,2),
-  votes         INT,
-  popularity_score NUMERIC,
-  play_count    BIGINT,
-  -- placement / visibility
-  homepage_position INT,                      -- NULL = not on homepage
-  featured      BOOLEAN DEFAULT FALSE,
-  trending      BOOLEAN DEFAULT FALSE,
-  editors_choice BOOLEAN DEFAULT FALSE,
-  collections   TEXT[],                       -- which homepage collections it appeared in
-  category      TEXT,                         -- snapshotted: enables "category changes"
-  last_updated_on_site DATE,                  -- site's "last updated" (update-frequency signal)
-  UNIQUE (game_id, crawl_id)
-);
--- one partial index makes "who's on the homepage today" and ranking history fast
-CREATE INDEX ON game_snapshots (game_id, captured_at DESC);
-CREATE INDEX ON game_snapshots (crawl_id);
-CREATE INDEX ON game_snapshots (captured_at) WHERE homepage_position IS NOT NULL;
-
--- tag membership over time (tags appear/disappear → "tag changes")
-CREATE TABLE tags (id SERIAL PRIMARY KEY, name TEXT UNIQUE NOT NULL);
-CREATE TABLE game_tag_snapshots (
-  crawl_id BIGINT REFERENCES crawls(id),
-  game_id  BIGINT REFERENCES games(id),
-  tag_id   INT REFERENCES tags(id),
-  PRIMARY KEY (crawl_id, game_id, tag_id)
-);
-
--- ─────────────────────────── AI ENRICHMENT (versioned, re-runnable) ──────────────
-CREATE TABLE enrichment (
-  id            BIGSERIAL PRIMARY KEY,
-  game_id       BIGINT REFERENCES games(id),
-  model         TEXT NOT NULL,                -- 'claude-opus-4-8'
-  prompt_version TEXT NOT NULL,               -- bump to force re-enrich
-  input_hash    TEXT NOT NULL,                -- hash(description+tags+screenshot) → dedupe
-  created_at    TIMESTAMPTZ DEFAULT now(),
-  -- inferred game-design fields (also kept structured in JSONB for flexibility)
-  core_loop          TEXT,
-  minute_to_minute   TEXT,
-  meta_progression   TEXT,
-  player_motivation  TEXT,
-  primary_mechanic   TEXT,
-  secondary_mechanics TEXT[],
-  art_style          TEXT,
-  camera             TEXT,                     -- top-down, side, iso, first-person…
-  perspective        TEXT,
-  session_length_min INT,                      -- estimate
-  complexity         SMALLINT,                 -- 1–5
-  skill_ceiling      SMALLINT,                 -- 1–5
-  target_audience    TEXT,
-  retention_hooks    TEXT[],
-  comparable_games   TEXT[],
-  likely_inspiration TEXT[],
-  fun_pillars        TEXT[],
-  monetization       TEXT[],                   -- ads, rewarded, iap…
-  success_reasons    TEXT,
-  risk_reasons       TEXT,
-  raw                JSONB,                    -- full structured response
-  UNIQUE (game_id, prompt_version)
-);
-```
-
-**Derived intelligence as views** (recomputed cheaply each crawl; promote hot ones to `MATERIALIZED VIEW` refreshed at end of ETL):
-
-```sql
--- latest snapshot per game (the "current state" join everyone uses)
-CREATE VIEW v_latest AS
-SELECT DISTINCT ON (game_id) * FROM game_snapshots ORDER BY game_id, captured_at DESC;
-
--- vote growth & rating delta (7/30-day) — feeds "explosive growth" / "breakout"
-CREATE MATERIALIZED VIEW mv_growth AS
-SELECT g.id AS game_id,
-       now() - g.first_seen_at                       AS age,
-       l.votes, l.rating, l.popularity_score,
-       l.votes - w.votes                             AS votes_delta_7d,
-       l.rating - w.rating                           AS rating_delta_7d
-FROM games g
-JOIN v_latest l ON l.game_id = g.id
-LEFT JOIN LATERAL (
-  SELECT * FROM game_snapshots s
-  WHERE s.game_id = g.id AND s.captured_at <= now() - interval '7 days'
-  ORDER BY s.captured_at DESC LIMIT 1) w ON true;
-
--- feature duration: consecutive days a game held featured/homepage
-CREATE MATERIALIZED VIEW mv_feature_duration AS
-SELECT game_id,
-       count(*) FILTER (WHERE featured)              AS days_featured,
-       count(*) FILTER (WHERE homepage_position IS NOT NULL) AS days_on_homepage,
-       min(captured_at) FILTER (WHERE featured)      AS first_featured_at
-FROM game_snapshots GROUP BY game_id;
-
--- HIDDEN GEM = high rating, low visibility. BREAKOUT = fast vote growth off small base.
-CREATE VIEW v_hidden_gems AS
-SELECT mg.game_id, g.title, mg.rating, mg.votes
-FROM mv_growth mg JOIN games g ON g.id = mg.game_id
-WHERE mg.rating >= 4.4 AND mg.votes < 5000
-  AND mg.game_id NOT IN (SELECT game_id FROM v_latest WHERE featured);
-```
-
-**Schema tradeoffs:**
+The reasoning that the generated reference cannot carry:
 
 | Decision | Why | Cost |
 |---|---|---|
-| Snapshot table separate from identity | Lets identity stay small & clean; facts grow forever without bloating joins | One extra join for "current state" (solved by `v_latest`) |
-| Tags snapshotted, not just a join table | Spec requires *tag-change* history | More rows; cheap because tags are small ints |
-| Enrichment versioned by `prompt_version` + `input_hash` | Re-enrich only when prompt improves or content changes → near-zero recurring LLM cost | Slightly more complex worker logic |
-| Postgres over a time-series DB (Timescale/Influx) | Daily granularity is *not* high-frequency; you need rich relational analytics (joins across genre/dev/tag) far more than 1M-points/sec ingest | Must hand-roll a couple of window queries |
+| Facts in a separate table from identity | Identity stays small and clean while facts grow forever, without bloating every join | An extra join for "current state", which `v_latest` absorbs |
+| Postgres over a time-series database | Daily granularity is not high-frequency ingest, and the analytics are relational — joins across genre, developer, and tag matter far more than points per second | A couple of window queries written by hand |
+| One `schema.sql` across PGlite and Neon | Same dialect locally and in production, so a query that works in dev works in prod | Bound to the intersection of what both engines support |
+| Migrations are additive only | An append-only fact table is only trustworthy if columns are never dropped or narrowed underneath the history already recorded | Retired columns go unused rather than being removed |
 
 ---
 
@@ -279,28 +101,14 @@ browser-game-intel/
 
 ---
 
-## 4. API Design (REST; tRPC optional for type-safety)
+## 4. API Design
 
-All list endpoints accept the **shared filter set** as query params:
-`platform, genre, tag, developer, year, rating_min, votes_min, popularity_min, engine, art_style, mechanic, camera, multiplayer, difficulty, session_len`.
+Every route the API actually serves is generated from the Express router — see
+**[`docs/reference/api.md`](docs/reference/api.md)**. The surface is deliberately defined twice
+(Express for local dev, a Netlify Function in production) and `routeParity.test.ts` fails the
+suite the moment the two drift.
 
-| Method · Path | Returns |
-|---|---|
-| `GET /api/games` | filtered, paginated, sortable list (server-side) |
-| `GET /api/games/:id` | full detail: identity + latest snapshot + enrichment + history |
-| `GET /api/games/:id/history` | snapshot time-series (rank, votes, rating, featured) for charts |
-| `GET /api/genres` | per-genre rollup: count, avg rating, avg votes, avg feature days |
-| `GET /api/genres/trends?weeks=12` | weekly count/rating per genre → growing vs declining |
-| `GET /api/tags/cooccurrence` | edge list `{a, b, weight}` → network graph |
-| `GET /api/tags/frequency` | tag counts → treemap / bars |
-| `GET /api/developers` | per-dev: games, success rate, avg rating, cadence |
-| `GET /api/hidden-gems` | high-rating / low-visibility list |
-| `GET /api/breakouts` | fast vote growth off small base |
-| `GET /api/market-gaps` | genre×mechanic cells with high interest, low supply (see §6) |
-| `GET /api/insights` | latest generated NL insights (cached) |
-| `GET /api/overview` | KPI strip + headline charts (one round-trip for landing) |
-
-**Design choices:** server-side filtering/sorting/pagination (never ship 50k rows to the browser); cursor pagination on `(metric, id)`; every chart endpoint returns *chart-ready shapes* (the SQL does the aggregation, not the client). Tradeoff: more endpoints vs one generic `/query` — explicit endpoints are cacheable, documented, and safe (no SQL injection surface), at the cost of writing them.
+**Design choices:** aggregation happens in SQL, so every endpoint returns *chart-ready shapes* rather than raw rows — the browser is never asked to reduce the corpus. Tradeoff: many explicit endpoints instead of one generic `/query`, but each is cacheable, documented, and offers no SQL-injection surface.
 
 ---
 
@@ -453,32 +261,25 @@ This addendum supersedes earlier specifics where they differ. It records the she
 
 ### 12.1 KAIROS shell (the command center)
 
-GameRadar is **Service #1** inside KAIROS, a hub with three services behind a thin icon rail:
+GameRadar is **Service #1** inside KAIROS, a hub whose four services sit behind a thin icon rail:
 
-```
-[ rail ] → [ contextual sidebar ] → [ content ]
- Radar       (Radar nav | brief editions | library collections)
- Brief
- Library
-```
-
-- **One app, one deploy, one URL.** Frontend route groups `/radar`, `/brief`, `/library` share a shell layout (the rail). The dashboard's existing left sidebar becomes the *contextual sidebar* when Radar is active — no restructuring.
-- **One database, three namespaces:** `radar.*` (games/snapshots/tags — §2), `brief_editions`, `library_items`.
-
-```sql
-CREATE TABLE brief_editions (
-  id BIGSERIAL PRIMARY KEY, edition_date DATE NOT NULL, weekday TEXT,
-  brief_type TEXT, payload JSONB NOT NULL, rendered_html TEXT,
-  local_path TEXT, source_count INT, created_at TIMESTAMPTZ DEFAULT now(),
-  UNIQUE (edition_date, brief_type));
-
-CREATE TABLE library_items (
-  id BIGSERIAL PRIMARY KEY, kind TEXT,            -- prototype|design_doc|art|reference
-  title TEXT NOT NULL, summary TEXT, media_url TEXT, tags TEXT[],
-  status TEXT DEFAULT 'draft', created_at TIMESTAMPTZ DEFAULT now());
+```mermaid
+flowchart LR
+  RAIL["icon rail<br/>fixed, always visible"] --> SIDE["contextual sidebar<br/>supplied by the active service"]
+  SIDE --> CONTENT["content panel"]
+  RAIL -.selects.-> RADAR[Radar]
+  RAIL -.selects.-> BRIEF[Brief]
+  RAIL -.selects.-> LIB[Library]
+  RAIL -.selects.-> REV[Revenue]
 ```
 
-- **News Brief integration:** the existing Mon/Thu routine keeps producing its **local HTML** (`Documents\KAIROS\Raw\<brief>\`) and Notion copy unchanged; it gains **one step** — upsert the edition's *structured JSON* into `brief_editions` (the source of truth KAIROS renders). Local HTML stays for offline/portability; the DB holds queryable, cross-linkable data. `rendered_html` is an optional cached render for the simplest Brief tab.
+- **One app, one deploy, one URL, and deliberately no router.** The shell mounts every service at once and toggles them with a `hidden` prop, so switching a service costs no refetch and no remount. The rail is fixed; the service that is active supplies the contextual sidebar.
+- **One database, one namespace.** Radar's `games` / `game_snapshots` / `tags` (§2) sit alongside `brief_editions`, `brief_steering`, `library_items`, and `pitches` in the same database, so a pitch can join a market row without a federation layer.
+
+The columns of `brief_editions`, `brief_steering`, `library_items`, and `pitches` are generated
+from `schema.sql` — see **[`docs/reference/schema.md`](docs/reference/schema.md)**.
+
+- **News Brief integration:** the Mon/Thu routine keeps producing its **local HTML** (`Documents\KAIROS\Output\<brief>\`) and its Notion copy; it gains **one step** — upsert the edition's *structured JSON* into `brief_editions`, the source of truth KAIROS renders. Local HTML stays for offline portability; the DB holds queryable, cross-linkable data. `rendered_html` is an optional cached render for the simplest Brief tab.
 - **Library:** schema reserved; UI is an intentional empty state until V2.
 
 ### 12.2 As-built stack decisions (revisions to §9) — with tradeoffs
