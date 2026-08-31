@@ -3220,6 +3220,13 @@ a.conv-chip:hover {
   color: var(--accent);
   border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--surface));
 }
+/* #179 — "no Steam read": a MISSING measurement, not a measured lean. Deliberately colourless
+   and dashed so it can never be mistaken for one of the three decided leans above. */
+.route-unmapped {
+  background: var(--surface-2);
+  color: var(--text-3);
+  border: 1px dashed var(--text-4);
+}
 
 /* ── Dark: the few rules the token layer cannot reach ──────────────────────────
    Everything above now draws from tokens or color-mix, so dark is almost purely

@@ -648,6 +648,23 @@ describe("#108 loop-family map", () => {
     expect(loopFamilyFor("Shooter")).toBeNull(); // unmapped never force-fits
     expect(loopFamilyFor("nope", "nonsense")).toBeNull();
   });
+
+  it("#179 resolves the widened keys, and still refuses the genres no family holds", () => {
+    // `driving` was a key and `racing` was not, so the top-velocity browser genre fed nothing.
+    expect(loopFamilyFor("Racing")).toBe(loopFamilyFor("Driving"));
+    expect(loopFamilyFor("Racing")).toBe("route-planning");
+    expect(loopFamilyFor("Car")).toBe("route-planning");
+    expect(loopFamilyFor("Escape")).toBe("contained-systemic");
+    expect(loopFamilyFor("Tycoon")).toBe("idle-tycoon");
+    expect(loopFamilyFor("Decoration")).toBe("cozy-craft");
+    expect(loopFamilyFor("Restaurant")).toBe("cozy-craft");
+    // Steam spells the same tags in prose, browser portals in slugs; both forms must resolve.
+    expect(loopFamilyFor("Strategy", "Tower Defense")).toBe("wave-defense-prep");
+    expect(loopFamilyFor("Shooter", "Looter Shooter")).toBe("extraction-lite");
+    // Deliberately unmapped: a shelf label or a loop no family holds stays null, never force-fit.
+    for (const g of ["Sports", "Fighting", "Battle Royale", ".io", "Arcade", "Beauty", "Skill"])
+      expect(loopFamilyFor(g)).toBeNull();
+  });
 });
 
 describe("#108 getLoopFamilyMarket", () => {
@@ -679,14 +696,21 @@ describe("#108 getLoopFamilyMarket", () => {
   });
 
   it("#67 sets Steam economics and a route lean beside the browser read", async () => {
-    const st = (pull: number | null, crowding = false) => ({ pull, crowding });
+    const st = (pull: number | null, crowding = false) => ({ pull, crowding, mapped: true });
     expect(q.marketRouteLean(2, false, st(0.5))).toBe("browser");
     expect(q.marketRouteLean(0.5, false, st(2))).toBe("steam");
     expect(q.marketRouteLean(1, false, st(1))).toBe("contested");
     expect(q.marketRouteLean(1.3, true, st(1))).toBe("contested"); // crowding damps the lead away
-    expect(q.marketRouteLean(1, false, st(null))).toBe("browser"); // an absent surface IS the lean
+    expect(q.marketRouteLean(1, false, st(null))).toBe("browser"); // MEASURED absence IS the lean
     expect(q.marketRouteLean(null, false, st(1))).toBe("steam");
     expect(q.marketRouteLean(null, false, st(null))).toBeNull();
+
+    // #179 — an UNMEASURED Steam side is not a browser lean. Nothing maps in, so the comparison
+    // the chip claims to have made never happened; only the mapped-but-empty case above is a lean.
+    const un = (pull: number | null) => ({ pull, crowding: false, mapped: false });
+    expect(q.marketRouteLean(1, false, un(null))).toBe("steam-unmapped");
+    expect(q.marketRouteLean(9, false, un(null))).toBe("steam-unmapped"); // strength can't rescue it
+    expect(q.marketRouteLean(null, false, un(null))).toBeNull(); // neither surface read at all
 
     const m = await q.getLoopFamilyMarket(db, "all");
     expect(m.rows.some((r) => r.steam)).toBe(true);
@@ -695,8 +719,14 @@ describe("#108 getLoopFamilyMarket", () => {
       // appetite, and such a family is a row on Steam's strength alone rather than whitespace.
       expect(r.steam === null || r.steam.games > 0).toBe(true);
       expect(r.supplyN > 0).toBe(r.appetite != null);
-      expect(r.routeLean).toBe(r.steam ? (r.supplyN ? r.routeLean : "steam") : "browser");
+      // #179: an empty Steam side reports WHY it is empty. Unmapped ⇒ never a browser lean.
+      expect(Array.isArray(r.steamGenres)).toBe(true);
+      if (r.steam) expect(r.steamGenres.length).toBeGreaterThan(0);
+      else expect(r.routeLean).toBe(r.steamGenres.length ? "browser" : "steam-unmapped");
+      if (r.steam && !r.supplyN) expect(r.routeLean).toBe("steam");
     }
+    // The defect this closes: a row with no Steam mapping must not claim the browser won.
+    for (const r of m.rows) expect(r.routeLean === "browser" && !r.steamGenres.length).toBe(false);
     // The single-surface read makes no cross-platform claim.
     expect((await q.getLoopFamilyMarket(db, "steam")).rows.every((r) => !r.routeLean)).toBe(true);
   });
