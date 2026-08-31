@@ -9,12 +9,14 @@
 // the whole accumulated DB. The load is append-only over a rotating seed, so legacy rows keep
 // null dates a single crawl can't fix; measuring all-time would false-fail forever. `comparables`
 // is the exception: it's the actual queryable UI output over all live Steam games.
+// That cohort is further scoped to RELEASED titles (#148) — checks/steamCohort.ts owns the SQL
+// and the reasoning.
 
 export interface SteamQualityCounts {
-  crawled: number; // games in the most-recent crawl (fresh cohort) — did the crawl produce data
-  withDate: number; // fresh cohort with release_date  (date-parser / locale accuracy)
-  rated: number; // fresh cohort with a rating
-  indie: number; // fresh cohort with scale_tier <> 'aaa'  (indie seed present + not all-AAA)
+  crawled: number; // RELEASED games in the most-recent crawl — did the crawl produce data
+  withDate: number; // released cohort with release_date  (date-parser / locale accuracy)
+  rated: number; // released cohort with a rating
+  indie: number; // released cohort with scale_tier <> 'aaa'  (indie seed present + not all-AAA)
   comparables: number; // getSteamComparables over ALL live Steam (recency window populated)
 }
 
