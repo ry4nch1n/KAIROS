@@ -22,6 +22,7 @@ import type {
   HiddenGem,
   SteamOverview,
   SteamGenreEconomics,
+  SuccessBand,
   SteamGap,
   SteeringLens,
   SteeringMatch,
@@ -999,7 +1000,38 @@ const TOTAL_REV_TIP =
 const BAND_TIP =
   "Cross-check range from two independent estimators: owners × price, and reviews × 35 × price (Boxleiter method). Wide range = the underlying data is uncertain, so read the range, not the point.";
 const SPLIT_TIP =
-  "The two revenue estimators differ by more than 3×, so this genre's revenue is not reliably known — treat the range as the answer.";
+  "The two revenue estimators differ by more than 2×, so this genre's revenue is not reliably known — treat the range as the answer.";
+
+// Absolute outcome ladder (#177). The band above says how UNCERTAIN the number is; this says how
+// GOOD it would be if true — "$380k median" only becomes decision-ready once you know that is a
+// sustainable result rather than a typical one. Labels carry the dollar floor so the tier never
+// has to be looked up elsewhere.
+const SUCCESS_LABEL: Record<SuccessBand, string> = {
+  "sub-scale": "sub-scale · <$50k",
+  modest: "modest · $50k–250k",
+  sustainable: "sustainable · $250k–1M",
+  hit: "hit · $1M–5M",
+  breakout: "breakout · $5M+",
+};
+const SUCCESS_TIP =
+  "Where this market's typical title lands on the ladder of commercial outcomes (lifetime gross): sub-scale / modest / sustainable / hit / breakout. Read it with the cohort note above — a paid-games-only benchmark from another tool sits roughly 4× higher.";
+// Percentile context is per-row, so it is a title attribute rather than a shared Tip string.
+const pctlTitle = (r: SteamGenreEconomics) =>
+  r.revenuePercentiles
+    ? `Within this market: p25 ${proxy(r.revenuePercentiles.p25)} · p75 ${proxy(r.revenuePercentiles.p75)} · p90 ${proxy(r.revenuePercentiles.p90)}. Clearing p75 puts a title in the top quarter.`
+    : "Too few titles in this market to quote quartiles honestly — the tier is shown without percentile context.";
+
+/** Absolute outcome tier for the headline median, under the uncertainty band. */
+function SuccessChip({ r }: { r: SteamGenreEconomics }) {
+  if (!r.successBand) return null; // older payloads carry no ladder
+  return (
+    <div className="succ-line">
+      <span className={"succ-chip succ-" + r.successBand} title={pctlTitle(r)}>
+        {SUCCESS_LABEL[r.successBand] || r.successBand}
+      </span>
+    </div>
+  );
+}
 
 /** Sub-line under the headline median: the two estimators as a range, flagged when they split. */
 function RevBand({ r }: { r: SteamGenreEconomics }) {
@@ -1071,6 +1103,7 @@ function EconTable({
           <th className="r">
             Median rev/game
             <Tip text={MED_REV_TIP} />
+            <Tip text={SUCCESS_TIP} />
           </th>
           <th className="r">
             Mean rev/game
@@ -1109,6 +1142,7 @@ function EconTable({
             <td className="r" style={{ fontWeight: 600 }}>
               {proxy(r.medianRevenuePerGame)}
               <RevBand r={r} />
+              <SuccessChip r={r} />
             </td>
             <td className="r">{proxy(r.meanRevenuePerGame)}</td>
             <td className="r">{proxy(r.revenueProxy)}</td>
@@ -1776,6 +1810,14 @@ function GenreEconCard({ data }: { data: SteamOverview }) {
           </span>
         )}
       </h2>
+      {/* The ladder is meaningless without its cohort: the same benchmark computed over paid
+          games only runs ~4x higher, so a tier quoted from another tool is not comparable. */}
+      <p className="view-head">
+        Outcome tiers (<b>sub-scale / modest / sustainable / hit / breakout</b>) are absolute
+        lifetime-gross bands, calibrated on the cohort these medians already use —{" "}
+        <b>released, non-AAA titles with free and unpriced games counted at $0</b>. A
+        paid-games-only benchmark sits roughly 4× higher; don't compare the two.
+      </p>
       {lens === "genre" && cohort === "all" && (
         <p className="view-head">
           All tiers include AAA — owners/revenue are dominated by mega-hits; demand context only,{" "}

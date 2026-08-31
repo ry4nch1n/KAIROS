@@ -18,6 +18,8 @@ import type {
   SteamDeveloperRow,
   SteamNewRelease,
   SteamUpcoming,
+  SuccessBand,
+  RevenuePercentiles,
 } from "shared";
 import { teamSizeFor } from "../data/teamSize.ts";
 import { conversionFor } from "../data/genreConversion.ts";
@@ -144,7 +146,11 @@ export async function getScaleTierBreakdown(
 // 2023-24 recalibrations sit in the low-to-mid 30s). 35 is the defensible middle of that range.
 export const BOXLEITER_MULTIPLIER = 35;
 // Past this ratio the two estimators are telling different stories; show the band, not a point.
-export const ESTIMATOR_DISAGREE_RATIO = 3;
+// 2, not 3: the disagreements actually observed in the wild sit BELOW 3× and so never flagged.
+// Two measured 2026-08-24 — Beneath Oresa ($460k owners-based vs $966k Boxleiter, 2.1×) and
+// Dungeons & Degenerate Gamblers ($0.5M vs $1.3M, 2.6×) — are exactly the cases a reader must
+// not mistake for precision, and both passed the old gate silently.
+export const ESTIMATOR_DISAGREE_RATIO = 2;
 
 /** Sorted band + disagreement read over the two independent per-game revenue estimators. */
 export function revenueBand(
@@ -169,6 +175,68 @@ export function revenueBand(
   };
 }
 
+// ── Absolute success-band ladder (#177) ──
+// `revenueBand` above is an UNCERTAINTY band (how far apart the two estimators are). This is the
+// orthogonal axis: where a number lands on the distribution of commercial OUTCOMES. "$380k
+// median" is not decision-ready until you know it is an upper-middle result, not a typical one.
+//
+// Calibrated 2026-08-24 against the roguelike-deckbuilder tag (Games-Stats, n=1,032, retrieved
+// 2026-08-24): 45% under $5k · 19% $5–25k · 17% $25–100k · 16% $100k–1M · 3% $1M+. THAT COHORT
+// INCLUDES FREE AND UNPRICED TITLES. The paid-games-only universe medians $29k (IndieMarketSpy,
+// n=270) against $7.5k for the full tag — ~4× apart, which is why every surface rendering a band
+// must also state the cohort it was calibrated on or the tier is meaningless. KAIROS bands the
+// same cohort its medians use: released, non-AAA, free titles counted at $0 (#24).
+// Re-pull these figures when they age — they are a snapshot, not a constant of nature.
+const SUCCESS_BAND_FLOORS: { band: SuccessBand; minDollars: number }[] = [
+  { band: "breakout", minDollars: 5_000_000 },
+  { band: "hit", minDollars: 1_000_000 },
+  { band: "sustainable", minDollars: 250_000 },
+  { band: "modest", minDollars: 50_000 },
+  { band: "sub-scale", minDollars: 0 },
+];
+// The review-count lens on the same ladder. Derived from BOXLEITER_MULTIPLIER — never a second
+// hard-coded table — so the two readings cannot drift apart when the multiplier is recalibrated.
+// A review count only maps to dollars through a price, so the ladder quotes ONE reference price
+// (the modal indie premium point) and says so; a $5 game needs proportionally more reviews.
+export const SUCCESS_BAND_REF_PRICE_CENTS = 1499;
+// Ceiling, not round: this is the review count you must CLEAR to reach the floor, so rounding
+// down would quote a number that maps back to the tier below it.
+export function bandMinReviews(minDollars: number): number {
+  return Math.ceil(minDollars / (BOXLEITER_MULTIPLIER * (SUCCESS_BAND_REF_PRICE_CENTS / 100)));
+}
+/** The ladder as data — floors in dollars beside their review-count equivalent. */
+export const SUCCESS_BANDS = SUCCESS_BAND_FLOORS.map((b) => ({
+  ...b,
+  minReviews: bandMinReviews(b.minDollars),
+}));
+/** Absolute outcome tier for one lifetime-gross estimate, in dollars. */
+export function successBandFor(revenueDollars: number): SuccessBand {
+  return (SUCCESS_BAND_FLOORS.find((b) => revenueDollars >= b.minDollars) ?? SUCCESS_BAND_FLOORS[4])
+    .band;
+}
+
+// Percentile context (#177). A band on the MEDIAN says where the typical title lands; it cannot
+// say how steep the market's tail is. The quartile/decile cut points do — but only where enough
+// titles exist for a quantile to mean anything. Below this floor one or two games move p90 by an
+// order of magnitude, so the honest answer is null, not a confident-looking number.
+export const PERCENTILE_MIN_COHORT = 30;
+function percentilesFor(games: number, r: Record<string, unknown>): RevenuePercentiles | null {
+  if (games < PERCENTILE_MIN_COHORT) return null;
+  return {
+    p25: Math.round(num(r.p25_rev_cents) / 100),
+    p75: Math.round(num(r.p75_rev_cents) / 100),
+    p90: Math.round(num(r.p90_rev_cents) / 100),
+  };
+}
+// The three extra cut points, on the SAME owners-based estimator as `medianRevenuePerGame`
+// (mixing estimators across percentiles of one distribution would be incoherent).
+const REV_PCTL_SQL = [25, 75, 90]
+  .map(
+    (p) => `percentile_cont(0.${p}) WITHIN GROUP (
+              ORDER BY coalesce(l.owners_est, 0) * coalesce(l.price_cents, 0))::float AS p${p}_rev_cents`,
+  )
+  .join(",\n            ");
+
 // SQL for the Boxleiter per-game revenue median, in cents (free/unrated games count as 0,
 // matching the owners-based median's treatment — see #24).
 const BOXLEITER_MED_SQL = `percentile_cont(0.5) WITHIN GROUP (
@@ -179,7 +247,13 @@ const BOXLEITER_MED_SQL = `percentile_cont(0.5) WITHIN GROUP (
 // aggregate the same way, so the cross-estimate must be identical in both.
 function econBandFields(medRevDollars: number, medRevBlCents: unknown) {
   const boxleiter = Math.round(num(medRevBlCents) / 100);
-  return { medianRevenueBoxleiter: boxleiter, ...revenueBand(medRevDollars, boxleiter) };
+  return {
+    medianRevenueBoxleiter: boxleiter,
+    ...revenueBand(medRevDollars, boxleiter),
+    // Tiered on the HEADLINE median, so the chip and the number above it always agree. When the
+    // estimators split, `estimatorsDisagree` is the warning that the tier is soft too.
+    successBand: successBandFor(medRevDollars),
+  };
 }
 
 // Per-genre economics for Steam, defaulting to the indie-addressable cohort
@@ -199,7 +273,8 @@ export async function getSteamGenreEconomics(
             coalesce(sum(l.owners_est * l.price_cents), 0)::float AS rev_cents,
             percentile_cont(0.5) WITHIN GROUP (
               ORDER BY coalesce(l.owners_est, 0) * coalesce(l.price_cents, 0))::float AS med_rev_cents,
-            ${BOXLEITER_MED_SQL} AS med_rev_bl_cents
+            ${BOXLEITER_MED_SQL} AS med_rev_bl_cents,
+            ${REV_PCTL_SQL}
      FROM v_latest l JOIN games g ON g.id = l.game_id JOIN sources src ON src.id = g.source_id
      WHERE g.is_live AND src.name = 'steam' AND l.genre IS NOT NULL ${tierFilter} ${RELEASED_ONLY}
      GROUP BY ${canonSql("l.genre")} ORDER BY total_owners DESC`,
@@ -218,6 +293,7 @@ export async function getSteamGenreEconomics(
       medianRevenuePerGame: medRev,
       meanRevenuePerGame: num(r.games) ? Math.round(num(r.rev_cents) / 100 / num(r.games)) : 0,
       conversion: conversionFor(r.genre),
+      revenuePercentiles: percentilesFor(num(r.games), r),
       ...econBandFields(medRev, r.med_rev_bl_cents),
     };
   });
@@ -282,7 +358,8 @@ export async function getSteamTagEconomics(
             coalesce(sum(l.owners_est * l.price_cents), 0)::float AS rev_cents,
             percentile_cont(0.5) WITHIN GROUP (
               ORDER BY coalesce(l.owners_est, 0) * coalesce(l.price_cents, 0))::float AS med_rev_cents,
-            ${BOXLEITER_MED_SQL} AS med_rev_bl_cents
+            ${BOXLEITER_MED_SQL} AS med_rev_bl_cents,
+            ${REV_PCTL_SQL}
      FROM v_latest l
      JOIN games g ON g.id = l.game_id
      JOIN sources src ON src.id = g.source_id
@@ -318,6 +395,7 @@ export async function getSteamTagEconomics(
         medianRevenuePerGame: medRev,
         meanRevenuePerGame: num(r.games) ? Math.round(num(r.rev_cents) / 100 / num(r.games)) : 0,
         conversion: conversionFor(r.tag),
+        revenuePercentiles: percentilesFor(num(r.games), r),
         // Supply is the load-bearing signal — it derives from release_date, present on every
         // crawled Steam title, so it reads immediately. Demand trajectory depends on snapshot
         // history accumulating; it stays "new" (honest, not a fake trend) until the series

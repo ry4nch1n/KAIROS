@@ -776,13 +776,18 @@ describe("D10c genre economics per-game revenue — size vs opportunity (#24)", 
 
 describe("D10d Boxleiter cross-estimate band (#53)", () => {
   it("bands the two estimators and only flags a real split", () => {
-    // agreement: 2x apart is inside the 3x threshold
+    // agreement: exactly at the threshold is not past it
     const near = q.revenueBand(100_000, 200_000);
     expect(near.revenueBandLowPerGame).toBe(100_000);
     expect(near.revenueBandHighPerGame).toBe(200_000);
     expect(near.estimatorRatio).toBe(2);
     expect(near.estimatorsDisagree).toBe(false);
-    // disagreement: past 3x the estimators tell different stories, whichever side is bigger
+    // #177: the threshold is 2, not 3 — the splits actually observed in the wild (Beneath Oresa
+    // 2.1x, Dungeons & Degenerate Gamblers 2.6x) sit below 3 and used to pass silently.
+    expect(q.ESTIMATOR_DISAGREE_RATIO).toBe(2);
+    expect(q.revenueBand(460_000, 966_000).estimatorsDisagree).toBe(true); // 2.10x
+    expect(q.revenueBand(500_000, 1_300_000).estimatorsDisagree).toBe(true); // 2.60x
+    // disagreement: past the threshold the estimators tell different stories, whichever side is bigger
     expect(q.revenueBand(100_000, 500_000).estimatorsDisagree).toBe(true);
     expect(q.revenueBand(500_000, 100_000).estimatorsDisagree).toBe(true);
     expect(q.revenueBand(500_000, 100_000).revenueBandLowPerGame).toBe(100_000);
@@ -854,6 +859,97 @@ describe("D10d Boxleiter cross-estimate band (#53)", () => {
     expect(row.medianRevenueBoxleiter).toBe(3_500);
     expect(row.estimatorsDisagree).toBe(true);
     expect(row.estimatorRatio).toBeGreaterThan(3);
+  });
+});
+
+// The ladder answers a question the uncertainty band cannot: is this a typical outcome or a good
+// one? Both axes must survive together — #53's band is not replaced by #177's tier.
+describe("D10e absolute success-band ladder (#177)", () => {
+  it("tiers lifetime gross on the documented boundaries, inclusive at each floor", () => {
+    expect(q.successBandFor(0)).toBe("sub-scale");
+    expect(q.successBandFor(49_999)).toBe("sub-scale");
+    expect(q.successBandFor(50_000)).toBe("modest");
+    expect(q.successBandFor(249_999)).toBe("modest");
+    expect(q.successBandFor(250_000)).toBe("sustainable");
+    expect(q.successBandFor(999_999)).toBe("sustainable");
+    expect(q.successBandFor(1_000_000)).toBe("hit");
+    expect(q.successBandFor(4_999_999)).toBe("hit");
+    expect(q.successBandFor(5_000_000)).toBe("breakout");
+  });
+
+  it("derives the review-count lens FROM the Boxleiter multiplier, never a second table", () => {
+    const ref = q.SUCCESS_BAND_REF_PRICE_CENTS / 100;
+    for (const b of q.SUCCESS_BANDS) {
+      expect(b.minReviews).toBe(Math.ceil(b.minDollars / (q.BOXLEITER_MULTIPLIER * ref)));
+    }
+    // The point of deriving: a review count run back through the estimator lands in its own band.
+    for (const b of q.SUCCESS_BANDS.filter((x) => x.minDollars > 0)) {
+      expect(q.successBandFor(b.minReviews * q.BOXLEITER_MULTIPLIER * ref)).toBe(b.band);
+    }
+    expect(q.SUCCESS_BANDS.map((b) => b.minReviews)).toEqual([9531, 1907, 477, 96, 0]);
+  });
+
+  it("bands the economics rows and withholds percentiles below the cohort floor", async () => {
+    const db = await freshMemoryDb();
+    await loadGames(
+      db,
+      "steam",
+      STEAM_BASE_URL,
+      // 3 titles: owners buckets put the median at 20,000 x $10 = $200k -> "modest".
+      [10_000, 20_000, 90_000].map((owners, i) =>
+        steamGame({
+          sourceGameId: `sb${i}`,
+          genre: "Sim",
+          tags: ["Deckbuilding"],
+          scaleTier: "small_indie",
+          ownersEst: owners,
+          priceCents: 1000,
+          votes: 1000,
+        }),
+      ),
+      "2026-06-30T00:00:00.000Z",
+    );
+    const row = (await q.getSteamGenreEconomics(db)).find((r) => r.genre === "Sim")!;
+    expect(row.medianRevenuePerGame).toBe(200_000);
+    expect(row.successBand).toBe("modest");
+    // 3 titles is far under the floor — a quartile here is one game's opinion, so: null.
+    expect(q.PERCENTILE_MIN_COHORT).toBeGreaterThanOrEqual(30);
+    expect(row.revenuePercentiles).toBeNull();
+    // the sub-genre lens carries the identical tier, not a differently-derived one
+    const tagRow = (await q.getSteamTagEconomics(db, { minSupply: 3 })).find(
+      (r) => r.genre === "Deckbuilding",
+    )!;
+    expect(tagRow.successBand).toBe("modest");
+    expect(tagRow.revenuePercentiles).toBeNull();
+  });
+
+  it("reports percentiles once the cohort clears the floor", async () => {
+    const db = await freshMemoryDb();
+    // 40 titles at a $10 price, owners walking 10k..400k -> a real distribution to quantile.
+    await loadGames(
+      db,
+      "steam",
+      STEAM_BASE_URL,
+      Array.from({ length: 40 }, (_, i) =>
+        steamGame({
+          sourceGameId: `pc${i}`,
+          genre: "Strategy",
+          scaleTier: "small_indie",
+          ownersEst: (i + 1) * 10_000,
+          priceCents: 1000,
+          votes: 100,
+        }),
+      ),
+      "2026-06-30T00:00:00.000Z",
+    );
+    const row = (await q.getSteamGenreEconomics(db)).find((r) => r.genre === "Strategy")!;
+    const p = row.revenuePercentiles!;
+    expect(p).not.toBeNull();
+    expect(p.p25).toBeLessThan(row.medianRevenuePerGame);
+    expect(p.p75).toBeGreaterThan(row.medianRevenuePerGame);
+    expect(p.p90).toBeGreaterThanOrEqual(p.p75);
+    // the ladder still reads off the headline median, independent of the tail
+    expect(row.successBand).toBe(q.successBandFor(row.medianRevenuePerGame));
   });
 });
 

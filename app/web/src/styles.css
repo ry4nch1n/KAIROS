@@ -3044,6 +3044,33 @@ a.est-chip:hover {
   padding: 0 var(--sp-1);
 }
 
+/* Absolute outcome ladder (#177) — sits under the uncertainty band, quieter than the headline
+   number it tiers. Wraps rather than widening the cell: the label carries a dollar range, and a
+   nowrap chip is exactly the kind of fixed-width content that pushes a table off a 375px screen. */
+.succ-line {
+  margin-top: var(--sp-0);
+}
+.succ-chip {
+  display: inline-block;
+  font-size: var(--fs-1);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--text-2);
+  background: var(--surface-2);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--r-sm);
+  padding: 0 var(--sp-1);
+  max-width: 100%;
+}
+/* Only the top two tiers earn the focus colour — everything else stays graphite, so the rare
+   outcome reads at a glance instead of five colours competing. */
+.succ-hit,
+.succ-breakout {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--surface));
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+}
+
 /* Demand/Supply quadrant colour legend (B3) */
 .q-legend {
   display: flex;
