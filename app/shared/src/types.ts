@@ -44,6 +44,25 @@ export interface SteamGenreEconomics {
   revenueBandHighPerGame: number; // dollars; max(owners-based, Boxleiter)
   estimatorRatio: number; // high ÷ low (1 = agreement); 0 when the band can't be formed
   estimatorsDisagree: boolean; // true past the disagreement threshold — read the band, not a point
+  // Absolute outcome tier (#177) — a DIFFERENT axis from the band above. The band says how
+  // uncertain the number is; this says how good it would be if true. Tiered on the headline
+  // median. Meaningless without its cohort, which every rendering surface must state.
+  successBand: SuccessBand;
+  // Cut points of the same owners-based distribution, or null below the honest cohort floor
+  // (see PERCENTILE_MIN_COHORT) — a p90 drawn from six titles is one game's opinion.
+  revenuePercentiles: RevenuePercentiles | null;
+}
+
+// Lifetime realised Steam gross per game, in dollars: sub-scale <$50k · modest $50k–250k ·
+// sustainable $250k–1M · hit $1M–5M · breakout $5M+. Floors and their review-count equivalents
+// live in one table on the server (SUCCESS_BANDS) — the review lens is derived from the
+// Boxleiter multiplier, never hard-coded twice.
+export type SuccessBand = "sub-scale" | "modest" | "sustainable" | "hit" | "breakout";
+
+export interface RevenuePercentiles {
+  p25: number; // dollars — the lower quartile outcome in this market
+  p75: number; // dollars — clearing this puts a title in the market's top quarter
+  p90: number; // dollars — the top decile; how steep the tail is
 }
 
 // Sub-genre lens: the same economics row, keyed on a SteamSpy tag instead of a store genre

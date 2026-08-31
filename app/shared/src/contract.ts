@@ -100,7 +100,20 @@ export const CONTRACT = {
   //      this annotates rather than silently re-sorts. Scope is the BROWSER panel only — no
   //      revenue axis exists there, so the honest reading is "quality discovery missed", not any
   //      claim about an underserved market. Additive; read defensively.
-  version: 20,
+  // v21: `SteamGenreEconomics` (and the tag lens extending it) gained an absolute OUTCOME ladder
+  //      beside v10's uncertainty band (#177). `successBand` tiers the headline median on lifetime
+  //      realised gross — sub-scale <$50k · modest $50k–250k · sustainable $250k–1M · hit $1M–5M ·
+  //      breakout $5M+ — because "$380k median" is not decision-ready until you know whether that
+  //      is a typical result or an upper-quartile one. Each floor also carries a review-count
+  //      equivalent DERIVED from BOXLEITER_MULTIPLIER at one stated reference price, so the two
+  //      lenses cannot drift. `revenuePercentiles` ({p25, p75, p90}, same owners-based estimator)
+  //      adds the tail shape, and is null below a 30-title cohort floor rather than reporting a
+  //      quantile that one game could move. The ladder is calibrated on the cohort KAIROS already
+  //      medians — released, non-AAA, free titles at $0 — and a paid-only cohort runs ~4× higher,
+  //      so every surface showing a band states its cohort. Additive; read defensively.
+  //      Same commit: ESTIMATOR_DISAGREE_RATIO 3 → 2 (observed splits sit at 2.1–2.6× and never
+  //      flagged), so more rows now carry `estimatorsDisagree` — a threshold change, not a shape one.
+  version: 21,
   pitch: {
     // v2: added visual-card fields — setting, artStyle, codeName, headerUrl, shotUrl.
     // v3: rating rework — scoreFields d1Fit/steamCeiling/buildCost → browserFit/steamFit/buildEase.
