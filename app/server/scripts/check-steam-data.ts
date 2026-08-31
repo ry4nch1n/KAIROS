@@ -2,6 +2,13 @@
 // asserts recency + accuracy invariants on the CURRENT Steam data, and exits non-zero on failure
 // so a crawl that silently produced stale/wrong data fails loudly instead of looking "green".
 // Wired as the final step of the daily crawl. Run locally: npm run check:steam
+//
+// SCOPE, wider than the filename (#158): this is the daily crawl's ONLY gate step, so the
+// cross-source capture-yield pass runs here too — the browser portals are crawled by the same
+// workflow and had no gate of their own. Splitting it into a `check:browser` script would need
+// a new npm script AND a new workflow step, both human-only surfaces; folding it in costs one
+// import and keeps every invariant reporting in one place, which is the point of #158's
+// placement decision. Renaming the script to match is a separate, human-owned change.
 import { appDb } from "../src/db/db.ts";
 import { getSteamComparables } from "../src/queries/index.ts";
 import {
@@ -10,6 +17,7 @@ import {
   DEFAULT_STEAM_QUALITY,
   type CaptureCohort,
 } from "../src/checks/steamDataQuality.ts";
+import { browserCaptureCohorts } from "../src/checks/browserCaptureYield.ts";
 import { STEAM_AI_DISCLOSURE_MAX_AGE_DAYS } from "../src/crawler/steam.ts";
 
 // Golden appids: known-correct classifications that must hold regardless of thresholds.
@@ -111,8 +119,16 @@ const GOLDEN_AAA = new Set(["730", "578080"]); // CS2 (Valve), PUBG (Krafton) �
     },
   ];
   const capture = assessCaptureYield(cohorts);
-  console.log("Capture yield (latest crawl cohort):", capture.lines.join(" · "));
+  console.log("Steam capture yield (latest crawl cohort):", capture.lines.join(" · "));
   res.failures.push(...capture.failures);
+
+  // Browser portals (#56/#158). Their enrichments come from ONE shelf/listing fetch per crawl
+  // whose failure is swallowed by design, so the same 0%-over-a-real-cohort rule applies — the
+  // registry lives in checks/browserCaptureYield.ts and the cohorts are read from the rows the
+  // browser crawls just wrote, in the same run of this workflow.
+  const browser = assessCaptureYield(await browserCaptureCohorts(db));
+  console.log("Browser capture yield (latest crawl cohort):", browser.lines.join(" · "));
+  res.failures.push(...browser.failures);
 
   // Golden spot-checks (only assert for appids actually present in the crawl).
   const golden = await db.query(
@@ -134,10 +150,10 @@ const GOLDEN_AAA = new Set(["730", "578080"]); // CS2 (Valve), PUBG (Krafton) �
   if (golden.length) console.log("golden:", golden.map((r) => `${r.title}=${r.tier}`).join(", "));
 
   if (res.failures.length) {
-    console.error("\n❌ STEAM DATA-QUALITY GATE FAILED:");
+    console.error("\n❌ CRAWL DATA-QUALITY GATE FAILED:");
     for (const f of res.failures) console.error("   - " + f);
     process.exit(1);
   }
-  console.log("\n✅ Steam data-quality gate passed");
+  console.log("\n✅ Crawl data-quality gate passed");
   process.exit(0);
 })();
