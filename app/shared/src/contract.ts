@@ -90,7 +90,17 @@ export const CONTRACT = {
   //      matched-but-below-the-cut markets, each with its rank, capped at 5). Matching itself is
   //      untouched — `steerRow`'s no-force-fit contract is unchanged. Additive; read defensively
   //      (an older payload simply lacks the two new fields).
-  version: 19,
+  // v20: `HiddenGem` gained a discovery axis — `daysTracked`, `votesPerDay`, `trajectory` (#176).
+  //      High rating × low votes ranked by a Bayesian-shrunk rating is a ONE-axis read, and that
+  //      one axis cannot separate "quality the audience hasn't found yet" from "shipped, nobody
+  //      found it, stalled years ago" — the two have identical rating/vote signatures and
+  //      opposite meanings. The added fields are the second axis: age since KAIROS first saw the
+  //      title (crawl discovery, NEVER a release date — the browser portals don't date releases)
+  //      and the same age-adjusted momentum `NewRelease` already carries. Ranking is unchanged;
+  //      this annotates rather than silently re-sorts. Scope is the BROWSER panel only — no
+  //      revenue axis exists there, so the honest reading is "quality discovery missed", not any
+  //      claim about an underserved market. Additive; read defensively.
+  version: 20,
   pitch: {
     // v2: added visual-card fields — setting, artStyle, codeName, headerUrl, shotUrl.
     // v3: rating rework — scoreFields d1Fit/steamCeiling/buildCost → browserFit/steamFit/buildEase.

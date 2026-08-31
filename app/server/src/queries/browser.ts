@@ -362,6 +362,10 @@ async function gemBase(db: Querier, platform: Platform) {
   return db.query(
     `WITH base AS (
        SELECT g.id, g.title, ${canonSql("l.genre")} AS genre, l.rating, l.votes,
+              -- Days since we FIRST SAW the title, measured against the same data-relative
+              -- anchor the new-release window uses (never the wall clock, so reads stay
+              -- deterministic). first_seen_at is crawl discovery, not a release date.
+              greatest(0, floor(extract(epoch FROM (${newAnchor(platform)} - g.first_seen_at)) / 86400))::int AS days_tracked,
               percent_rank() OVER (ORDER BY l.rating) AS rp,
               percent_rank() OVER (ORDER BY l.votes)  AS vp
        FROM v_latest l
@@ -369,7 +373,7 @@ async function gemBase(db: Querier, platform: Platform) {
        JOIN sources src ON src.id = g.source_id
        WHERE g.is_live AND l.rating IS NOT NULL AND l.votes IS NOT NULL ${pf(platform)}
      )
-     SELECT id, title, genre, rating, votes, rp, vp,
+     SELECT id, title, genre, rating, votes, days_tracked, rp, vp,
             (rp >= ${GEM_RATING_PCTILE} AND vp <= ${GEM_VOTES_PCTILE} AND votes >= ${MIN_GEM_VOTES}) AS gem
      FROM base`,
   );
@@ -390,30 +394,82 @@ export async function getScatter(
   }));
 }
 
+/**
+ * Per-title vote momentum for an arbitrary id set, off the append-only snapshot series.
+ * Same reading getNewReleases computes over its cohort, hoisted so any list can annotate
+ * its rows with "is this still accreting attention, or has it stopped?".
+ */
+async function voteMomentum(
+  db: Querier,
+  ids: number[],
+): Promise<Map<number, { votesPerDay: number; trajectory: Trajectory }>> {
+  const out = new Map<number, { votesPerDay: number; trajectory: Trajectory }>();
+  if (!ids.length) return out;
+  const ph = ids.map((_, i) => `$${i + 1}`).join(",");
+  const series = await db.query(
+    `SELECT game_id AS id, captured_at AS d, max(votes) AS votes
+     FROM game_snapshots
+     WHERE game_id IN (${ph}) AND votes IS NOT NULL
+     GROUP BY game_id, captured_at ORDER BY game_id, captured_at`,
+    ids,
+  );
+  const byId = new Map<number, { t: number[]; v: number[] }>();
+  for (const r of series) {
+    const id = num(r.id);
+    let g = byId.get(id);
+    if (!g) {
+      g = { t: [], v: [] };
+      byId.set(id, g);
+    }
+    g.t.push(new Date(r.d).getTime());
+    g.v.push(num(r.votes));
+  }
+  for (const id of ids) {
+    const g = byId.get(id);
+    if (!g || g.v.length < 2) {
+      out.set(id, { votesPerDay: 0, trajectory: "new" });
+      continue;
+    }
+    out.set(id, classifyTrajectory(g.v, (g.t[g.t.length - 1] - g.t[0]) / 86400000));
+  }
+  return out;
+}
+
 export async function getHiddenGems(
   db: Querier,
   platform: Platform,
   rows?: Record<string, any>[],
 ): Promise<HiddenGem[]> {
   rows ??= await gemBase(db, platform);
-  return (
-    rows
-      .filter((r) => r.gem)
-      // Rank by Bayesian-shrunk rating so well-supported quality outranks thin-sample flukes.
-      .sort(
-        (a, b) =>
-          bayesianGemScore(num(b.rating), num(b.votes)) -
-          bayesianGemScore(num(a.rating), num(a.votes)),
-      )
-      .slice(0, 30)
-      .map((r) => ({
-        gameId: num(r.id),
-        title: r.title,
-        rating: num(r.rating),
-        votes: num(r.votes),
-        genre: r.genre ?? "—",
-      }))
+  const top = rows
+    .filter((r) => r.gem)
+    // Rank by Bayesian-shrunk rating so well-supported quality outranks thin-sample flukes.
+    .sort(
+      (a, b) =>
+        bayesianGemScore(num(b.rating), num(b.votes)) -
+        bayesianGemScore(num(a.rating), num(a.votes)),
+    )
+    .slice(0, 30);
+  // Second axis (#176). Rating × votes alone gives one number, and one number cannot tell
+  // "under-discovered" from "stalled years ago" — the two look identical on it. Age since
+  // first sighting plus vote momentum ANNOTATE the ranking (the sort is deliberately
+  // unchanged) so the reader can separate them instead of trusting the label.
+  const mom = await voteMomentum(
+    db,
+    top.map((r) => num(r.id)),
   );
+  return top.map((r) => {
+    const id = num(r.id);
+    return {
+      gameId: id,
+      title: r.title,
+      rating: num(r.rating),
+      votes: num(r.votes),
+      genre: r.genre ?? "—",
+      daysTracked: num(r.days_tracked),
+      ...(mom.get(id) ?? { votesPerDay: 0, trajectory: "new" as Trajectory }),
+    };
+  });
 }
 
 export async function getMarketGaps(db: Querier, platform: Platform): Promise<MarketGap[]> {
@@ -838,15 +894,21 @@ export async function getInsights(
     });
   // (3) Hidden-gems count
   const gems = deps?.gems ?? (await getHiddenGems(db, platform));
-  if (gems.length)
+  if (gems.length) {
+    // The honest reading (#176): this list is "quality discovery missed", NOT evidence of an
+    // underserved market — the browser panel has no revenue axis to make a demand claim on.
+    // Splitting on momentum is what makes it actionable: a gem still accreting votes is being
+    // found late, a flat one has stopped being found at all.
+    const live = gems.filter((g) => g.votesPerDay > 0 && g.trajectory !== "decaying").length;
     out.push({
       kind: "gem",
       tag: "HIDDEN GEMS",
-      meta: `${gems.length} found`,
-      text: `<b>${gems.length} hidden gems</b> rank in the top 25% on rating with low vote volume.`,
+      meta: `${gems.length} found · ${live} still climbing`,
+      text: `<b>${gems.length} well-rated games</b> sit in the top 25% on rating with low vote volume — <b>${live}</b> are still gaining votes, the rest have stalled.`,
       implication:
-        'quality alone didn\'t get these discovered — study what they share before betting on "good gets found"',
+        "quality discovery missed — study the ones still climbing for what earns attention late, and treat the flat ones as a warning that good doesn't get found on its own",
     });
+  }
   // (4) Optional highest-quality genre by P75 rating
   const landscape = deps?.landscape ?? (await getGenreLandscape(db, platform));
   if (landscape.length) {
