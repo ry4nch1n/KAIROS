@@ -467,6 +467,34 @@ textarea {
   color: var(--primary-deep);
   font-weight: 600;
 }
+/* A skipped edition slot (#180). Not a button — nothing to open — and quieter than a
+   real row so the eye reads it as an absence, not another entry. */
+.edition.gap {
+  cursor: default;
+  color: var(--text-3);
+  opacity: 0.72;
+  border: 1px dashed var(--border-soft);
+  background: none;
+  min-height: 38px;
+}
+.gap-note {
+  margin-left: auto;
+  font-size: var(--fs-1);
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+}
+/* Cadence header line. Wraps rather than pushing the 375px rail wide. */
+.cadence-note {
+  font-family: "Fira Code";
+  font-size: var(--fs-1);
+  line-height: var(--lh-2);
+  color: var(--text-3);
+  padding: var(--sp-1) var(--sp-3);
+  overflow-wrap: anywhere;
+}
+.cadence-note.alert {
+  color: var(--accent);
+}
 .ed-tag {
   margin-left: auto;
   font-size: var(--fs-1);

@@ -122,7 +122,16 @@ export const CONTRACT = {
   //      fed the row, the mirror of `genres` on the browser side) makes a wrong lean debuggable
   //      from the payload. Same commit widened the map's key coverage. Additive: an existing
   //      reader that does not know the new value renders no chip rather than a wrong one.
-  version: 22,
+  // v23: GET /api/brief/editions now also emits DERIVED gap rows — a cadence slot that never
+  //      published, marked `missing: true` with id 0, empty briefType and sourceCount 0 (#180).
+  //      A list of the editions that exist cannot show the edition that does not, so two
+  //      skipped Thursdays read exactly like a quiet fortnight. The cadence is INFERRED from
+  //      the trailing six complete weeks rather than hardcoded, so a deliberate schedule change
+  //      stops raising gaps instead of alarming forever; too short a history claims no cadence
+  //      and emits no gaps, and a slot is reported only once past due — never today or later,
+  //      never before the first edition ever published. Additive: a reader that does not know
+  //      the flag renders one extra row, and brief validation stays advisory either way.
+  version: 23,
   pitch: {
     // v2: added visual-card fields — setting, artStyle, codeName, headerUrl, shotUrl.
     // v3: rating rework — scoreFields d1Fit/steamCeiling/buildCost → browserFit/steamFit/buildEase.

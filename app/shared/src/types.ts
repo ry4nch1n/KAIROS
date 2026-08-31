@@ -421,6 +421,11 @@ export interface BriefEditionMeta {
   weekday: string; // "mon" | "thu"
   briefType: string;
   sourceCount: number;
+  // Set on a DERIVED gap row (#180): a slot the inferred cadence expected and that never
+  // published. A list of the editions that exist cannot show the edition that does not, so
+  // the misses are emitted inline, in date order, alongside the real rows. A gap row carries
+  // id 0, an empty briefType and sourceCount 0 — there is no edition behind it to fetch.
+  missing?: boolean;
 }
 
 // Matches the real indie-brief edition JSON (build-brief.js / brief-content-<date>.json).
