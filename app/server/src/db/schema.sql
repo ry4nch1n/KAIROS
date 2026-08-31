@@ -66,6 +66,12 @@ CREATE TABLE IF NOT EXISTS game_snapshots (
   ai_disclosure_note  TEXT,     -- the developer's disclosure note, when present
   followers           BIGINT,   -- #54: app community-group members = Steam followers (null = not measured, never 0)
   coming_soon         BOOLEAN,  -- #54: store says UNRELEASED (null = not measured; excluded from every market analytic)
+  -- #178 store-page completeness. Capture only — no analytic reads these yet. NULL = not
+  -- measured (browser source, or the field absent from the payload); an EMPTY store_features
+  -- is a measured "carries none of them", which is the bottom-band signal itself.
+  language_count         INT,      -- distinct store-listed languages
+  has_simplified_chinese BOOLEAN,  -- the single highest-leverage locale for indie reach
+  store_features         TEXT[],   -- subset of achievements | cloud | controller | workshop
   UNIQUE (game_id, crawl_id)
 );
 CREATE INDEX IF NOT EXISTS idx_snap_game_time ON game_snapshots (game_id, captured_at DESC);
@@ -83,6 +89,9 @@ ALTER TABLE game_snapshots ADD COLUMN IF NOT EXISTS ai_disclosure       BOOLEAN;
 ALTER TABLE game_snapshots ADD COLUMN IF NOT EXISTS ai_disclosure_note  TEXT;
 ALTER TABLE game_snapshots ADD COLUMN IF NOT EXISTS followers           BIGINT;
 ALTER TABLE game_snapshots ADD COLUMN IF NOT EXISTS coming_soon         BOOLEAN;
+ALTER TABLE game_snapshots ADD COLUMN IF NOT EXISTS language_count         INT;
+ALTER TABLE game_snapshots ADD COLUMN IF NOT EXISTS has_simplified_chinese BOOLEAN;
+ALTER TABLE game_snapshots ADD COLUMN IF NOT EXISTS store_features         TEXT[];
 
 CREATE TABLE IF NOT EXISTS tags (
   id   SERIAL PRIMARY KEY,

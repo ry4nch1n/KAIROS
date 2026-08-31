@@ -48,7 +48,28 @@ export interface RawGame {
   // pre-purchase demand number an unshipped game has. null/undefined = not measured (browser
   // sources), which reads the same as false everywhere via `IS NOT TRUE`.
   comingSoon?: boolean | null;
+  // ── Store-page completeness (#178). CAPTURE ONLY — no analytic reads these yet.
+  // All three come free from payloads already fetched (`store/api/appdetails` +
+  // SteamSpy `appdetails`), so they add ZERO crawl cost and never touch CRAWL_LIMIT.
+  // null/undefined = NOT MEASURED (browser sources, or the field absent from the payload) —
+  // distinct from a measured zero/empty, which is itself the signal: the two lowest-review
+  // titles in the 2026-08-24 deckbuilder pass were the only two shipping no achievements and
+  // no cloud saves, and the single-language one was bottom of the band.
+  languageCount?: number | null; // distinct store-listed languages (localisation breadth)
+  hasSimplifiedChinese?: boolean | null; // the single highest-leverage locale for indie reach
+  /**
+   * Which of the four store-page features the listing carries, as a sorted subset of
+   * {@link STORE_FEATURES}. An EMPTY array is a measured "carries none of them" — the bottom-band
+   * signal — and must never be collapsed to null, which means the payload never told us.
+   */
+  storeFeatures?: string[] | null;
 }
+
+/**
+ * The store-page features worth capturing, in the order they are written. Each is a boolean
+ * fact about the listing (not about the game), so the compact array form beats four columns.
+ */
+export const STORE_FEATURES = ["achievements", "cloud", "controller", "workshop"] as const;
 
 /** Per-run selection inputs for {@link SourceAdapter.listGameUrls}. */
 export interface ListOptions {

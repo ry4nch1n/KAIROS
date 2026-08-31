@@ -4,7 +4,7 @@
 //   2. appreviews summary → review %positive (→ rating), total_reviews (→ votes)
 //   3. SteamSpy appdetails→ owners (→ plays), ccu, playtime, weighted tags
 // The pure transforms below are unit-tested; the network layer is a thin orchestrator.
-import { type RawGame, politeFetch, sleep } from "./base.ts";
+import { type RawGame, STORE_FEATURES, politeFetch, sleep } from "./base.ts";
 
 const STORE = "https://store.steampowered.com";
 const STEAMSPY = "https://steamspy.com/api.php";
@@ -396,6 +396,79 @@ export function isComingSoon(appData: any): boolean {
   return appData?.release_date?.coming_soon === true;
 }
 
+// ── store-page completeness (#178) ───────────────────────────────────────────
+// Both inputs are already in hand: appdetails carries `supported_languages` + `categories`,
+// SteamSpy carries a plain `languages` list. Nothing here fetches.
+
+/**
+ * Split a Steam/SteamSpy language listing into distinct language names.
+ *
+ * appdetails serves markup, not data: `"English<strong>*</strong>, French, …,
+ * Japanese<br><strong>*</strong>languages with full audio support"`. The trailing footnote is
+ * prose, not a language, so it is cut before the split — otherwise every fully-voiced title
+ * inflates its own count by one. SteamSpy's `languages` is the same list without the markup,
+ * so one parser serves both.
+ */
+export function parseSupportedLanguages(raw: string | null | undefined): string[] {
+  if (!raw || typeof raw !== "string") return [];
+  const text = raw
+    .split(/<br\s*\/?>/i)[0] // the audio footnote lives after the line break
+    .replace(/<[^>]*>/g, " ") // drop <strong>/<i> wrappers, keep the separators
+    .replace(/\*?\s*languages with full audio support.*$/i, "") // footnote without a <br>
+    .replace(/&amp;/g, "&");
+  const seen = new Set<string>();
+  for (const part of text.split(",")) {
+    const name = part.replace(/\*/g, "").replace(/\s+/g, " ").trim();
+    if (name) seen.add(name.toLowerCase());
+  }
+  return [...seen];
+}
+
+/** Simplified Chinese is the one locale with a documented step-change in indie reach. */
+export function detectSimplifiedChinese(languages: string[]): boolean {
+  return languages.some((l) => /simplified\s*chinese|chinese\s*\(\s*simplified\s*\)/i.test(l));
+}
+
+// appdetails category ids are stable machine keys; the `description` strings are localized and
+// occasionally reworded, so match on the id and keep the text only as a fallback.
+const FEATURE_CATEGORY_IDS: Record<string, number[]> = {
+  achievements: [22],
+  cloud: [23],
+  controller: [28], // FULL controller support only — 18 (partial) is a weaker claim
+  workshop: [30],
+};
+const FEATURE_PATTERNS: Record<string, RegExp> = {
+  achievements: /steam achievements/i,
+  cloud: /steam cloud/i,
+  controller: /full controller support/i,
+  workshop: /steam workshop/i,
+};
+
+/**
+ * Extract the store-page features from appdetails `categories`.
+ *
+ * Returns null when the payload carries no categories array at all (not measured — a browser
+ * source, or a partial/failed store fetch). Returns `[]` when categories ARE present and none
+ * of the four match: that empty array is the actual bottom-band signal, so the two cases must
+ * stay distinguishable.
+ */
+export function parseStoreFeatures(appData: any): string[] | null {
+  const cats = appData?.categories;
+  if (!Array.isArray(cats)) return null;
+  const ids = new Set<number>();
+  const descriptions: string[] = [];
+  for (const c of cats) {
+    const id = Number(c?.id);
+    if (Number.isFinite(id)) ids.add(id);
+    if (typeof c?.description === "string") descriptions.push(c.description);
+  }
+  return STORE_FEATURES.filter(
+    (f) =>
+      FEATURE_CATEGORY_IDS[f].some((id) => ids.has(id)) ||
+      descriptions.some((d) => FEATURE_PATTERNS[f].test(d)),
+  );
+}
+
 /** Join the three endpoints' payloads for one appid into a normalized RawGame. */
 export function parseSteamGame(
   appid: number | string,
@@ -413,6 +486,13 @@ export function parseSteamGame(
   const price = appData?.price_overview;
   const tags = topTags(steamspy?.tags);
   const comingSoon = isComingSoon(appData);
+  // Store-page completeness (#178). appdetails is authoritative; SteamSpy's plainer `languages`
+  // is the fallback for the runs where the store payload came back partial. Neither is a new
+  // request — both responses are already joined above.
+  const languages = parseSupportedLanguages(
+    appData?.supported_languages ?? steamspy?.languages ?? null,
+  );
+  const measuredLanguages = languages.length > 0;
 
   return {
     sourceGameId: String(appid),
@@ -448,6 +528,11 @@ export function parseSteamGame(
       ? null
       : classifyScaleTier({ reviews: totalReviews, owners, selfPublished, majorBacked }),
     comingSoon,
+    // A payload that listed no languages tells us nothing about localisation breadth — that is
+    // null, not a count of 0. A listing with exactly one language IS a measured 1.
+    languageCount: measuredLanguages ? languages.length : null,
+    hasSimplifiedChinese: measuredLanguages ? detectSimplifiedChinese(languages) : null,
+    storeFeatures: parseStoreFeatures(appData),
   };
 }
 
