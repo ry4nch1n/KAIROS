@@ -147,7 +147,19 @@ export const CONTRACT = {
   //      Games are apportioned by their own tags instead, one family per game, unassigned when the
   //      tags disagree. For readers: more `rows`, fewer `uncovered`, and a `genres`/`steamGenres`
   //      entry may read "Genre × Tag" for a split slice rather than a bare genre. Shape unchanged.
-  version: 25,
+  // v26: `votesPerDay` is now FRACTIONAL — two decimals, floored at 0.01 under any real gain
+  //      (#192). v20 shipped the Hidden Gems discovery axis on a helper that rounded the rate to
+  //      an integer, and Hidden Gems is the LOW-vote cohort by construction: 28 of the 30 live
+  //      rows read `0`, four of them beside a `rising` chip. An axis that is blank exactly where
+  //      it was built to be read is worse than no axis, because the empty column claims
+  //      "measured, and it's nothing". The floor plus a rate/label agreement rule (a window with
+  //      no net gain can no longer be called `rising`) makes that contradiction unrepresentable
+  //      rather than merely unlikely. Type and shape are unchanged (still `number`), so this is a
+  //      semantics bump: readers formatting the value must expect decimals, and must keep the
+  //      three states distinct — a positive rate, a measured 0 (flat), and `trajectory: "new"`
+  //      (no series yet, which is "not enough data", NOT zero). `NewRelease` carries the same
+  //      change and is unaffected in practice: its rows move thousands of votes/day.
+  version: 26,
   pitch: {
     // v2: added visual-card fields — setting, artStyle, codeName, headerUrl, shotUrl.
     // v3: rating rework — scoreFields d1Fit/steamCeiling/buildCost → browserFit/steamFit/buildEase.
