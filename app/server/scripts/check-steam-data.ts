@@ -83,6 +83,40 @@ const GOLDEN_AAA = new Set(["730", "578080"]); // CS2 (Valve), PUBG (Krafton) �
         "every market analytic silently includes unreleased titles AND the follower cohort " +
         "empties, taking its own 0%-capture assertion down with it (#54).",
     },
+    // Store-page completeness (#178, registered here by #194 once daily crawls proved the parse
+    // against live Steam responses). Every Steam row is eligible: both inputs ride along on the
+    // appdetails/SteamSpy payloads the crawl already fetches, so there is no per-row gating
+    // predicate to mirror — a healthy run measures all of them.
+    //
+    // CAPTURED IS "IS NOT NULL", AND THAT IS THE WHOLE CORRECTNESS POINT: a measured `false`
+    // and a measured EMPTY store_features are captures. The empty array IS the bottom-band
+    // signal (#178's research: the two lowest-review titles in the deckbuilder pass were the
+    // two shipping no achievements and no cloud saves), so counting `[]` as a miss would fire
+    // this gate on exactly the games the column exists to find.
+    {
+      key: "language_count",
+      eligible: agg.cohort,
+      captured: agg.languageCountCaptured,
+      why:
+        'localisation breadth collapses to "not measured" for the whole crawl, and the ' +
+        "store-page-completeness read that separates the bottom outcome band loses its main input (#178).",
+    },
+    {
+      // Same measurement gate as language_count by construction, guarded separately so a
+      // regression in the locale detector alone (rather than the language parse) still fires.
+      key: "has_simplified_chinese",
+      eligible: agg.cohort,
+      captured: agg.simplifiedChineseCaptured,
+      why: "the one locale with a documented step-change in indie reach reads as unknown everywhere (#178).",
+    },
+    {
+      key: "store_features",
+      eligible: agg.cohort,
+      captured: agg.storeFeaturesCaptured,
+      why:
+        "a broken categories parse is indistinguishable from a store page that genuinely lists " +
+        "none of the four features — the NULL swallows the measured empty set that is the signal (#178).",
+    },
   ];
   const capture = assessCaptureYield(cohorts);
   console.log("Steam capture yield (latest crawl cohort):", capture.lines.join(" · "));

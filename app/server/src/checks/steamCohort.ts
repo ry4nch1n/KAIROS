@@ -36,6 +36,16 @@ export interface SteamCohortCounts {
   releaseStateCaptured: number;
   /** Of `unreleased`, those that came back with a follower count. */
   followersCaptured: number;
+  /**
+   * Store-page completeness (#178, registered by #194). Captured means the column is NOT NULL —
+   * a measured `false` and a measured EMPTY `store_features` are captures, not misses: an
+   * all-features-absent listing is precisely the bottom-band signal these columns exist to find.
+   * The two language columns share one measurement gate in parseSteamGame (`measuredLanguages`),
+   * so they move together; both are counted because either going quiet on its own is a bug.
+   */
+  languageCountCaptured: number;
+  simplifiedChineseCaptured: number;
+  storeFeaturesCaptured: number;
   aiEligible: number; // eligibility mirrors wantsAiDisclosure() in crawler/steam.ts
   aiCaptured: number;
 }
@@ -68,6 +78,10 @@ export async function steamCohortCounts(db: Querier): Promise<SteamCohortCounts>
               -- capture-yield cohorts (#158): eligible vs actually-carrying-a-value, per enrichment
               count(*) FILTER (WHERE coming_soon IS NOT NULL)::int AS release_state_captured,
               count(*) FILTER (WHERE NOT released AND followers IS NOT NULL)::int AS followers_captured,
+              -- store-page completeness (#194): IS NOT NULL, so a measured false/'{}' counts as captured
+              count(*) FILTER (WHERE language_count IS NOT NULL)::int AS language_count_captured,
+              count(*) FILTER (WHERE has_simplified_chinese IS NOT NULL)::int AS simplified_chinese_captured,
+              count(*) FILTER (WHERE store_features IS NOT NULL)::int AS store_features_captured,
               count(*) FILTER (WHERE ai_wanted)::int AS ai_eligible,
               count(*) FILTER (WHERE ai_wanted AND ai_disclosure IS NOT NULL)::int AS ai_captured
        FROM fresh`,
@@ -84,6 +98,9 @@ export async function steamCohortCounts(db: Querier): Promise<SteamCohortCounts>
     indie: n(r?.indie),
     releaseStateCaptured: n(r?.release_state_captured),
     followersCaptured: n(r?.followers_captured),
+    languageCountCaptured: n(r?.language_count_captured),
+    simplifiedChineseCaptured: n(r?.simplified_chinese_captured),
+    storeFeaturesCaptured: n(r?.store_features_captured),
     aiEligible: n(r?.ai_eligible),
     aiCaptured: n(r?.ai_captured),
   };

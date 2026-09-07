@@ -1,7 +1,7 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { applySchema, freshMemoryDb, type Querier } from "../src/db/db.ts";
 import { steamCohortCounts } from "../src/checks/steamCohort.ts";
-import { assessSteamDataQuality } from "../src/checks/steamDataQuality.ts";
+import { assessCaptureYield, assessSteamDataQuality } from "../src/checks/steamDataQuality.ts";
 
 // #148. ~1/6 of every fresh cohort is an unreleased title (#54 part 2) with an honest NULL
 // release_date and NULL scale_tier; the gate counted them, diluting `dateFill` and padding
@@ -25,6 +25,10 @@ interface Row {
   date?: string | null;
   tier?: string | null;
   followers?: number | null;
+  /** Store-page completeness (#178/#194). `undefined` seeds NULL — "never measured". */
+  languageCount?: number | null;
+  simplifiedChinese?: boolean | null;
+  storeFeatures?: string[] | null;
 }
 
 /** Seed one Steam crawl day. Same slugs across days on purpose: v_latest takes the later one. */
@@ -53,8 +57,9 @@ async function seed(rows: Row[], day = "2026-08-30"): Promise<void> {
       )
     )[0].id;
     await db.query(
-      `INSERT INTO game_snapshots(game_id, crawl_id, captured_at, rating, scale_tier, coming_soon, followers)
-       VALUES ($1,$2,$3,4.4,$4,$5,$6)`,
+      `INSERT INTO game_snapshots(game_id, crawl_id, captured_at, rating, scale_tier, coming_soon, followers,
+         language_count, has_simplified_chinese, store_features)
+       VALUES ($1,$2,$3,4.4,$4,$5,$6,$7,$8,$9::text[])`,
       [
         gid,
         crawlId,
@@ -62,6 +67,9 @@ async function seed(rows: Row[], day = "2026-08-30"): Promise<void> {
         r.tier ?? null,
         r.released === null ? null : !r.released,
         r.followers ?? null,
+        r.languageCount ?? null,
+        r.simplifiedChinese ?? null,
+        r.storeFeatures ?? null,
       ],
     );
   }
@@ -128,5 +136,63 @@ describe("gate cohort excludes coming-soon rows (#148)", () => {
     const c = await steamCohortCounts(db);
     expect([c.cohort, c.crawled, c.unreleased]).toEqual([10, 10, 0]);
     expect(c.releaseStateCaptured).toBe(5); // …and they still read as uncaptured release state
+  });
+});
+
+// #194. Registering these three columns arms the 0%-capture gate on them, and the one way that
+// registration can be WRONG is to read a measured absence as a miss: `has_simplified_chinese =
+// false` and `store_features = '{}'` are the store-page-completeness signal itself (#178), not a
+// failed fetch. A gate that counted them as uncaptured would red the daily crawl on precisely
+// the bottom-band titles the columns were added to surface.
+describe("store-completeness capture yield: NULL vs EMPTY (#194)", () => {
+  /** The bottom-band shape: measured, and carrying nothing. */
+  const barest = (): Row => ({
+    ...released(),
+    languageCount: 1,
+    simplifiedChinese: false,
+    storeFeatures: [],
+  });
+  const storeCohorts = (c: Awaited<ReturnType<typeof steamCohortCounts>>) => [
+    { key: "language_count", eligible: c.cohort, captured: c.languageCountCaptured, why: "" },
+    {
+      key: "has_simplified_chinese",
+      eligible: c.cohort,
+      captured: c.simplifiedChineseCaptured,
+      why: "",
+    },
+    { key: "store_features", eligible: c.cohort, captured: c.storeFeaturesCaptured, why: "" },
+  ];
+
+  it("counts a measured false / empty array as CAPTURED, so the gate passes", async () => {
+    await reset();
+    await seed(many(12, barest));
+
+    const c = await steamCohortCounts(db);
+    expect([c.languageCountCaptured, c.simplifiedChineseCaptured, c.storeFeaturesCaptured]).toEqual(
+      [12, 12, 12],
+    );
+    expect(assessCaptureYield(storeCohorts(c)).ok).toBe(true);
+  });
+
+  it("fails on an all-NULL cohort over the eligible floor — the outage it exists to catch", async () => {
+    await reset();
+    await seed(many(12, released)); // nothing measured: the parse went quiet
+
+    const c = await steamCohortCounts(db);
+    expect([c.languageCountCaptured, c.simplifiedChineseCaptured, c.storeFeaturesCaptured]).toEqual(
+      [0, 0, 0],
+    );
+    const r = assessCaptureYield(storeCohorts(c));
+    expect(r.ok).toBe(false);
+    expect(r.failures).toHaveLength(3);
+  });
+
+  it("does not assert under the eligible-row floor: a capped run is not evidence", async () => {
+    await reset();
+    await seed(many(9, released)); // 9 < MIN_CAPTURE_COHORT
+
+    const c = await steamCohortCounts(db);
+    expect(c.cohort).toBe(9);
+    expect(assessCaptureYield(storeCohorts(c)).ok).toBe(true);
   });
 });
