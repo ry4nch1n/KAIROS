@@ -664,6 +664,17 @@ describe("#108 loop-family map", () => {
     // Deliberately unmapped: a shelf label or a loop no family holds stays null, never force-fit.
     for (const g of ["Sports", "Fighting", "Battle Royale", ".io", "Arcade", "Beauty", "Skill"])
       expect(loopFamilyFor(g)).toBeNull();
+    // Steam's genre axis is five grab-bags, so a Steam sub-genre tag resolves on the TAG alone.
+    expect(loopFamilyFor("Action", "Looter Shooter")).toBe("extraction-lite");
+    expect(loopFamilyFor("Indie", "Roguelike Deckbuilder")).toBe("synergy-builder");
+    expect(loopFamilyFor("Casual", "Idler")).toBe("idle-tycoon");
+    expect(loopFamilyFor("Adventure", "Farming Sim")).toBe("cozy-craft");
+    expect(loopFamilyFor("RPG", "Automation")).toBe("automation-under-pressure");
+    // …but a genre carrying its own default is never yanked off it by a minority tag.
+    expect(loopFamilyFor("Puzzle", "Idler")).toBe("route-planning");
+    // Setting/mode tags and shelves no one family holds stay null on the tag axis too.
+    for (const t of ["Open World", "Survival", "Crafting", "Souls-like", "Card Battler"])
+      expect(loopFamilyFor("Action", t)).toBeNull();
   });
 });
 
@@ -685,14 +696,27 @@ describe("#108 getLoopFamilyMarket", () => {
       expect(["rising", "steady", "cooling", "quiet"]).toContain(r.supplyTrend);
     }
 
-    // Genre-grain counting: a family's supply equals the games in its genres — no tag double-count.
+    // #179: the tag axis may now SPLIT a genre across families, so a slice reads "Genre × Tag"
+    // and a family's supply is bounded by the genres its slices came out of. The no-double-count
+    // rule survives the split as a global invariant — every game is attributed at most once.
     const genres = await q.getGenres(db, "all");
     const bySupply = new Map(genres.map((g) => [g.genre, g.games]));
-    for (const r of m.rows)
-      expect(r.supplyN).toBe(r.genres.reduce((a, g) => a + (bySupply.get(g) ?? 0), 0));
+    for (const r of m.rows) {
+      let cap = 0;
+      for (const label of r.genres) {
+        const g = label.split(" × ")[0];
+        expect(bySupply.has(g)).toBe(true);
+        cap += bySupply.get(g) ?? 0;
+      }
+      expect(r.supplyN).toBeLessThanOrEqual(cap);
+    }
+    expect(m.rows.reduce((a, r) => a + r.supplyN, 0)).toBeLessThanOrEqual(
+      genres.reduce((a, g) => a + g.games, 0),
+    );
 
-    // A Steam-only family is uncovered on the browser platform.
-    expect(m.uncovered).toContain("contained-systemic");
+    // #179: the tag split reaches families the genre-whole fold could not — on the seed the
+    // browser read answers for 8 of 9, where genre-grain coverage left most of the menu blank.
+    expect(covered.size).toBeGreaterThanOrEqual(8);
   });
 
   it("#67 sets Steam economics and a route lean beside the browser read", async () => {

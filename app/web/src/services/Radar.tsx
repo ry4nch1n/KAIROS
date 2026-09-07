@@ -654,7 +654,7 @@ const LeanChip = ({ lean }: { lean?: string | null }) => {
 /** Why a Steam cell is blank — or, when it isn't, which genres fed it. */
 const steamCellTip = (steam: unknown, steamGenres?: string[]) =>
   steamGenres?.length
-    ? `Steam genres mapped into this family: ${steamGenres.join(", ")}`
+    ? `Mapped into this family from Steam: ${steamGenres.join(", ")}`
     : steam
       ? undefined
       : "No live Steam genre maps into this family — nothing was measured on the Steam side.";
