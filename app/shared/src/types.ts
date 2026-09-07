@@ -433,6 +433,11 @@ export interface BriefEditionMeta {
   // the misses are emitted inline, in date order, alongside the real rows. A gap row carries
   // id 0, an empty briefType and sourceCount 0 — there is no edition behind it to fetch.
   missing?: boolean;
+  // Set on the single CADENCE-WEAKENED row (#193): the weekday met the cadence bar in the
+  // preceding window but has fallen under it in the current one while its peers held, so it
+  // is dropping out of the inferred cadence rather than being retired. Read as "these
+  // editions have stopped", not as one more skipped slot — it stands in for a whole weekday.
+  weakened?: boolean;
 }
 
 // Matches the real indie-brief edition JSON (build-brief.js / brief-content-<date>.json).

@@ -482,6 +482,16 @@ textarea {
   font-size: var(--fs-1);
   letter-spacing: 0.6px;
   text-transform: uppercase;
+  text-align: right;
+  min-width: 0;
+}
+/* A weekday dropping out of the cadence (#193) — louder than a single skipped slot, because
+   it is the point at which the gap rows would otherwise stop appearing at all. */
+.edition.gap.weak {
+  opacity: 1;
+  color: var(--accent);
+  border-style: solid;
+  border-color: var(--accent);
 }
 /* Cadence header line. Wraps rather than pushing the 375px rail wide. */
 .cadence-note {

@@ -13,7 +13,7 @@ value means bumping the relevant version in the same commit.**
 
 | Scope | Version |
 |-------|---------|
-| `(top level)` | **26** |
+| `(top level)` | **27** |
 | `pitch` | **8** |
 | `briefPayload` | **1** |
 | `taxonomy` | **3** |
