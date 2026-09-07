@@ -40,6 +40,18 @@ const gapRow = (date: string): BriefEditionMeta => ({
   missing: true,
 });
 
+// Weekdays that published in >= CADENCE_HIT_RATIO of the CADENCE_WEEKS weeks beginning at
+// `windowStart` (a Monday). One window, one rule — the only thing that varies is where it starts.
+function cadenceOf(published: Set<string>, windowStart: string): string[] {
+  const hits = new Map<string, number>();
+  for (let w = 0; w < CADENCE_WEEKS; w++)
+    for (let d = 0; d < 7; d++) {
+      const day = shiftDays(windowStart, 7 * w + d);
+      if (published.has(day)) hits.set(weekdayOf(day), (hits.get(weekdayOf(day)) ?? 0) + 1);
+    }
+  return WEEKDAY_KEYS.filter((k) => (hits.get(k) ?? 0) / CADENCE_WEEKS >= CADENCE_HIT_RATIO);
+}
+
 // Slots the trailing cadence expected and that never published, newest first.
 export function deriveBriefGaps(
   editions: BriefEditionMeta[],
@@ -59,27 +71,46 @@ export function deriveBriefGaps(
   const weeks: string[] = [];
   for (let i = 0; i < CADENCE_WEEKS; i++) weeks.push(shiftDays(windowStart, 7 * i));
 
-  const hits = new Map<string, number>();
-  for (const monday of weeks)
-    for (let d = 0; d < 7; d++) {
-      const day = shiftDays(monday, d);
-      if (published.has(day)) hits.set(weekdayOf(day), (hits.get(weekdayOf(day)) ?? 0) + 1);
-    }
-  const cadence = WEEKDAY_KEYS.filter(
-    (k) => (hits.get(k) ?? 0) / CADENCE_WEEKS >= CADENCE_HIT_RATIO,
-  );
+  const cadence = cadenceOf(published, windowStart);
   if (!cadence.length) return [];
+
+  // #193: the 60% bar makes the alarm SELF-SILENCING. A weekday that keeps being skipped
+  // eventually falls under it, drops out of `cadence`, and its gap rows vanish — the longer it
+  // stays broken, the more confidently KAIROS reports that nothing is wrong. A deliberate
+  // change and a failure look identical in one trailing window; they differ in shape, so
+  // compare against the six weeks BEFORE this one. A weekday that was cadence then, is not
+  // now, while at least one of its peers still holds, is decaying against an intact schedule.
+  // This fires on the TRANSITION only: once the earlier window has slid past the last regular
+  // publication the weekday is cadence in neither, and a genuinely retired day goes quiet on
+  // its own. Neither the threshold nor the primary window moves — both would only delay the
+  // silence.
+  const priorStart = shiftDays(windowStart, -7 * CADENCE_WEEKS);
+  const prior = firstEdition <= priorStart ? cadenceOf(published, priorStart) : [];
+  const weakened = prior.some((k) => cadence.includes(k))
+    ? prior.filter((k) => !cadence.includes(k))
+    : [];
 
   // Scan the window plus the current partial week so a miss surfaces on its first slot —
   // but only past-due ones, never today or the future, never before the first edition.
-  const gaps: BriefEditionMeta[] = [];
+  const scan: string[] = [];
   for (const monday of [...weeks, shiftDays(windowStart, 7 * CADENCE_WEEKS)])
     for (let d = 0; d < 7; d++) {
       const day = shiftDays(monday, d);
-      if (day < firstEdition || day >= today) continue;
-      if (cadence.includes(weekdayOf(day)) && !published.has(day)) gaps.push(gapRow(day));
+      if (day >= firstEdition && day < today) scan.push(day);
     }
-  return gaps.reverse();
+
+  const gaps: BriefEditionMeta[] = [];
+  for (const day of scan)
+    if (cadence.includes(weekdayOf(day)) && !published.has(day)) gaps.push(gapRow(day));
+  // ONE row per weakened weekday, on the latest slot it skipped — the claim is "Thursday
+  // editions have stopped", which is said once, not re-litigated for every slot behind it.
+  for (const k of weakened) {
+    const day = scan.filter((d) => weekdayOf(d) === k && !published.has(d)).pop();
+    if (day) gaps.push({ ...gapRow(day), weakened: true });
+  }
+  return gaps.sort((a, b) =>
+    a.editionDate < b.editionDate ? 1 : a.editionDate > b.editionDate ? -1 : 0,
+  );
 }
 
 export async function getBriefEditions(db: Querier, now?: Date): Promise<BriefEditionMeta[]> {

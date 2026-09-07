@@ -159,7 +159,18 @@ export const CONTRACT = {
   //      three states distinct — a positive rate, a measured 0 (flat), and `trajectory: "new"`
   //      (no series yet, which is "not enough data", NOT zero). `NewRelease` carries the same
   //      change and is unaffected in practice: its rows move thousands of votes/day.
-  version: 26,
+  // v27: the editions gap list gains a CADENCE-WEAKENED row — `missing: true` plus
+  //      `weakened: true` on the latest skipped slot of a weekday that met the 60% cadence bar
+  //      in the preceding six-week window but has fallen under it in the current one, while at
+  //      least one of its peers held (#193). Without it the alarm was self-silencing: a weekday
+  //      that keeps being skipped eventually drops out of the inferred cadence and its gap rows
+  //      disappear, so the longer it stays broken the more confidently the payload reports that
+  //      nothing is wrong. The signal fires on the TRANSITION and goes quiet on its own once the
+  //      earlier window slides past the last regular publication, so a deliberate schedule
+  //      change still stops alarming; the threshold and the primary window are deliberately
+  //      unchanged. At most one such row per weekday. Additive: a reader that does not know the
+  //      flag sees an ordinary gap row rather than silence.
+  version: 27,
   pitch: {
     // v2: added visual-card fields — setting, artStyle, codeName, headerUrl, shotUrl.
     // v3: rating rework — scoreFields d1Fit/steamCeiling/buildCost → browserFit/steamFit/buildEase.
