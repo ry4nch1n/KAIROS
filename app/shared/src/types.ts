@@ -306,6 +306,11 @@ export interface HiddenGem {
   // from "shipped, nobody found it, stalled years ago" — these two axes separate them.
   // `daysTracked` = days since KAIROS first saw the title (crawl discovery, NOT a release date);
   // `votesPerDay`/`trajectory` = the same age-adjusted momentum New Releases uses.
+  // `votesPerDay` is FRACTIONAL (two decimals, floored at 0.01 for any real gain) — this is
+  // the low-vote cohort by construction, so a genuinely climbing gem moves ~0.4 votes/day and
+  // integer rounding reported it as 0 (#192). A `rising` row therefore always carries a
+  // positive rate; a rate of 0 means measured-and-flat, and `trajectory: "new"` means no
+  // series yet — never confuse the two.
   daysTracked: number;
   votesPerDay: number;
   trajectory: Trajectory;
@@ -541,7 +546,9 @@ export interface NewRelease {
   rating: number;
   votes: number;
   url: string;
-  votesPerDay: number; // votes gained per day over the tracked window (launch-date-independent)
+  // Votes gained per day over the tracked window (launch-date-independent). Fractional to two
+  // decimals since #192; these rows run in the thousands, so the display still reads whole.
+  votesPerDay: number;
   trajectory: Trajectory;
 }
 

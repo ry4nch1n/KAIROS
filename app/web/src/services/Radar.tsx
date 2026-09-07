@@ -241,6 +241,26 @@ const TRAJ_LABEL: Record<string, string> = {
 // judge", not "recently released" — hidden gems are drawn from the whole live catalog, so
 // borrowing the New-Releases wording would assert an age the data doesn't carry.
 const GEM_TRAJ_LABEL: Record<string, string> = { ...TRAJ_LABEL, new: "· no series yet" };
+// The votes/day cell, in the three states the payload can actually be in (#192). Hidden Gems is
+// the low-vote cohort by construction, so its rates are fractions and the old integer format
+// printed "0" for 28 of 30 rows — four of them next to a "rising" chip. Three distinct readings,
+// never collapsed: no series yet is NOT a measured zero, and a measured zero is NOT a fraction
+// rounded away. Server-side `votesPerDay` is floored at 0.01 under any real gain and "rising"
+// requires a positive rate, so this can never print "0" or "no data" beside a rising chip.
+export function voteRateText(votesPerDay: number, trajectory: Trajectory): string {
+  if (trajectory === "new") return "no data";
+  if (!(votesPerDay > 0)) return "0";
+  if (votesPerDay >= 100) return "+" + fmt(Math.round(votesPerDay));
+  if (votesPerDay >= 10) return "+" + votesPerDay.toFixed(1);
+  return "+" + votesPerDay.toFixed(2);
+}
+// A fraction per day is hard to feel; the same rate per week is the reading the cohort deserves.
+export const voteRateTip = (votesPerDay: number, trajectory: Trajectory): string =>
+  trajectory === "new"
+    ? "Fewer than two snapshots of this title — no rate measured yet, which is not the same as zero."
+    : votesPerDay > 0
+      ? `≈ ${(votesPerDay * 7).toFixed(votesPerDay * 7 < 10 ? 1 : 0)} votes/week over the tracked window`
+      : "Measured over the tracked window: no votes gained.";
 // Supply-side momentum (B2): new-entrant flow. "rising" = crowding (a warning, so it reads
 // hot/amber, opposite of demand where rising is good); "quiet" = open lane.
 const SUPPLY_LABEL: Record<string, string> = {
@@ -985,7 +1005,7 @@ function GemsView({ ov, rows }: { ov: Overview; rows: HiddenGem[] | null }) {
                 </th>
                 <th className="r">
                   Votes/day
-                  <Tip text="Votes gained per day over the tracked window — separates a game being found late from one that stopped being found." />
+                  <Tip text="Votes gained per day over the tracked window — separates a game being found late from one that stopped being found. These are low-vote titles by definition, so the rate is fractional: +0.40/day is ~3 votes a week, and a real signal. 'no data' means too few snapshots to measure, not zero." />
                 </th>
                 <th>
                   Trend
@@ -1003,7 +1023,9 @@ function GemsView({ ov, rows }: { ov: Overview; rows: HiddenGem[] | null }) {
                   </td>
                   <td className="r">{fmt(r.votes)}</td>
                   <td className="r">{r.daysTracked > 0 ? r.daysTracked + "d" : "<1d"}</td>
-                  <td className="r">{r.votesPerDay > 0 ? "+" + fmt(r.votesPerDay) : "—"}</td>
+                  <td className="r" title={voteRateTip(r.votesPerDay, r.trajectory)}>
+                    {voteRateText(r.votesPerDay, r.trajectory)}
+                  </td>
                   <td>
                     <span className={"traj traj-" + r.trajectory}>
                       {GEM_TRAJ_LABEL[r.trajectory] || r.trajectory}
@@ -1057,7 +1079,9 @@ function NewReleasesView({ rows }: { rows: NewRelease[] }) {
               <td>{r.genre}</td>
               <td className="r">{r.rating ? r.rating.toFixed(2) : "—"}</td>
               <td className="r">{fmt(r.votes)}</td>
-              <td className="r">{r.votesPerDay > 0 ? "+" + fmt(r.votesPerDay) : "—"}</td>
+              <td className="r" title={voteRateTip(r.votesPerDay, r.trajectory)}>
+                {voteRateText(r.votesPerDay, r.trajectory)}
+              </td>
               <td>
                 <span className={"traj traj-" + r.trajectory}>
                   {TRAJ_LABEL[r.trajectory] || r.trajectory}

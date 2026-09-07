@@ -66,6 +66,21 @@ export function isCurationTag(name: string): boolean {
 }
 
 /**
+ * The reported rate, at two decimals with a 0.01 floor under any real gain (#192).
+ * Integer rounding erased this axis for the whole Hidden Gems cohort: low votes is that
+ * panel's SELECTION criterion, so its members gain fractions of a vote per day, and 28 of
+ * 30 live rows read `0` — four of them beside a `rising` chip. The floor is what makes that
+ * contradiction unrepresentable rather than merely unlikely: a series that gained anything
+ * reports something, so a positive trajectory can never sit next to a zero rate. High-traffic
+ * callers are untouched in practice — New Releases moves thousands of votes/day, and the
+ * renderer prints anything >= 100 as a whole number.
+ */
+function voteRate(raw: number): number {
+  if (!(raw > 0)) return 0;
+  return Math.max(0.01, Math.round(raw * 100) / 100);
+}
+
+/**
  * Age-adjusted momentum for one title from its vote time-series. Raw cumulative votes
  * can't tell a fresh rocket (167K votes in two weeks, still climbing) from a dead
  * evergreen (167K votes years ago, flat) — velocity can, and without a launch date:
@@ -79,13 +94,16 @@ export function classifyTrajectory(
 ): { votesPerDay: number; trajectory: Trajectory } {
   const pts = series.filter((v) => Number.isFinite(v));
   if (pts.length < 2 || daySpan <= 0) return { votesPerDay: 0, trajectory: "new" };
-  const votesPerDay = Math.max(0, Math.round((pts[pts.length - 1] - pts[0]) / daySpan));
+  const votesPerDay = voteRate((pts[pts.length - 1] - pts[0]) / daySpan);
   if (pts.length < 3) return { votesPerDay, trajectory: "plateau" };
   const mid = Math.floor(pts.length / 2);
   const early = (pts[mid] - pts[0]) / Math.max(1, mid);
   const late = (pts[pts.length - 1] - pts[mid]) / Math.max(1, pts.length - 1 - mid);
   let trajectory: Trajectory = "plateau";
-  if (late > early * 1.25 && late > 0) trajectory = "rising";
+  // "rising" needs the reported rate to agree with the half-over-half read (#192): a portal
+  // recount can drop cumulative votes mid-window, which left `late > early` sitting beside a
+  // net gain of zero — the chip and the number contradicting each other, by construction.
+  if (late > early * 1.25 && late > 0 && votesPerDay > 0) trajectory = "rising";
   else if (late < early * 0.5) trajectory = "decaying";
   return { votesPerDay, trajectory };
 }

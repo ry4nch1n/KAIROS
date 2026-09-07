@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { freshMemoryDb, type Querier } from "../src/db/db.ts";
-import { getHiddenGems, bayesianGemScore } from "../src/queries/index.ts";
+import { getHiddenGems, bayesianGemScore, classifyTrajectory } from "../src/queries/index.ts";
 
 // issue #8 — sample-size gate on Hidden Gems.
 
@@ -129,6 +129,19 @@ async function seedDiscovery(db: Querier) {
     ],
     800,
   );
+  // #192: the cohort's REAL shape — a gem climbing at a fraction of a vote per day. Three
+  // votes over thirty days is under-discovered AND improving, and integer rounding printed it
+  // as "+0" beside a "rising" chip, which is the panel lying about its own new axis.
+  await add(
+    "Trickle",
+    4.9,
+    [
+      [30, 100],
+      [15, 101],
+      [0, 103],
+    ],
+    60,
+  );
 }
 
 describe("H3 getHiddenGems annotates discovery age and vote momentum (#176)", () => {
@@ -151,5 +164,38 @@ describe("H3 getHiddenGems annotates discovery age and vote momentum (#176)", ()
     expect(stalled!.daysTracked).toBeGreaterThan(found!.daysTracked);
     expect(found!.daysTracked).toBeGreaterThanOrEqual(29);
     expect(found!.daysTracked).toBeLessThanOrEqual(31);
+  });
+});
+
+describe("H4 the discovery rate survives the low-vote cohort it was built for (#192)", () => {
+  it("a gem gaining a fraction of a vote per day reports that fraction, not 0", async () => {
+    const db = await freshMemoryDb();
+    await seedDiscovery(db);
+    const gems = await getHiddenGems(db, "poki");
+    const trickle = gems.find((g) => g.title === "Trickle");
+    expect(trickle, "Trickle must qualify as a gem").toBeTruthy();
+    // 3 votes over 30 days = 0.1/day. The old integer rounding reported this as 0.
+    expect(trickle!.votesPerDay).toBeCloseTo(0.1, 6);
+    expect(trickle!.trajectory).toBe("rising");
+  });
+  it("no row can pair a rising chip with a zero rate — the two are derived to agree", async () => {
+    const db = await freshMemoryDb();
+    await seedDiscovery(db);
+    for (const g of await getHiddenGems(db, "poki"))
+      if (g.trajectory === "rising") expect(g.votesPerDay).toBeGreaterThan(0);
+  });
+  it("classifyTrajectory keeps two decimals, floors a real gain at 0.01, and never calls a net-flat window rising", () => {
+    expect(classifyTrajectory([100, 101, 103], 30).votesPerDay).toBeCloseTo(0.1, 6);
+    // A gain too small even for two decimals still reports something rather than nothing.
+    const tiny = classifyTrajectory([1000, 1000, 1001], 400);
+    expect(tiny.votesPerDay).toBe(0.01);
+    expect(tiny.trajectory).toBe("rising");
+    // A mid-window recount can leave `late > early` on a window that netted nothing; the label
+    // follows the number rather than contradicting it.
+    const dipped = classifyTrajectory([100, 50, 60], 10);
+    expect(dipped.votesPerDay).toBe(0);
+    expect(dipped.trajectory).not.toBe("rising");
+    // High-traffic rows are unchanged in the reading that matters: still whole-number scale.
+    expect(classifyTrajectory([100, 20000, 167000], 14).votesPerDay).toBeGreaterThan(1000);
   });
 });
