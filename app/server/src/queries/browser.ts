@@ -24,7 +24,7 @@ import type {
   SettingFacet,
 } from "shared";
 import { CONTRACT } from "../../../shared/src/contract.ts";
-import { loopFamilyFor } from "../data/loopFamilyMap.ts";
+import { DEFAULTED_GENRES, loopFamilyFor } from "../data/loopFamilyMap.ts";
 import {
   num,
   pf,
@@ -584,7 +584,7 @@ export async function getLoopFamilyMarket(
 ): Promise<LoopFamilyMarket> {
   // A Steam-platform read has one surface: scoring Steam against itself would manufacture a lean.
   const cross = platform !== "steam";
-  const [genreRows, pairRows, supply, steamEcon] = await Promise.all([
+  const [genreRows, splitRows, supply, steamEcon] = await Promise.all([
     // Per-genre spine: distinct games (supply) + median votes (demand).
     db.query(
       `SELECT ${canonSql("l.genre")} AS genre, count(DISTINCT g.id)::int AS supply_n,
@@ -593,42 +593,44 @@ export async function getLoopFamilyMarket(
        WHERE g.is_live AND l.genre IS NOT NULL ${pf(platform)}
        GROUP BY ${canonSql("l.genre")}`,
     ),
-    // Genre × tag distinct-game counts — only to pick each genre's family (dominant mapped tag).
-    db.query(
-      `SELECT ${canonSql("l.genre")} AS genre, ${canonSql("t.name")} AS tag,
-              count(DISTINCT g.id)::int AS pair_n
-       FROM v_latest l
-       JOIN games g ON g.id = l.game_id
-       JOIN sources src ON src.id = g.source_id
-       JOIN game_tags gt ON gt.game_id = g.id
-       JOIN tags t ON t.id = gt.tag_id
-       WHERE g.is_live AND l.genre IS NOT NULL ${pf(platform)}
-       GROUP BY ${canonSql("l.genre")}, ${canonSql("t.name")}`,
-    ),
+    db.query(gameTagSql(platform, ", max(l.votes)::float AS votes", true), [DEFAULTED_GENRES]),
     genreSupplyTrend(db, platform),
     cross ? steamFamilyEconomics(db) : emptySteamSide(),
   ]);
-  const byGenre = foldFamilies(genreRows, pairRows);
 
   // acc.weighted = Σ appetite·supply → a supply-weighted family demand.
   type Acc = { supplyN: number; weighted: number; recent: number; prior: number; genres: string[] };
   const fams = new Map<string, Acc>();
+  const blank = (): Acc => ({ supplyN: 0, weighted: 0, recent: 0, prior: 0, genres: [] });
+  const add = (fam: string, gen: string, label: string, n: number, app: number, share: number) => {
+    const acc = fams.get(fam) ?? blank();
+    acc.supplyN += n;
+    acc.weighted += app * n;
+    acc.recent += (supply.get(gen)?.recent ?? 0) * share;
+    acc.prior += (supply.get(gen)?.prior ?? 0) * share;
+    acc.genres.push(label);
+    fams.set(fam, acc);
+  };
   for (const r of genreRows) {
-    const family = byGenre.get(r.genre);
-    if (!family) continue;
-    const sup = num(r.supply_n);
-    const acc = fams.get(family) ?? { supplyN: 0, weighted: 0, recent: 0, prior: 0, genres: [] };
-    acc.supplyN += sup;
-    acc.weighted += num(r.appetite) * sup;
-    const st = supply.get(r.genre);
-    acc.recent += st?.recent ?? 0;
-    acc.prior += st?.prior ?? 0;
-    acc.genres.push(r.genre);
-    fams.set(family, acc);
+    const family = loopFamilyFor(r.genre);
+    if (family) add(family, r.genre, r.genre, num(r.supply_n), num(r.appetite), 1);
   }
+  // A grab-bag genre now SPLITS on the tag axis rather than going whole to its dominant tag
+  // (#179): each slice is a pseudo-genre — own game count, own median demand — carrying that
+  // share of the genre's entrant flow. Assigning Action whole moved 1,117 games' supply and
+  // economics onto one family; apportioning them is the same claim, honestly sized.
+  const genreN = new Map(genreRows.map((r) => [r.genre, num(r.supply_n)]));
+  for (const sl of tagSlices(splitRows))
+    add(
+      sl.family,
+      sl.genre,
+      sl.label,
+      sl.games.length,
+      median(sl.games.map((g) => num(g.votes))),
+      sl.games.length / Math.max(1, genreN.get(sl.genre) ?? sl.games.length),
+    );
   // A family Steam covers but no browser genre reaches is a ROW, not whitespace — "nobody ships
   // this in the browser" is the cross-platform finding, which no-coverage hid.
-  const blank = (): Acc => ({ supplyN: 0, weighted: 0, recent: 0, prior: 0, genres: [] });
   for (const f of steamEcon.econ.keys()) if (!fams.has(f)) fams.set(f, blank());
 
   const appetiteOf = (a: Acc) => (a.supplyN ? Math.round(a.weighted / a.supplyN) : null);
@@ -641,7 +643,7 @@ export async function getLoopFamilyMarket(
       const steam = steamEcon.econ.get(family) ?? null;
       const steamGenres = steamEcon.genresByFamily.get(family) ?? [];
       const appetite = appetiteOf(a);
-      const supplyTrend = classifySupply(a.recent, a.prior);
+      const supplyTrend = classifySupply(Math.round(a.recent), Math.round(a.prior));
       return {
         family,
         supplyN: a.supplyN,
@@ -672,84 +674,91 @@ export async function getLoopFamilyMarket(
   return { platform, subtitle: subtitleFor(platform), rows, uncovered };
 }
 
-// The map's own rule, shared by BOTH surfaces above (#67): joining them on families only means
-// anything if both were folded the same way. Genre-level default wins, else dominant mapped tag.
-function foldFamilies(
-  genreRows: { genre: string }[],
-  pairRows: { genre: string; tag: string; pair_n: unknown }[],
-): Map<string, string> {
-  const out = new Map<string, string>();
-  for (const r of genreRows) {
-    const d = loopFamilyFor(r.genre);
-    if (d) out.set(r.genre, d);
-  }
-  const best = new Map<string, number>();
-  for (const r of pairRows) {
-    if (loopFamilyFor(r.genre)) continue; // a genre WITH a default keeps it
-    const fam = loopFamilyFor(r.genre, r.tag);
-    if (fam && num(r.pair_n) > (best.get(r.genre) ?? 0)) {
-      best.set(r.genre, num(r.pair_n));
-      out.set(r.genre, fam);
-    }
-  }
-  return out;
+/** Per-GAME genre + tag rows — the grain the tag axis needs. `skipDefaulted` drops the genres
+ *  carrying a default ($1): assigned whole, so their games never need the split. */
+function gameTagSql(platform: Platform, cols: string, skipDefaulted: boolean): string {
+  const gx = canonSql("l.genre");
+  return `SELECT ${gx} AS genre, array_agg(DISTINCT ${canonSql("t.name")}) AS tags${cols}
+     FROM v_latest l JOIN games g ON g.id = l.game_id JOIN sources src ON src.id = g.source_id
+     JOIN game_tags gt ON gt.game_id = g.id JOIN tags t ON t.id = gt.tag_id
+     WHERE g.is_live AND l.genre IS NOT NULL ${pf(platform)}
+       ${skipDefaulted ? `AND lower(${gx}) <> ALL($1::text[])` : ""}
+     GROUP BY g.id, ${gx}`;
 }
 
-// Steam economics per loop family (#67). A family median cannot be averaged out of per-genre
-// medians, so the genre→family map is pushed INTO the query (unnest) and percentiles run over the
-// games. Cohort = the other Steam economics surfaces': released, non-AAA (inlined, not imported
-// from ./steam.ts: no module cycle). Returns the economics AND the genres that produced them, so
-// a caller can tell an unmapped family from a measured-empty one (#179).
+type GameRow = { genre: string; tags: string[] | null } & Record<string, any>;
+type Slice = { family: string; genre: string; label: string; games: GameRow[] };
+
+/** The fold, per GAME (#179). Its genre default wins outright; otherwise exactly ONE family among
+ *  the game's mapped tags takes it — none or several disagreeing leaves it unassigned, the map's
+ *  own ambiguity guard applied a game at a time. Shared by BOTH surfaces: joining them on
+ *  families only means anything if both were folded the same way. */
+function tagSlices(rows: GameRow[]): Slice[] {
+  const out = new Map<string, Slice>();
+  for (const r of rows) {
+    const def = loopFamilyFor(r.genre);
+    const hits = new Map<string, string>(); // family -> the first tag that produced it
+    if (!def)
+      for (const t of Array.isArray(r.tags) ? r.tags : []) {
+        const f = loopFamilyFor(r.genre, t);
+        if (f && !hits.has(f)) hits.set(f, t);
+      }
+    const family = def ?? (hits.size === 1 ? [...hits.keys()][0] : null);
+    if (!family) continue;
+    const label = def ? r.genre : `${r.genre} × ${hits.get(family)}`;
+    const s = out.get(`${family}|${label}`) ?? { family, genre: r.genre, label, games: [] };
+    s.games.push(r);
+    out.set(`${family}|${label}`, s);
+  }
+  return [...out.values()];
+}
+
+// Steam economics per loop family (#67), folded per GAME (#179) so a grab-bag genre splits across
+// families on the tag axis without double-counting. Cohort = the other Steam economics surfaces':
+// released, non-AAA (inlined, not imported from ./steam.ts: no module cycle) — applied AFTER
+// coverage is recorded, so an all-AAA family still reads mapped-but-empty rather than unmapped.
+// Returns the economics AND the labels that produced them, which is what separates the two.
 type SteamSide = { econ: Map<string, LoopFamilySteam>; genresByFamily: Map<string, string[]> };
 const emptySteamSide = (): SteamSide => ({ econ: new Map(), genresByFamily: new Map() });
 async function steamFamilyEconomics(db: Querier): Promise<SteamSide> {
   const out: SteamSide = emptySteamSide();
-  const from = `FROM v_latest l JOIN games g ON g.id = l.game_id JOIN sources src ON src.id = g.source_id`;
-  const [genreRows, pairRows, supply] = await Promise.all([
-    db.query(`SELECT DISTINCT ${canonSql("l.genre")} AS genre ${from}
-              WHERE g.is_live AND l.genre IS NOT NULL ${pf("steam")}`),
+  const [rows, supply] = await Promise.all([
     db.query(
-      `SELECT ${canonSql("l.genre")} AS genre, ${canonSql("t.name")} AS tag,
-              count(DISTINCT g.id)::int AS pair_n ${from}
-       JOIN game_tags gt ON gt.game_id = g.id JOIN tags t ON t.id = gt.tag_id
-       WHERE g.is_live AND l.genre IS NOT NULL ${pf("steam")}
-       GROUP BY ${canonSql("l.genre")}, ${canonSql("t.name")}`,
+      gameTagSql(
+        "steam",
+        `, max(l.price_cents)::float AS price_cents, max(l.owners_est)::float AS owners_est,
+           max(l.scale_tier) AS scale_tier, bool_or(l.coming_soon) AS coming_soon`,
+        false,
+      ),
     ),
     genreSupplyTrend(db, "steam"),
   ]);
-  const byGenre = foldFamilies(genreRows, pairRows);
-  // Recorded BEFORE the economics filters run: this is the map's coverage of Steam, which is what
-  // separates "no Steam demand" from "no Steam key" — the two the panel could not tell apart.
-  for (const [genre, family] of byGenre)
-    out.genresByFamily.set(family, [...(out.genresByFamily.get(family) ?? []), genre].sort());
-  if (!byGenre.size) return out;
-  const genres = [...byGenre.keys()];
-  const rows = await db.query(
-    `SELECT m.family AS family, count(*)::int AS games,
-            percentile_cont(0.5) WITHIN GROUP (ORDER BY l.price_cents)::float AS med_price,
-            percentile_cont(0.5) WITHIN GROUP (
-              ORDER BY coalesce(l.owners_est, 0) * coalesce(l.price_cents, 0))::float AS med_rev
-     ${from}
-     JOIN unnest($1::text[], $2::text[]) AS m(genre, family) ON m.genre = ${canonSql("l.genre")}
-     WHERE g.is_live AND l.genre IS NOT NULL ${pf("steam")}
-       AND (l.scale_tier IS NULL OR l.scale_tier <> 'aaa') AND l.coming_soon IS NOT TRUE
-     GROUP BY m.family`,
-    [genres, genres.map((g) => byGenre.get(g) as string)],
-  );
+  const genreN = new Map<string, number>();
+  for (const r of rows) genreN.set(r.genre, (genreN.get(r.genre) ?? 0) + 1);
   const flow = new Map<string, { recent: number; prior: number }>();
-  for (const [genre, family] of byGenre) {
-    const f = flow.get(family) ?? { recent: 0, prior: 0 };
-    f.recent += supply.get(genre)?.recent ?? 0;
-    f.prior += supply.get(genre)?.prior ?? 0;
-    flow.set(family, f);
+  const cohort = new Map<string, GameRow[]>();
+  for (const sl of tagSlices(rows as GameRow[])) {
+    out.genresByFamily.set(
+      sl.family,
+      [...(out.genresByFamily.get(sl.family) ?? []), sl.label].sort(),
+    );
+    const f = flow.get(sl.family) ?? { recent: 0, prior: 0 };
+    const share = sl.games.length / Math.max(1, genreN.get(sl.genre) ?? sl.games.length);
+    f.recent += (supply.get(sl.genre)?.recent ?? 0) * share;
+    f.prior += (supply.get(sl.genre)?.prior ?? 0) * share;
+    flow.set(sl.family, f);
+    const keep = sl.games.filter((g) => g.scale_tier !== "aaa" && g.coming_soon !== true);
+    if (keep.length) cohort.set(sl.family, [...(cohort.get(sl.family) ?? []), ...keep]);
   }
-  for (const r of rows) {
-    const f = flow.get(r.family) ?? { recent: 0, prior: 0 };
-    out.econ.set(r.family, {
-      games: num(r.games),
-      medianPriceCents: Math.round(num(r.med_price)),
-      medianRevenuePerGame: Math.round(num(r.med_rev) / 100),
-      supplyTrend: classifySupply(f.recent, f.prior),
+  for (const [family, games] of cohort) {
+    const f = flow.get(family) ?? { recent: 0, prior: 0 };
+    out.econ.set(family, {
+      games: games.length,
+      medianPriceCents: Math.round(median(games.map((g) => num(g.price_cents)))),
+      medianRevenuePerGame: Math.round(
+        median(games.map((g) => num(g.owners_est) * num(g.price_cents))) / 100,
+      ),
+      supplyTrend: classifySupply(Math.round(f.recent), Math.round(f.prior)),
     });
   }
   return out;

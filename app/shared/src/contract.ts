@@ -140,7 +140,14 @@ export const CONTRACT = {
   //      interests. STEERING_WEIGHT is deliberately unchanged (0.5) — tuning it is the next
   //      observation, now that both surfaces are steered and comparable. Additive, and inert with
   //      no flags set: the browser ranking is then byte-identical to the unsteered one.
-  version: 24,
+  // v25: the loop-family fold now splits a genre across families on the TAG axis (#179). It gave
+  //      each genre to exactly ONE family, so Steam could only ever answer for the few genres with
+  //      a clean default — its genre axis is five grab-bags (Action 1,117 · Casual 834 · Adventure
+  //      548 · Indie 432), and attributing one whole would move a thousand games onto one family.
+  //      Games are apportioned by their own tags instead, one family per game, unassigned when the
+  //      tags disagree. For readers: more `rows`, fewer `uncovered`, and a `genres`/`steamGenres`
+  //      entry may read "Genre × Tag" for a split slice rather than a bare genre. Shape unchanged.
+  version: 25,
   pitch: {
     // v2: added visual-card fields — setting, artStyle, codeName, headerUrl, shotUrl.
     // v3: rating rework — scoreFields d1Fit/steamCeiling/buildCost → browserFit/steamFit/buildEase.

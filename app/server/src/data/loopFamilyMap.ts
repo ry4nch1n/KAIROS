@@ -53,10 +53,8 @@ const GENRE: Record<string, LoopFamily> = {
 // emits prose ("Tower Defense", "Looter Shooter"). Both forms are therefore listed (#179) — one
 // tag vocabulary, spelled the two ways the two crawlers actually deliver it.
 //
-// Not widened here: `action`, the largest genre on BOTH surfaces (Steam 1,026 / browser 708). The
-// fold gives a genre to exactly ONE family, so a tag key under a grab-bag genre re-attributes the
-// whole genre's supply and economics to that family. Under `strategy` (a genre whose mapped tag is
-// its loop) that is the intended disambiguation; under `action` it would be a fabrication.
+// A key here is GENRE-SENSITIVE — the same tag reading differently under two genres. Tags whose
+// loop is the same wherever they appear belong in TAG below instead (#179).
 const GENRE_TAG: Record<string, Record<string, LoopFamily>> = {
   strategy: { "tower-defense": "wave-defense-prep", "tower defense": "wave-defense-prep" },
   shooter: {
@@ -68,6 +66,46 @@ const GENRE_TAG: Record<string, Record<string, LoopFamily>> = {
   action: { "survivor-like": "minimal-input-survivors", deckbuilding: "synergy-builder" },
   simulation: { automation: "automation-under-pressure", sandbox: "contained-systemic" },
 };
+
+// Genre-AGNOSTIC tag keys — the Steam half of the coverage pass (#179). Steam's genre axis is five
+// grab-bags (Action 1,117 · Casual 834 · Adventure 548 · Indie 432, then Simulation/Strategy/RPG
+// ~50), so a Steam tag carries its loop alone and the genre adds nothing: "Looter Shooter" is the
+// same loop under Action as under RPG. Consulted LAST — a genre with a default keeps it, a genre ×
+// tag entry still wins. Both surface forms appear where the crawlers spell one tag two ways.
+// Every key is a live crawled tag (vocabulary checked 2026-09-07). Deliberately ABSENT, and the
+// larger half of this pass: tags naming a SETTING or mode (Open World, Singleplayer, Co-op, Story
+// Rich, First-Person, Horror, Exploration) and shelves no one family holds (Puzzle, Management,
+// Resource Management, Building, Base-Building, Crafting, Survival, Open World Survival Craft,
+// Action Roguelike, Bullet Hell, Souls-like, Card Battler). So `minimal-input-survivors` stays
+// Steam-unmapped: this crawl carries no Survivors-like / Bullet Heaven tag at all, and saying so
+// is exactly the answer the `steam-unmapped` lean exists to give.
+const TAG: Record<string, LoopFamily> = {
+  "extraction shooter": "extraction-lite",
+  "extraction-shooter": "extraction-lite",
+  "looter shooter": "extraction-lite",
+  "looter-shooter": "extraction-lite",
+  "roguelike deckbuilder": "synergy-builder",
+  deckbuilding: "synergy-builder",
+  "tower defense": "wave-defense-prep",
+  "tower-defense": "wave-defense-prep",
+  "farming sim": "cozy-craft",
+  cooking: "cozy-craft",
+  "life sim": "cozy-craft",
+  "colony sim": "contained-systemic",
+  "city builder": "contained-systemic",
+  sandbox: "contained-systemic",
+  idler: "idle-tycoon",
+  clicker: "idle-tycoon",
+  automation: "automation-under-pressure",
+  driving: "route-planning",
+  racing: "route-planning",
+  "survivors-like": "minimal-input-survivors",
+  "survivor-like": "minimal-input-survivors",
+  "bullet heaven": "minimal-input-survivors",
+};
+
+/** Genres carrying a genre-level default — assigned WHOLE, so the per-game tag split skips them. */
+export const DEFAULTED_GENRES: readonly string[] = Object.keys(GENRE);
 
 // Surface-form variants of the keys above. The tables are keyed canonically ("deckbuilding"),
 // but prose writes the same genre several ways — "deckbuilder", "deck-building", "deck builder".
@@ -97,7 +135,7 @@ const SYNONYMS: [string, LoopFamily][] = [
 ];
 
 // Every distinct family this map can emit — the test asserts each is a live contract family.
-const TAG_FAMILIES = Object.values(GENRE_TAG).flatMap((m) => Object.values(m));
+const TAG_FAMILIES = [...Object.values(TAG), ...Object.values(GENRE_TAG).flatMap(Object.values)];
 export const MAPPED_FAMILIES: readonly LoopFamily[] = [
   ...new Set<LoopFamily>([...Object.values(GENRE), ...TAG_FAMILIES, ...SYNONYMS.map(([, f]) => f)]),
 ];
@@ -112,6 +150,7 @@ const words = (s: string | null | undefined) =>
 const TEXT_KEYS: [string, LoopFamily][] = [
   ...Object.entries(GENRE),
   ...Object.values(GENRE_TAG).flatMap((m) => Object.entries(m)),
+  ...Object.entries(TAG),
   ...SYNONYMS,
 ].map(([k, f]) => [words(k), f as LoopFamily]);
 
@@ -141,8 +180,9 @@ export function loopFamilyFromLabels(
   return matchOne(labels) ?? (prose?.length ? matchOne(prose) : null);
 }
 
-/** Loop family for a genre (and optional tag), or null when nothing is curated. A genre × tag
- *  entry wins over the genre-level fallback; an unmapped key is null, never guessed. */
+/** Loop family for a genre (and optional tag), or null when nothing is curated. Three tiers, most
+ *  specific first: a genre × tag entry, then the genre-level default, then the genre-agnostic tag
+ *  (#179). An unmapped key is null, never guessed. */
 export function loopFamilyFor(
   genre: string | null | undefined,
   tag?: string | null | undefined,
@@ -154,5 +194,5 @@ export function loopFamilyFor(
     const pair = GENRE_TAG[g]?.[t];
     if (pair) return pair;
   }
-  return GENRE[g] ?? null;
+  return GENRE[g] ?? (t ? (TAG[t] ?? null) : null);
 }
