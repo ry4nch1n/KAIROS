@@ -177,8 +177,9 @@ export const CONTRACT = {
   //      3.08 points on their own — so one constant could not serve both surfaces, and on either
   //      one it was smaller than a single rank gap inside the band it had to cross. A flag is now
   //      worth half of `topScore − cutoffScore`, a row's total lift is capped at one whole band,
-  //      and only the top `3 × shownCount` candidates are eligible at all — so a steered row is
-  //      still a real gap, and can never outrank the leader the market data itself chose. Shape
+  //      and a row is eligible only while its own score is within one maximum lift of the cut, so
+  //      a steered row is still a real gap and can never outrank the leader the market data itself
+  //      chose — the weakest admissible market can at best tie the last shown row. Shape
   //      is unchanged: this is a semantics bump, and `weight` now differs per surface and per
   //      week. A matched row outside the candidate band reports `delta: 0` rather than vanishing
   //      from `steered`/`unlisted`, which stay the honest evidence that the lens ran. Shipped
