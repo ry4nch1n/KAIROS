@@ -1,4 +1,4 @@
-import type { BriefNotable } from "shared";
+import type { BriefNotable, BriefTopSignal } from "shared";
 
 // Display helpers for the brief's rich cards (#155, #156). Out of the component so they are
 // testable like their sibling libs — the component keeps only the markup.
@@ -66,4 +66,16 @@ export function groupBrowserCards<T extends { kind?: string | null }>(
     ...g,
     items: items.filter((it) => browserGroupOf(it.kind) === g.id),
   })).filter((g) => g.items.length > 0);
+}
+
+/** briefPayload v2 — a Top Signal may be a plain string or `{ text, source }`. Top Signals render
+ *  ABOVE the cards, so before v2 a reader had to scroll down and guess which card a signal meant;
+ *  the object form gives the line its own link. The string form stays legal forever: editions
+ *  published before v2 carry no source, and brief validation is advisory, so an old edition must
+ *  keep rendering rather than blank the section. A malformed entry degrades to empty text, never
+ *  to a thrown render. */
+export function topSignal(s: string | BriefTopSignal): { text: string; source?: string } {
+  if (typeof s === "string") return { text: s };
+  const src = isUrl(s?.source) ? s.source : undefined;
+  return { text: typeof s?.text === "string" ? s.text : "", source: src };
 }

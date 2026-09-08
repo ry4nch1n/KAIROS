@@ -248,7 +248,12 @@ export const CONTRACT = {
     required: ["slug", "title", "pitchDate"],
   },
   briefPayload: {
-    version: 1,
+    // v2: a `top_signals` entry may be `{ text, source }` as well as a plain string, so the
+    // section that renders ABOVE the cards can link out like every card already does. The
+    // string form stays legal FOREVER — editions published before v2 carry no source, and
+    // brief validation is advisory, so they must keep rendering rather than blank the section.
+    // Readers must accept both shapes; producers should emit the object.
+    version: 2,
     // Fields the News Brief renderer relies on. Brief validation is ADVISORY (warnings,
     // non-blocking) so a format lag can never blank the live dashboard — the renderer
     // degrades defensively and the contract test catches real drift in CI.

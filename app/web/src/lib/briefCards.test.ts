@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { cardImage, steamCover, browserGroupOf, groupBrowserCards } from "./briefCards.ts";
+import {
+  cardImage,
+  steamCover,
+  browserGroupOf,
+  groupBrowserCards,
+  topSignal,
+} from "./briefCards.ts";
 import type { BriefNotable } from "shared";
 
 const item = (over: Partial<BriefNotable> = {}): BriefNotable => ({ name: "TEKO", ...over });
@@ -88,5 +94,35 @@ describe("#156 browser section grouped by evidence kind", () => {
     const groups = groupBrowserCards([item({ kind: "Loop signal" })]);
     expect(groups.map((g) => g.id)).toEqual(["funnel"]);
     expect(groupBrowserCards([])).toEqual([]);
+  });
+});
+
+describe("briefPayload v2 top signals", () => {
+  it("keeps the pre-v2 plain-string form rendering", () => {
+    expect(topSignal("**Konami** entered the genre")).toEqual({
+      text: "**Konami** entered the genre",
+    });
+  });
+
+  it("carries the source through when the object form is used", () => {
+    expect(topSignal({ text: "Konami", source: "https://www.konami.com/x" })).toEqual({
+      text: "Konami",
+      source: "https://www.konami.com/x",
+    });
+  });
+
+  it("drops a source that is not an absolute URL, rather than rendering a dead link", () => {
+    // The exact defect the card `source` field was fixed for: a citation phrase renders as a
+    // link that goes nowhere. An unusable source must vanish, leaving the line as plain text.
+    expect(
+      topSignal({ text: "Konami", source: "Konami press release, 2026" }).source,
+    ).toBeUndefined();
+    expect(topSignal({ text: "Konami", source: "/api/brief" }).source).toBeUndefined();
+    expect(topSignal({ text: "Konami" }).source).toBeUndefined();
+  });
+
+  it("degrades a malformed entry to empty text instead of throwing", () => {
+    expect(topSignal({} as never)).toEqual({ text: "", source: undefined });
+    expect(topSignal({ text: 42 } as never).text).toBe("");
   });
 });
