@@ -307,7 +307,12 @@ export async function getSteamGenreEconomics(
 // across rows deliberately do NOT sum to the catalog — each row is "the market of games
 // carrying this tag". Demand is median REVIEWS, not median owners (#89): owners_est is a
 // SteamSpy bucket midpoint whose lowest bucket collapses to 10,000 and flattens the axis.
-const TAG_ECON_MIN_SUPPLY = 3; // below this a "market" is noise, not a market
+// ONE sample-size floor for every Steam market read (#211). Below this a "market" is noise, not
+// a market: the aggregate is a median over one or two numbers, so it moves entirely with whichever
+// title the crawl happened to catch. Named for the belief, not for the first caller that held it —
+// tag economics, the tag lookup, and the genre × tag opportunity ranking must all agree on where
+// "a market" starts, or the same cell is a market on one panel and noise on the next.
+const MIN_MARKET_SUPPLY = 3;
 const TAG_ECON_LIMIT = 30;
 // Lookup guardrails (#113). The ranked list is a top-30 BY TOTAL revenue, so generic
 // high-volume tags (Action, Singleplayer, 2D) own it and a niche-but-real market is
@@ -338,7 +343,7 @@ export async function getSteamTagEconomics(
   opts?: { cohort?: SteamCohort; minSupply?: number; limit?: number; match?: string[] },
 ): Promise<SteamTagEconomics[]> {
   const cohort = opts?.cohort ?? "indie";
-  const minSupply = opts?.minSupply ?? TAG_ECON_MIN_SUPPLY;
+  const minSupply = opts?.minSupply ?? MIN_MARKET_SUPPLY;
   const tierFilter =
     cohort === "indie" ? "AND (l.scale_tier IS NULL OR l.scale_tier <> 'aaa')" : "";
   // Named-tag path: match the canonical tag name case-insensitively, as a substring, so a
@@ -503,7 +508,7 @@ export async function getSteamTagLookup(
   opts?: { cohort?: SteamCohort; minSupply?: number; limit?: number },
 ): Promise<SteamTagLookup> {
   const terms = parseTagQuery(rawQuery);
-  const minSupply = opts?.minSupply ?? TAG_ECON_MIN_SUPPLY;
+  const minSupply = opts?.minSupply ?? MIN_MARKET_SUPPLY;
   const limit = opts?.limit ?? TAG_ECON_LIMIT;
   const base = { query: terms.join(", "), minSupply, rows: [], thin: [] } as SteamTagLookup;
   if (!terms.length) return base;
@@ -886,6 +891,13 @@ async function steamGapExamples(db: Querier): Promise<Map<string, string[]>> {
  *  one — the ranking below it still exists, and the steering lens reads it (#167). */
 export const OPPORTUNITY_TOP_N = 8;
 
+/** Fewest genre × tag cells the opportunity ranking will score. A z-score needs a spread to be
+ *  read against; below two cells the standard deviation is undefined and every score would be an
+ *  artifact of the sample rather than a statement about the market. Distinct from the per-cell
+ *  supply floor (`MIN_MARKET_SUPPLY`) — that governs which cells are markets, this governs
+ *  whether there is enough of a population left to rank at all (#211). */
+const MIN_RANKABLE_CELLS = 2;
+
 // Steam opportunity, FULL ranked candidate set — every genre×tag that cleared the supply floor,
 // steered and sorted but not cut. `getSteamOpportunity` is this list's top slice; the steering
 // lens needs the rest, because a market steering lifted can still land below the cut (#167).
@@ -905,11 +917,15 @@ export async function rankSteamOpportunity(db: Querier): Promise<SteamGap[]> {
        JOIN game_tags gt ON gt.game_id = g.id JOIN tags t ON t.id = gt.tag_id
        WHERE g.is_live AND src.name = 'steam' AND l.genre IS NOT NULL AND (l.scale_tier IS NULL OR l.scale_tier <> 'aaa')
          AND lower(${canonSql("t.name")}) <> lower(${canonSql("l.genre")}) ${RELEASED_ONLY}
-       GROUP BY ${canonSql("l.genre")}, ${canonSql("t.name")} HAVING count(DISTINCT g.id) >= 2`,
+       GROUP BY ${canonSql("l.genre")}, ${canonSql("t.name")}
+       HAVING count(DISTINCT g.id) >= ${MIN_MARKET_SUPPLY}`,
     ),
     steamGapExamples(db),
   ]);
-  if (rows.length < 2) return [];
+  // Too few cells to stand a z-score up: the mean and SD would be defined by the handful of rows
+  // being scored, so every score would describe the sample rather than the market. Return nothing
+  // and let the panel say so — an empty list with an honest reason beats a ranking of artifacts.
+  if (rows.length < MIN_RANKABLE_CELLS) return [];
   const z = (vals: number[]) => {
     const m = vals.reduce((a, b) => a + b, 0) / vals.length;
     const sd = Math.sqrt(vals.reduce((a, b) => a + (b - m) ** 2, 0) / vals.length) || 1;

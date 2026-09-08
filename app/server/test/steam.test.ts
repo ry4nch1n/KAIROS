@@ -1311,6 +1311,34 @@ async function seedSteamRich(db: Querier) {
         releaseDate: "2024-09-01",
         ccu: 20,
       }),
+      // #211: each genre × tag cell carries THREE games, the shared market-supply floor. A
+      // two-game cell is no longer a market, so a fixture built on pairs would rank nothing.
+      steamGame({
+        sourceGameId: "6",
+        genre: "Action",
+        scaleTier: "small_indie",
+        priceCents: 2500,
+        ownersEst: 150_000,
+        rating: 4.3,
+        votes: 1000,
+        tags: ["Roguelike"],
+        developer: "StudioC",
+        releaseDate: "2023-01-01",
+        ccu: 100,
+      }),
+      steamGame({
+        sourceGameId: "7",
+        genre: "Puzzle",
+        scaleTier: "small_indie",
+        priceCents: 2500,
+        ownersEst: 90_000,
+        rating: 4.4,
+        votes: 800,
+        tags: ["Pixel"],
+        developer: "StudioD",
+        releaseDate: "2023-02-01",
+        ccu: 30,
+      }),
       steamGame({
         sourceGameId: "4",
         genre: "Action",
@@ -1346,9 +1374,9 @@ describe("D16 Steam sub-sections (Pricing / Ownership / Developers / New release
     await seedSteamRich(db);
     const o = await q.getSteamOwnership(db);
     const action = o.find((r) => r.genre === "Action")!;
-    expect(action.games).toBe(2);
-    expect(action.totalOwners).toBe(250_000);
-    expect(action.ccu).toBe(550); // 500 + 50
+    expect(action.games).toBe(3);
+    expect(action.totalOwners).toBe(400_000);
+    expect(action.ccu).toBe(650); // 500 + 50 + 100
   });
 
   it("developers ranks indie studios by owners", async () => {
@@ -1392,9 +1420,11 @@ describe("D16 Steam sub-sections (Pricing / Ownership / Developers / New release
 describe("D16c opportunity score formula is pinned (#12)", () => {
   // The UI legend states: opportunity = z(demand) + z(quality ceiling) − z(supply),
   // with price shown as context but NOT scored. This fixture is built so the z-terms
-  // are hand-computable: two pairs with equal supply (z=0) whose demand and quality
+  // are hand-computable: two equal-sized cells (supply z=0) whose demand and quality
   // z-scores are exactly ±1 → scores must be exactly +2.0 and −2.0. If the formula
   // changes, this test fails and the Radar legend/tooltip must be updated with it.
+  // Each cell holds THREE games, not two: below the shared market-supply floor (#211) a
+  // genre × tag cell is not admitted to the ranking at all.
   it("score = z(median owners) + z(P90 rating) − z(supply); price not scored", async () => {
     const db = await freshMemoryDb();
     await loadGames(
@@ -1402,7 +1432,7 @@ describe("D16c opportunity score formula is pinned (#12)", () => {
       "steam",
       STEAM_BASE_URL,
       [
-        // pair 1: Action × roguelike — median owners 150k, P90 rating 4.36
+        // cell 1: Action × roguelike — median owners 150k, P90 rating 4.36
         steamGame({
           sourceGameId: "a1",
           genre: "Action",
@@ -1419,7 +1449,15 @@ describe("D16c opportunity score formula is pinned (#12)", () => {
           rating: 4.4,
           priceCents: 100,
         }),
-        // pair 2: Puzzle × roguelike — median owners 30k, P90 rating 3.36, far pricier
+        steamGame({
+          sourceGameId: "a3",
+          genre: "Action",
+          tags: ["roguelike"],
+          ownersEst: 150_000,
+          rating: 4.2,
+          priceCents: 100,
+        }),
+        // cell 2: Puzzle × roguelike — median owners 30k, P90 rating 3.36, far pricier
         steamGame({
           sourceGameId: "p1",
           genre: "Puzzle",
@@ -1434,6 +1472,14 @@ describe("D16c opportunity score formula is pinned (#12)", () => {
           tags: ["roguelike"],
           ownersEst: 40_000,
           rating: 3.4,
+          priceCents: 9900,
+        }),
+        steamGame({
+          sourceGameId: "p3",
+          genre: "Puzzle",
+          tags: ["roguelike"],
+          ownersEst: 30_000,
+          rating: 3.2,
           priceCents: 9900,
         }),
       ],
@@ -1455,6 +1501,70 @@ describe("D16c opportunity score formula is pinned (#12)", () => {
       const sum = g.components.demand + g.components.quality + g.components.supply;
       expect(Math.abs(sum - g.score)).toBeLessThanOrEqual(0.02); // 2dp rounding on each term
     }
+  });
+});
+
+// The opportunity score negates supply, so the thinnest admissible cell earns the biggest term
+// exactly where its demand estimate — a median over that handful of games — is least trustworthy.
+// Measured on prod 2026-09-08, every one of the eight shown rows sat at the old floor of 2. The
+// floor is now the file's own MIN_MARKET_SUPPLY, the same threshold tag economics already used.
+describe("D16d opportunity enforces the shared market-supply floor (#211)", () => {
+  const oppGame = (id: string, tag: string, owners: number) =>
+    steamGame({
+      sourceGameId: id,
+      genre: "Action",
+      tags: [tag],
+      ownersEst: owners,
+      rating: 4.2,
+      priceCents: 1000,
+    });
+
+  it("admits no shown row below the floor, and drops the cells that sit under it", async () => {
+    const db = await freshMemoryDb();
+    await loadGames(
+      db,
+      "steam",
+      STEAM_BASE_URL,
+      [
+        // Two cells that clear the floor…
+        oppGame("f1", "roguelike", 100_000),
+        oppGame("f2", "roguelike", 200_000),
+        oppGame("f3", "roguelike", 150_000),
+        oppGame("g1", "pixel", 40_000),
+        oppGame("g2", "pixel", 60_000),
+        oppGame("g3", "pixel", 50_000),
+        oppGame("g4", "pixel", 55_000),
+        // …and a two-game cell whose enormous median owners would otherwise top the ranking.
+        oppGame("t1", "thin", 9_000_000),
+        oppGame("t2", "thin", 9_000_000),
+      ],
+      "2026-06-30T00:00:00.000Z",
+    );
+    const opp = await q.getSteamOpportunity(db);
+    expect(opp.length).toBe(2);
+    expect(opp.every((g) => g.supplyN >= 3)).toBe(true);
+    // The thin cell is excluded on sample size ALONE — its demand would have ranked it first.
+    expect(opp.map((g) => g.tag.toLowerCase())).not.toContain("thin");
+  });
+
+  it("ranks nothing rather than artifacts when too few cells clear the floor", async () => {
+    const db = await freshMemoryDb();
+    await loadGames(
+      db,
+      "steam",
+      STEAM_BASE_URL,
+      [
+        oppGame("a1", "roguelike", 100_000),
+        oppGame("a2", "roguelike", 200_000),
+        oppGame("b1", "pixel", 40_000),
+        oppGame("b2", "pixel", 60_000),
+      ],
+      "2026-06-30T00:00:00.000Z",
+    );
+    // Every cell is a pair, so nothing is a market. The panel renders its own "not enough data
+    // yet" copy off this empty list — a short, honest panel rather than a ranking of noise.
+    expect(await q.getSteamOpportunity(db)).toEqual([]);
+    expect((await q.getSteamOverview(db)).opportunity).toEqual([]);
   });
 });
 
