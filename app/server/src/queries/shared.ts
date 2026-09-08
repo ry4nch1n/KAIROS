@@ -182,31 +182,36 @@ export const STEERING_SPREAD_K = 0.5;
  *  topScore`, so steering can reorder the shown band but never crown a leader over the one the
  *  market data itself put first. */
 export const STEERING_MAX_LIFT_K = 1;
-/** Anti-teleport rail the cap alone cannot give: only the top `3 × shownCount` of the UNSTEERED
- *  ranking is eligible for any lift. A flag breaks ties among markets that were already real gaps
- *  (top ~8% of live candidates); it never fetches a weak row up from rank 54. Rows outside the
- *  band still RECORD their match with `delta: 0`, so `applied`/`steered`/`unlisted` stay the
- *  honest evidence that the lens ran. */
-export const STEERING_BAND_MULTIPLE = 3;
+// ── The candidate band is a SCORE band, not a rank one ──
+// Measured on the #209 draft: the ranks #200 quoted were POST-lift ranks. Unsteered, the best
+// browser match sits at rank 20 of 200+ and the best Steam one at rank 61 of 100+ — and ranks 22
+// to 61 on Steam span barely 1.0 point. Below the cut both rankings are almost FLAT, so rank
+// distance stops measuring comparability and score distance is the only thing that does: a
+// top-3×N rank rail excluded exactly the two markets the issue was filed about while admitting
+// nothing. So the cap IS the band — a row is eligible when its own score is within one maximum
+// lift of the cut. Everything below could not have reached the list anyway, and the bound states
+// itself: the weakest admissible market can at best TIE the last shown row, so a lift promotes a
+// market only as far as the seat it was already within reach of. Rows outside the band still
+// RECORD their match at `delta: 0`, so `applied`/`steered`/`unlisted` stay the honest evidence
+// that the lens ran.
 
 export interface SteeringScale {
   weight: number; // score per matching flag, for this ranking
   maxLift: number; // ceiling on one row's total lift
-  band: number; // how many top-ranked candidates may be lifted at all
+  floor: number; // lowest unsteered score a lift can still reach the cut from
 }
 
 /** The scale for ONE ranking, from its own UNSTEERED scores (descending) and its displayed cut. */
 export function steeringScale(baseDesc: number[], shownCount: number): SteeringScale {
   const cut = Math.min(Math.max(shownCount, 2), baseDesc.length);
   const spread = cut >= 2 ? baseDesc[0] - baseDesc[cut - 1] : 0;
-  const band = Math.max(shownCount, shownCount * STEERING_BAND_MULTIPLE);
-  return spread > 0
-    ? {
-        weight: +(STEERING_SPREAD_K * spread).toFixed(2),
-        maxLift: +(STEERING_MAX_LIFT_K * spread).toFixed(2),
-        band,
-      }
-    : { weight: STEERING_WEIGHT, maxLift: STEERING_WEIGHT * 2, band };
+  const cutoff = baseDesc[cut - 1] ?? Number.NEGATIVE_INFINITY;
+  const maxLift = spread > 0 ? +(STEERING_MAX_LIFT_K * spread).toFixed(2) : STEERING_WEIGHT * 2;
+  return {
+    weight: spread > 0 ? +(STEERING_SPREAD_K * spread).toFixed(2) : STEERING_WEIGHT,
+    maxLift,
+    floor: +(cutoff - maxLift).toFixed(2),
+  };
 }
 
 export interface Steerable {
@@ -405,8 +410,8 @@ export function steerRanking<T extends Steerable>(
     base.map((r) => r.score),
     shownCount,
   );
-  base.forEach((r, i) => {
-    steerRow(r, flags, scale, i < scale.band);
+  base.forEach((r) => {
+    steerRow(r, flags, scale, r.score >= scale.floor);
   });
   return base.sort((a, b) => b.score - a.score);
 }

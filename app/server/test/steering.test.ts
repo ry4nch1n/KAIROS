@@ -326,7 +326,9 @@ describe("browser market gaps are steered by the standing flags (#142)", () => {
     for (let i = 0; i < 9; i++)
       for (const n of [1, 2])
         games.push(bg(`f${i}-${n}`, "Casual", `Filler ${i}`, 9000 - i * 500, 4.6));
-    for (const n of [1, 2]) games.push(bg(`d${n}`, "Puzzle", "Deckbuilding", 20, 2.0));
+    // Weak enough to sit last on the market data, close enough that a lift can still reach it —
+    // the score band admits a comparable market, not a hopeless one (#200).
+    for (const n of [1, 2]) games.push(bg(`d${n}`, "Puzzle", "Deckbuilding", 4500, 4.6));
     await loadGames(db, "crazygames", CG, games, "2026-06-30T00:00:00.000Z");
     return db;
   };
@@ -372,7 +374,9 @@ describe("browser market gaps are steered by the standing flags (#142)", () => {
     expect(lens.unmatched).toEqual(["submarine documentaries"]);
     expect(lens.steered).toBe(1); // matched somewhere in the ranking…
     expect(lens.steeredShown).toBe(0); // …but nothing the reader can see moved
-    expect(lens.unlisted![0]).toMatchObject({ label: "Puzzle × Deckbuilding", rank: 10 });
+    // Lifted from last (10) to 8 and still short of the top 6 — a promotion the reader can be
+    // told about honestly, not one that rewrote the list (#200).
+    expect(lens.unlisted![0]).toMatchObject({ label: "Puzzle × Deckbuilding", rank: 8 });
     expect(lens.weight).toBe(
       steeringScale(
         (await q.rankMarketGaps(await seed(), "crazygames")).map((g) => g.score),
@@ -446,7 +450,7 @@ describe("the steering lift scales to the ranking it is applied to (#200)", () =
   // were ALREADY real gaps. A market outside the candidate band is not teleported into view —
   // and it is not silently dropped from the lens either.
   it("cannot teleport a market from outside the candidate band, and still reports it", () => {
-    const deep = 40; // rank 41, well outside the top 3 × 6
+    const deep = 40; // scored more than one maximum lift below the cut
     const ranked = steerRanking(rows(BROWSER, deep), [FLAG], 6);
     const deck = ranked.find((g) => g.label === "Puzzle × Deckbuilding")!;
     expect(deck.score).toBe(BROWSER.scores[deep]); // untouched by the lift
