@@ -119,58 +119,114 @@ export function verdictsBySlug(items: LibraryItem[]): Record<string, PrototypeVe
 
 // A null verdict yields NO chips — the caller renders "not play-tested yet" instead. An untested
 // prototype must never render as a failed one, so absence gets its own words, not a row of ✗.
-export function verdictChips(v: PrototypeVerdict | null): { label: string; ok: boolean }[] {
+// `fail` and `unasked` stay apart too: a measured "no" is evidence, a gap is not.
+export type GateState = "pass" | "fail" | "unasked";
+export function verdictChips(v: PrototypeVerdict | null): { label: string; state: GateState }[] {
   if (!v) return [];
   const tri = (b: boolean | null, yes: string, no: string, unasked: string) =>
-    b === null ? { label: unasked, ok: false } : { label: b ? yes : no, ok: b };
+    b === null
+      ? { label: unasked, state: "unasked" as GateState }
+      : { label: b ? yes : no, state: (b ? "pass" : "fail") as GateState };
   return [
     tri(v.goalGrasped, "goal grasped ≤30s", "goal unclear at 30s", "30s goal: not asked"),
     tri(v.secondRun, "played a second run", "no second run", "second run: not asked"),
+    // The third tooth is the moment itself; its text is quoted below, not stuffed into a chip.
     v.moment
-      ? { label: "moment: " + v.moment, ok: true }
-      : { label: "no compelling moment named", ok: false },
+      ? { label: "named a compelling moment", state: "pass" as GateState }
+      : { label: "no compelling moment named", state: "fail" as GateState },
   ];
 }
 
+// Provenance is what makes a verdict evidence rather than opinion, so it is rendered, not hidden
+// in a tooltip — `retrospective` included, since a note reconstructed weeks later is weaker.
+export function verdictProvenance(v: PrototypeVerdict): {
+  recordedOn: string;
+  source: string | null;
+  retrospective: boolean;
+} {
+  return {
+    recordedOn: v.recordedAt.slice(0, 10),
+    source: v.source,
+    retrospective: /retrospectiv/i.test(v.source || ""),
+  };
+}
+
+// The kill-gate evidence block. Its quoted moment and source line clamp like every other long
+// field and un-clamp from the card's own `.is-open` — never a second expand of their own.
 function VerdictLine({ v }: { v: PrototypeVerdict | null }) {
   const chips = verdictChips(v);
-  const tip = v
-    ? "Kill-gate play-test · " + v.recordedAt.slice(0, 10) + (v.source ? " · " + v.source : "")
-    : "No play-test on record — untested is not the same as failed.";
-  return (
-    <div className="pscope" title={tip}>
-      {chips.length === 0 && <span className="pscope-chip">○ not play-tested yet</span>}
-      {chips.map((c) => (
-        <span key={c.label} className={"pscope-chip" + (c.ok ? " clock" : "")}>
-          {c.ok ? "✓" : "✗"} {c.label}
+  if (!v)
+    return (
+      <div className="pscope">
+        <span
+          className="pscope-chip vgate-unasked"
+          title="No play-test on record — untested is not the same as failed."
+        >
+          ○ not play-tested yet
         </span>
-      ))}
-    </div>
+      </div>
+    );
+  const prov = verdictProvenance(v);
+  const glyph: Record<GateState, string> = { pass: "✓", fail: "✗", unasked: "○" };
+  return (
+    <section className="vgate">
+      <span className="vgate-title">Play-test verdict</span>
+      {prov.retrospective && (
+        <span className="pscope-chip vgate-retro">recorded retrospectively</span>
+      )}
+      <div className="pscope vgate-chips">
+        {chips.map((c) => (
+          <span key={c.label} className={"pscope-chip vgate-" + c.state}>
+            {glyph[c.state]} {c.label}
+          </span>
+        ))}
+      </div>
+      {v.moment && <blockquote className="vquote">“{v.moment}”</blockquote>}
+      <p className="vsrc">
+        <span className="vsrc-when">Recorded {prov.recordedOn}</span>
+        {prov.source && <> · {prov.source}</>}
+      </p>
+    </section>
   );
 }
 
-function PitchCard({ p, verdict }: { p: Pitch; verdict: PrototypeVerdict | null }) {
-  const [open, setOpen] = useState(false);
-  // Spine fields clamp to 2 lines. A hard mid-word ellipsis reads as "cut off
-  // abruptly", so we soft-fade the tail instead — but only on fields that are
-  // actually truncated (mark them `is-clamped`), leaving fields that fit solid.
-  const fieldsRef = useRef<HTMLDivElement>(null);
-  const mark = () =>
-    fieldsRef.current?.querySelectorAll<HTMLElement>(".pfield").forEach((el) => {
-      el.classList.toggle("is-clamped", el.scrollHeight > el.clientHeight + 1);
+// One clamp + expand, shared by both cards (#196). Marks every element matching `selector` that
+// is genuinely truncated with `is-clamped` (the class that draws the soft tail-fade) and reports
+// whether any is — so a card whose content already fits shows no control at all. Measuring is
+// skipped while `open`: an un-clamped element measures untruncated, vanishing the control.
+function useClampScan(selector: string, open: boolean) {
+  const ref = useRef<HTMLElement>(null);
+  const [clamped, setClamped] = useState(false);
+  const mark = () => {
+    const root = ref.current;
+    if (!root || open) return;
+    let any = false;
+    root.querySelectorAll<HTMLElement>(selector).forEach((el) => {
+      const cut = el.scrollHeight > el.clientHeight + 1;
+      el.classList.toggle("is-clamped", cut);
+      any ||= cut;
     });
-  // Re-measure after every commit: the card first mounts inside a hidden
-  // (display:none) service panel where fields measure 0×0, and only gets real
-  // dimensions when the panel is revealed — which re-renders this card, so a
-  // no-dependency layout effect catches that moment (and the open toggle).
+    setClamped(any);
+  };
+  // Re-measure after every commit: a card first mounts inside a hidden (display:none) service
+  // panel where everything measures 0×0, and only gets real dimensions when the panel is
+  // revealed — which re-renders the card, so a no-dependency layout effect catches that moment.
   useLayoutEffect(mark);
-  // A viewport resize reflows the column count and the web-font swap shifts wrap
-  // points, neither of which re-renders the card — cover both explicitly.
+  // A viewport resize reflows the column count and the web-font swap shifts wrap points,
+  // neither of which re-renders the card — cover both explicitly.
   useEffect(() => {
     window.addEventListener("resize", mark);
     document.fonts?.ready.then(mark);
     return () => window.removeEventListener("resize", mark);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  return { ref, clamped };
+}
+
+function PitchCard({ p, verdict }: { p: Pitch; verdict: PrototypeVerdict | null }) {
+  const [open, setOpen] = useState(false);
+  // Spine fields clamp to 2 lines, as do the verdict's quoted moment and source line: a hard
+  // mid-word ellipsis reads as "cut off abruptly", so the shared scan soft-fades the tail.
+  const { ref: cardRef, clamped } = useClampScan(".pfield, .vquote, .vsrc", open);
   const spine: [string, string | null, string?][] = [
     ["Loop", p.loopDetail],
     ["Setting", p.setting],
@@ -187,7 +243,7 @@ function PitchCard({ p, verdict }: { p: Pitch; verdict: PrototypeVerdict | null 
   ];
   const hasDetail = detail.some(([, v]) => v) || !!p.shotUrl;
   return (
-    <article className="bcard pcard">
+    <article className={"bcard pcard" + (open ? " is-open" : "")} ref={cardRef}>
       {p.headerUrl && (
         <div className="pcapsule">
           <img
@@ -266,7 +322,7 @@ function PitchCard({ p, verdict }: { p: Pitch; verdict: PrototypeVerdict | null 
       {/* The evidence behind the status chip above — skipped for paper pitches, where
           `proposed` already says "unprototyped". */}
       {(verdict || p.status !== "proposed") && <VerdictLine v={verdict} />}
-      <div className={"pfields" + (open ? " open" : "")} ref={fieldsRef}>
+      <div className={"pfields" + (open ? " open" : "")}>
         {spine.map(([label, val, cls]) => (
           <div key={label} className={"pfield" + (cls ? " " + cls : "")}>
             <span className="plabel">{label}</span>
@@ -297,7 +353,7 @@ function PitchCard({ p, verdict }: { p: Pitch; verdict: PrototypeVerdict | null 
           <figcaption>In-game concept</figcaption>
         </figure>
       )}
-      {hasDetail && (
+      {(hasDetail || clamped || open) && (
         <button
           type="button"
           className="pexpand"
@@ -354,29 +410,15 @@ function PitchCard({ p, verdict }: { p: Pitch; verdict: PrototypeVerdict | null 
   );
 }
 
-// Mirrors PitchCard's spine clamp: the summary is clamped to a fixed line count (CSS,
-// scoped under .lib-grid) so its length can't drive card height, and the button pins to
-// the card bottom so CTAs line up across a row. Only a truncated summary gets the soft
-// tail-fade — same measure-and-mark trick PitchCard uses on its .pfield spine.
+// Mirrors PitchCard's spine clamp: the summary clamps to a fixed line count (CSS, scoped under
+// .lib-grid) so its length can't drive card height, and the Play link pins to the card bottom so
+// CTAs line up across a row. "Read full" (#196) un-clamps everything long at once — summary AND
+// the verdict's moment and source — so rows stay uniform and a wordy note still gets read.
 function LibCard({ it }: { it: LibraryItem }) {
-  const blurbRef = useRef<HTMLParagraphElement>(null);
-  const mark = () => {
-    const el = blurbRef.current;
-    if (el) el.classList.toggle("is-clamped", el.scrollHeight > el.clientHeight + 1);
-  };
-  // Re-measure after every commit — the card first mounts inside a hidden (display:none)
-  // service panel where the blurb measures 0×0, and only gets real dimensions when the
-  // panel is revealed (which re-renders the card).
-  useLayoutEffect(mark);
-  // A viewport resize reflows the column count and the web-font swap shifts wrap points,
-  // neither of which re-renders the card — cover both explicitly, as PitchCard does.
-  useEffect(() => {
-    window.addEventListener("resize", mark);
-    document.fonts?.ready.then(mark);
-    return () => window.removeEventListener("resize", mark);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const [open, setOpen] = useState(false);
+  const { ref: cardRef, clamped } = useClampScan(".bblurb, .vquote, .vsrc", open);
   return (
-    <article className="bcard pcard">
+    <article className={"bcard pcard" + (open ? " is-open" : "")} ref={cardRef}>
       {it.imageUrl && (
         <div className="pcapsule">
           <img
@@ -400,13 +442,20 @@ function LibCard({ it }: { it: LibraryItem }) {
       </div>
       <h2>{it.title}</h2>
       {it.date && <div className="bmeta">Published {fmtDate(it.date)}</div>}
-      {it.summary && (
-        <p className="bblurb" ref={blurbRef}>
-          {it.summary}
-        </p>
-      )}
+      {it.summary && <p className="bblurb">{it.summary}</p>}
       {/* Prototype cards carry the verdict that was recorded against this exact build. */}
       {it.kind === "prototype" && <VerdictLine v={it.verdict} />}
+      {/* Offered only when something is genuinely cut off, so the control always means "more". */}
+      {(clamped || open) && (
+        <button
+          type="button"
+          className="pexpand"
+          onClick={() => setOpen((o) => !o)}
+          aria-expanded={open}
+        >
+          {open ? "▾ Show less" : "▸ Read full"}
+        </button>
+      )}
       {it.mediaUrl && (
         <a className="plink" href={it.mediaUrl} target="_blank" rel="noreferrer">
           ▶ Play prototype

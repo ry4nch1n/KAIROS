@@ -2016,6 +2016,17 @@ textarea {
   -webkit-mask-image: linear-gradient(to bottom, #000 62%, transparent);
   mask-image: linear-gradient(to bottom, #000 62%, transparent);
 }
+/* Expanded ("Read full"): ONE control per card lifts every clamp on it — the summary, the
+   verdict's quoted moment and its source line — so a long card never needs a second expand. */
+.pcard.is-open .bblurb,
+.pcard.is-open .vquote,
+.pcard.is-open .vsrc {
+  display: block;
+  -webkit-line-clamp: unset;
+  overflow: visible;
+  -webkit-mask-image: none;
+  mask-image: none;
+}
 /* Pin Play prototype to the card bottom so CTAs line up across a row. */
 .lib-grid .plink {
   margin-top: auto;
@@ -3245,6 +3256,85 @@ a.conv-chip:hover {
   color: var(--primary-deep);
   border-color: var(--border);
 }
+/* Kill-gate verdict block (#199): a prototype's evidence, set as a small bordered dossier rather
+   than a loose chip row. Green cleared a tooth, red failed one, dashed-grey means nobody asked. */
+.vgate {
+  margin: var(--sp-2) 0 var(--sp-1);
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--border-soft);
+  border-left: 2px solid var(--border);
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+}
+.vgate-title {
+  font-family: "Fira Code";
+  font-size: var(--fs-1);
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+/* A reconstruction is weaker evidence than a note taken at the table — the card says which. */
+.pscope-chip.vgate-retro {
+  margin-left: var(--sp-2);
+  background: transparent;
+  color: var(--amber);
+  border-style: dashed;
+  border-color: color-mix(in srgb, var(--amber) 45%, var(--border));
+}
+.vgate-chips {
+  margin: var(--sp-2) 0 0;
+}
+.pscope-chip.vgate-pass {
+  background: color-mix(in srgb, var(--green) 9%, var(--surface));
+  color: var(--green);
+  border-color: color-mix(in srgb, var(--green) 28%, var(--border));
+}
+.pscope-chip.vgate-fail {
+  background: color-mix(in srgb, var(--red) 8%, var(--surface));
+  color: var(--red);
+  border-color: color-mix(in srgb, var(--red) 26%, var(--border));
+}
+.pscope-chip.vgate-unasked {
+  background: transparent;
+  color: var(--text-3);
+  border-style: dashed;
+}
+/* Moment + provenance clamp like the spine fields so one wordy note can't drive row height. */
+.vquote,
+.vsrc {
+  margin: var(--sp-2) 0 0;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.vquote {
+  padding-left: var(--sp-2);
+  border-left: 2px solid color-mix(in srgb, var(--green) 40%, var(--border));
+  font-size: var(--fs-3);
+  line-height: var(--lh-3);
+  font-style: italic;
+  color: var(--text-2);
+}
+.vsrc {
+  font-family: "Fira Code";
+  font-size: var(--fs-1);
+  line-height: var(--lh-1);
+  color: var(--text-3);
+}
+.vsrc-when {
+  color: var(--text-2);
+  font-weight: 600;
+}
+/* Same soft tail-fade the spine fields use, only on the ones actually cut off. */
+.vquote.is-clamped,
+.vsrc.is-clamped {
+  -webkit-mask-image: linear-gradient(to bottom, #000 45%, transparent);
+  mask-image: linear-gradient(to bottom, #000 45%, transparent);
+}
+
 .pscores .pjudge {
   border-left: 1px solid var(--border);
   padding-left: var(--sp-3);
