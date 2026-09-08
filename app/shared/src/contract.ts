@@ -170,7 +170,22 @@ export const CONTRACT = {
   //      change still stops alarming; the threshold and the primary window are deliberately
   //      unchanged. At most one such row per weekday. Additive: a reader that does not know the
   //      flag sees an ordinary gap row rather than silence.
-  version: 27,
+  // v28: `SteeringLens.weight` stops being one absolute constant and becomes RELATIVE to each
+  //      ranking's own visible band (#200). Measured live 2026-09-04 with 11 flags ticked, the
+  //      0.5 lift had matched 99 markets across the two panels and moved none of them into view:
+  //      browser gap scores run 7.5–10.5 and Steam's 3.8–5.8, and the six shown browser rows span
+  //      3.08 points on their own — so one constant could not serve both surfaces, and on either
+  //      one it was smaller than a single rank gap inside the band it had to cross. A flag is now
+  //      worth half of `topScore − cutoffScore`, a row's total lift is capped at one whole band,
+  //      and only the top `3 × shownCount` candidates are eligible at all — so a steered row is
+  //      still a real gap, and can never outrank the leader the market data itself chose. Shape
+  //      is unchanged: this is a semantics bump, and `weight` now differs per surface and per
+  //      week. A matched row outside the candidate band reports `delta: 0` rather than vanishing
+  //      from `steered`/`unlisted`, which stay the honest evidence that the lens ran. Shipped
+  //      with #195 (a `…playing card…` flag claiming the tag "Can't stop playing" on the bare
+  //      word `playing`) — a raised weight is exactly what turns that into a visible wrong
+  //      promotion under a chip asserting the move was intentional.
+  version: 28,
   pitch: {
     // v2: added visual-card fields — setting, artStyle, codeName, headerUrl, shotUrl.
     // v3: rating rework — scoreFields d1Fit/steamCeiling/buildCost → browserFit/steamFit/buildEase.

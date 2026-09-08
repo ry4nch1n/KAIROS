@@ -2,7 +2,14 @@
 // standing flags set the ranking is identical to the market-data one — scores, order, keys.
 import { describe, expect, it } from "vitest";
 import type { SteamGap } from "shared";
-import { matchSteering, steerRow, steeringLens, STEERING_WEIGHT } from "../src/queries/shared.ts";
+import {
+  matchSteering,
+  steerRanking,
+  steerRow,
+  steeringLens,
+  steeringScale,
+  STEERING_WEIGHT,
+} from "../src/queries/shared.ts";
 import { freshMemoryDb } from "../src/db/db.ts";
 import { loadGames } from "../src/crawler/load.ts";
 import { STEAM_BASE_URL } from "../src/crawler/steam.ts";
@@ -176,7 +183,8 @@ describe("steeringLens", () => {
       steered: 1,
       steeredShown: 1,
       unlisted: [],
-      weight: STEERING_WEIGHT,
+      // Two rows, no cut passed → the whole ranking IS the visible band, 1.5 to 1.2 (#200).
+      weight: 0.15,
     });
   });
 });
@@ -341,11 +349,13 @@ describe("browser market gaps are steered by the standing flags (#142)", () => {
     await q.setBriefSteering(db, ["Luck/deck builder synergy games"]);
     const steered = await q.rankMarketGaps(db, "crazygames");
     const deck = steered.find((g) => g.label === "Puzzle × Deckbuilding")!;
-    expect(deck.steering).toEqual({
-      flags: ["Luck/deck builder synergy games"],
-      delta: STEERING_WEIGHT,
-    });
-    expect(deck.score).toBeCloseTo(unsteered[deckBefore].score + STEERING_WEIGHT, 5);
+    // The lift is this ranking’s own, not a constant (#200) — read it back off the unsteered set.
+    const { weight } = steeringScale(
+      unsteered.map((g) => g.score),
+      6,
+    );
+    expect(deck.steering).toEqual({ flags: ["Luck/deck builder synergy games"], delta: weight });
+    expect(deck.score).toBeCloseTo(unsteered[deckBefore].score + weight, 5);
     // …and nothing the flag did not match moved: steering promotes, it never demotes.
     for (const g of steered.filter((x) => !x.steering))
       expect(g.score).toBe(unsteered.find((u) => u.label === g.label)!.score);
@@ -363,6 +373,99 @@ describe("browser market gaps are steered by the standing flags (#142)", () => {
     expect(lens.steered).toBe(1); // matched somewhere in the ranking…
     expect(lens.steeredShown).toBe(0); // …but nothing the reader can see moved
     expect(lens.unlisted![0]).toMatchObject({ label: "Puzzle × Deckbuilding", rank: 10 });
-    expect(lens.weight).toBe(STEERING_WEIGHT);
+    expect(lens.weight).toBe(
+      steeringScale(
+        (await q.rankMarketGaps(await seed(), "crazygames")).map((g) => g.score),
+        6,
+      ).weight,
+    );
+  });
+});
+
+// #195 — the whole-word cousin of #173. A `…playing card…` flag claimed the browser tag "Can't
+// stop playing" on the bare word `playing`: one high-frequency English gerund that both sides
+// happen to contain and that carries none of the flag's meaning. Measured live 2026-09-04, where
+// `Driving × Can't stop playing` sat in `unlisted` with delta 1.0 from two flags on that word
+// alone. Cosmetic only while the weight could not move anything — which #200 changes.
+describe("a bare common gerund cannot carry a flag (#195)", () => {
+  const FLAGS = ["Blackjack or playing card mechanics", "Living playing card/toy soldiers setting"];
+
+  it("refuses the engagement tag the bare word `playing` invented", () => {
+    for (const tag of ["Can't stop playing", "Can’t stop playing"])
+      expect(matchSteering(FLAGS, { genre: "Driving", tag })).toEqual([]);
+  });
+
+  it("still reaches a genuine card market — the interest is in `card`, not in `playing`", () => {
+    expect(matchSteering(FLAGS, { genre: "Card", tag: "Battle" })).toEqual(FLAGS);
+    expect(matchSteering(FLAGS, { genre: "Casual", tag: "Card" })).toEqual(FLAGS);
+  });
+});
+
+// #200 — 0.5 was one absolute constant over two rankings with different natural scales, and it
+// moved nothing on either: 99 steered markets, `steeredShown: 0` on both panels. The two ladders
+// below reproduce the 2026-09-04 measurement — the shown scores verbatim, a flat tail, and the
+// flag's market at the rank it actually held (browser 16, Steam 22).
+describe("the steering lift scales to the ranking it is applied to (#200)", () => {
+  const FLAG = "Luck/deck builder synergy games";
+  const surface = (head: number[], shownCount: number, tailStep: number, at: number) => {
+    const scores = [...head];
+    while (scores.length < 60) scores.push(+(scores[scores.length - 1] - tailStep).toFixed(2));
+    return { shownCount, cutoff: head[head.length - 1], scores, at };
+  };
+  type Surface = ReturnType<typeof surface>;
+  const BROWSER = surface([10.54, 9.57, 9.27, 8.74, 8.33, 7.45], 6, 0.1, 15);
+  const STEAM = surface([5.84, 5.76, 5.26, 5.03, 4.77, 4.67, 3.81, 3.81], 8, 0.05, 21);
+  /** Fresh rows every call — `steerRanking` lifts in place. */
+  const rows = (s: Surface, at = s.at) =>
+    s.scores.map((score, i) =>
+      i === at ? gap("Puzzle", "Deckbuilding", score) : gap("Casual", `Filler ${i}`, score),
+    );
+  const shown = (s: Surface, flags: string[], at = s.at) =>
+    steerRanking(rows(s, at), flags, s.shownCount).slice(0, s.shownCount);
+
+  it("gives each surface its own weight, both larger than the flat constant", () => {
+    expect(steeringScale(BROWSER.scores, BROWSER.shownCount).weight).toBeCloseTo(1.54, 2);
+    expect(steeringScale(STEAM.scores, STEAM.shownCount).weight).toBeCloseTo(1.01, 2);
+    // The point of the change: one number cannot serve both, and 0.5 served neither.
+    expect(steeringScale(BROWSER.scores, 6).weight).not.toBe(steeringScale(STEAM.scores, 8).weight);
+  });
+
+  it("surfaces a comparable market on both scales, where the flat 0.5 never could", () => {
+    for (const s of [BROWSER, STEAM]) {
+      expect(s.scores[s.at] + STEERING_WEIGHT).toBeLessThan(s.cutoff); // the old lift fell short…
+      expect(shown(s, [FLAG]).some((g) => g.label === "Puzzle × Deckbuilding")).toBe(true);
+    }
+  });
+
+  it("no flags set → the ranking is still byte-identical to the market data's own", () => {
+    expect(steerRanking(rows(BROWSER), [], 6)).toEqual(steerRanking(rows(BROWSER), ["  "], 6));
+    expect(steerRanking(rows(BROWSER), [], 6).some((g) => g.steering)).toBe(false);
+  });
+
+  // The guardrail that protects the panel's credibility: a lift breaks ties among markets that
+  // were ALREADY real gaps. A market outside the candidate band is not teleported into view —
+  // and it is not silently dropped from the lens either.
+  it("cannot teleport a market from outside the candidate band, and still reports it", () => {
+    const deep = 40; // rank 41, well outside the top 3 × 6
+    const ranked = steerRanking(rows(BROWSER, deep), [FLAG], 6);
+    const deck = ranked.find((g) => g.label === "Puzzle × Deckbuilding")!;
+    expect(deck.score).toBe(BROWSER.scores[deep]); // untouched by the lift
+    expect(deck.steering).toEqual({ flags: [FLAG], delta: 0 }); // …but the match is still recorded
+    const lens = steeringLens([FLAG], ranked, 6)!;
+    expect(lens).toMatchObject({ applied: [FLAG], steered: 1, steeredShown: 0 });
+    expect(lens.unlisted![0]).toMatchObject({ label: "Puzzle × Deckbuilding", rank: 41, delta: 0 });
+  });
+
+  it("caps the total lift at one visible band — steering never crowns a new leader", () => {
+    const flags = [FLAG, "Puzzle games", "Deckbuilding"]; // three matches on the same market
+    const ranked = steerRanking(rows(BROWSER), flags, 6);
+    const deck = ranked.find((g) => g.label === "Puzzle × Deckbuilding")!;
+    const { maxLift, weight } = steeringScale(BROWSER.scores, 6);
+    expect(deck.steering!.flags).toHaveLength(3);
+    expect(deck.steering!.delta).toBe(maxLift); // not 3 × weight
+    expect(maxLift).toBeLessThan(3 * weight);
+    // A row below the cut scores at most `cutoff`, and cutoff + spread = the unsteered top score.
+    expect(deck.score).toBeLessThanOrEqual(BROWSER.scores[0]);
+    expect(ranked[0].label).toBe("Casual × Filler 0");
   });
 });

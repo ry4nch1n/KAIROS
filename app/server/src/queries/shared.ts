@@ -164,9 +164,50 @@ export async function genreSupplyTrend(
 // curated loop-family map (so "survivors" reaches Action × Survivor-Like without naming it) or
 // as a whole word in the market's labels. Discipline from data/loopFamilyMap.ts: a flag that
 // fits nothing matches nothing; with no flags set the ranking is unchanged.
-/** Score added per matching flag — enough to lift an on-interest market over a marginally
- *  better one, too small to float a market the data doesn't support (a z-score is ~1.0). */
+/** Fallback score per matching flag — used only when a ranking gives nothing to scale against
+ *  (fewer than two candidates, or every candidate tied). The pre-#200 absolute constant. */
 export const STEERING_WEIGHT = 0.5;
+
+// ── Relative weight (#200) ──
+// 0.5 was one absolute constant over two rankings with different natural scales: browser gap
+// scores run 7.5–10.5, Steam's 3.8–5.8. Measured live 2026-09-04 with 11 flags ticked it lifted
+// 99 markets across the two panels and moved NONE into view — the six shown browser rows span
+// 3.08 points by themselves, so +0.5 could not cross one rank gap inside the visible band, let
+// alone the ten ranks its best match needed. The lift is now a fraction of each ranking's OWN
+// visible band (topScore − cutoffScore), so one setting means the same thing on both surfaces.
+/** Per matching flag: half the visible band — enough to reorder comparable markets. */
+export const STEERING_SPREAD_K = 0.5;
+/** Ceiling on one row's total lift: one whole visible band, so a third matching flag adds nothing.
+ *  Load-bearing invariant — a row below the cut scores at most `cutoff`, and `cutoff + spread =
+ *  topScore`, so steering can reorder the shown band but never crown a leader over the one the
+ *  market data itself put first. */
+export const STEERING_MAX_LIFT_K = 1;
+/** Anti-teleport rail the cap alone cannot give: only the top `3 × shownCount` of the UNSTEERED
+ *  ranking is eligible for any lift. A flag breaks ties among markets that were already real gaps
+ *  (top ~8% of live candidates); it never fetches a weak row up from rank 54. Rows outside the
+ *  band still RECORD their match with `delta: 0`, so `applied`/`steered`/`unlisted` stay the
+ *  honest evidence that the lens ran. */
+export const STEERING_BAND_MULTIPLE = 3;
+
+export interface SteeringScale {
+  weight: number; // score per matching flag, for this ranking
+  maxLift: number; // ceiling on one row's total lift
+  band: number; // how many top-ranked candidates may be lifted at all
+}
+
+/** The scale for ONE ranking, from its own UNSTEERED scores (descending) and its displayed cut. */
+export function steeringScale(baseDesc: number[], shownCount: number): SteeringScale {
+  const cut = Math.min(Math.max(shownCount, 2), baseDesc.length);
+  const spread = cut >= 2 ? baseDesc[0] - baseDesc[cut - 1] : 0;
+  const band = Math.max(shownCount, shownCount * STEERING_BAND_MULTIPLE);
+  return spread > 0
+    ? {
+        weight: +(STEERING_SPREAD_K * spread).toFixed(2),
+        maxLift: +(STEERING_MAX_LIFT_K * spread).toFixed(2),
+        band,
+      }
+    : { weight: STEERING_WEIGHT, maxLift: STEERING_WEIGHT * 2, band };
+}
 
 export interface Steerable {
   genre: string;
@@ -200,6 +241,17 @@ const STOP = new Set([
   // so a "Single-player" flag still reaches a "Singleplayer" market.
   "player",
   "players",
+  // ── #195: a shared common word is not a shared interest ──
+  // A `…playing card…` flag claimed the browser tag "Can't stop playing" on the bare word
+  // `playing`. The whole-word cousin of #173: no stemmer over-reach, just one high-frequency
+  // English gerund a flag phrase and a portal's engagement tag both happen to contain, carrying
+  // none of the flag's meaning. Stopped like "game" and "player" — the qualifier survives in the
+  // compound forms, so "playing card" still reaches a card market through `playingcard` and
+  // through its own significant word, `card`. A wrong match is worse than no match.
+  "playing",
+  "building",
+  "running",
+  "going",
 ]);
 const rawWords = (s: string) =>
   String(s ?? "")
@@ -320,14 +372,43 @@ export function matchSteering(flags: string[], m: { genre: string; tag: string }
 /** Re-score ONE ranked market. A no-op when nothing matches (or nothing is set): score,
  *  components and keys stay exactly as the market data computed them. Slots into the ranking
  *  chain before its `.sort`, so a lift can push a market above the top-N cut. */
-export function steerRow<T extends Steerable>(row: T, flags: string[]): T {
+export function steerRow<T extends Steerable>(
+  row: T,
+  flags: string[],
+  scale?: SteeringScale,
+  eligible = true,
+): T {
   const matched = matchSteering(activeFlags(flags), row);
   if (!matched.length) return row; // no claim, never force-fit
-  const delta = +(STEERING_WEIGHT * matched.length).toFixed(2);
+  // Outside the candidate band the match is still RECORDED, at delta 0 — the lens must keep
+  // reporting it, and reporting it as a lift that did not happen is the honest reading (#200).
+  const weight = scale?.weight ?? STEERING_WEIGHT;
+  const cap = scale?.maxLift ?? Number.POSITIVE_INFINITY;
+  const delta = eligible ? +Math.min(weight * matched.length, cap).toFixed(2) : 0;
   row.score = +(row.score + delta).toFixed(2);
   row.components = { ...row.components, steering: delta };
   row.steering = { flags: matched, delta };
   return row;
+}
+
+/** Steer a WHOLE ranking: sort on the market data, scale the weight to that ranking's own visible
+ *  band, lift only the candidates inside the band, re-sort. Replaces the per-row `.map(steerRow)`
+ *  both surfaces used — which could not see the spread it now scales against (#200). */
+export function steerRanking<T extends Steerable>(
+  rows: T[],
+  flags: string[],
+  shownCount: number,
+): T[] {
+  const base = [...rows].sort((a, b) => b.score - a.score);
+  if (!activeFlags(flags).length) return base; // nothing steering → the market data's own order
+  const scale = steeringScale(
+    base.map((r) => r.score),
+    shownCount,
+  );
+  base.forEach((r, i) => {
+    steerRow(r, flags, scale, i < scale.band);
+  });
+  return base.sort((a, b) => b.score - a.score);
 }
 
 /** How many matched-but-below-the-cut markets the lens names. Enough to see the shape of what
@@ -376,6 +457,12 @@ export function steeringLens(
     steered: steeredRows.length,
     steeredShown: ranked.slice(0, shownCount).filter((r) => r.steering).length,
     unlisted,
-    weight: STEERING_WEIGHT,
+    // The per-flag weight this ranking actually used (#200). Recovered from the rows rather than
+    // passed in: subtracting each row's own steering term gives back the unsteered scores the
+    // scale was computed from, so the reported number can never drift from the applied one.
+    weight: steeringScale(
+      ranked.map((r) => +(r.score - (r.components.steering ?? 0)).toFixed(2)).sort((a, b) => b - a),
+      shownCount,
+    ).weight,
   };
 }

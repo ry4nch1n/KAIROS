@@ -168,7 +168,7 @@ export interface SteeringLens {
   steered: number; // # of ranked rows that got a lift (whole ranking)
   steeredShown?: number; // …of which, how many are inside the displayed cut (#167)
   unlisted?: SteeringUnlisted[]; // matched markets below the cut, best-ranked first, capped
-  weight: number; // score added per matching flag
+  weight: number; // score added per matching flag — relative to this ranking’s band (#200)
 }
 
 export interface SteamGap {
