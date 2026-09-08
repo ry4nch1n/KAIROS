@@ -407,6 +407,66 @@ describe("a bare common gerund cannot carry a flag (#195)", () => {
   });
 });
 
+// #212 — the THIRD over-reach of one family, and the reason the stoplist stopped growing. #173
+// was a stemmer collapse (`builder` → `build` claimed Building); #195 was a bare gerund (`playing`
+// claimed "Can't stop playing"); this is a bare head noun — a `…deck builder…` flag claiming
+// `Simulation × City Builder`, measured live 2026-09-08 as the ONLY steered row with a non-zero
+// delta on either surface. Note the shape #195's fix produced: it stopped `building`, and the very
+// next over-reach arrived on `builder`, its neighbour. No stoplist can separate these two, because
+// `builder` is significant in "deck builder" and in "City Builder" alike — the entry that kills
+// the wrong match kills the right one with it. What separates them is POSITION: the market's own
+// qualifier is authoritative, so a market never lends out a head it has already narrowed itself.
+// These five cases are the spec; the four the issue named are marked.
+describe("a market's qualified head cannot be claimed by a flag (#212)", () => {
+  const DECK = "Luck/deck builder synergy games";
+  const CARD = "Blackjack or playing card mechanics";
+  const LIVING = "Living playing card/toy soldiers setting";
+  const ROGUE = "Rogue-lites";
+  const FLAGS = [DECK, ROGUE, CARD, LIVING];
+
+  it("refuses `City Builder` — a city builder is not a deck builder [acceptance]", () => {
+    // The whole row, not just the flag: nothing else may rescue it either (the family route
+    // included). This is the live `unlisted` entry that ranked 18 on a 1.01 delta.
+    expect(matchSteering(FLAGS, { genre: "Simulation", tag: "City Builder" })).toEqual([]);
+    // The qualifier is what the flag shares, so a market that leads with it still matches.
+    expect(matchSteering([DECK], { genre: "Simulation", tag: "Deck Builder" })).toEqual([DECK]);
+  });
+
+  it("still reaches the deckbuilder markets the flag exists for [acceptance]", () => {
+    expect(matchSteering(FLAGS, { genre: "Indie", tag: "Roguelike Deckbuilder" })).toEqual([
+      DECK,
+      ROGUE,
+    ]);
+    expect(matchSteering(FLAGS, { genre: "Casual", tag: "Deckbuilding" })).toEqual([DECK]);
+  });
+
+  it("keeps #195's card market and still refuses its engagement tag [acceptance]", () => {
+    // `Casual × Card` is the live surfaced row (rank 8 after #211) — losing it would be the
+    // regression, not the cleanup. It survives because a flag's OWN head may still claim: the
+    // market states `card` plainly. "Can't stop playing" does not state `playing` plainly.
+    expect(matchSteering(FLAGS, { genre: "Casual", tag: "Card" })).toEqual([CARD, LIVING]);
+    expect(matchSteering(FLAGS, { genre: "Driving", tag: "Can't stop playing" })).toEqual([]);
+  });
+
+  it("keeps the #173 pin — a generic root still claims nothing", () => {
+    for (const m of [
+      { genre: "Adventure", tag: "Base-Building" },
+      { genre: "Simulation", tag: "Building" }, // builder → build → Building
+      { genre: "Action", tag: "4 Player Local" },
+      { genre: "Casual", tag: "Free to Play" },
+    ])
+      expect(matchSteering(FLAGS, m)).toEqual([]);
+  });
+
+  it("leaves a one-word market untouched — the rule only demotes heads [acceptance]", () => {
+    // `Rogue-lites` reaches these through the market's FIRST token, which nothing qualifies.
+    expect(matchSteering([ROGUE], { genre: "Adventure", tag: "Roguelike" })).toEqual([ROGUE]);
+    expect(matchSteering([ROGUE], { genre: "Indie", tag: "Roguelike Deckbuilder" })).toEqual([
+      ROGUE,
+    ]);
+  });
+});
+
 // #200 — 0.5 was one absolute constant over two rankings with different natural scales, and it
 // moved nothing on either: 99 steered markets, `steeredShown: 0` on both panels. The two ladders
 // below reproduce the 2026-09-04 measurement — the shown scores verbatim, a flat tail, and the

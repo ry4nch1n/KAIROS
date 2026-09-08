@@ -246,24 +246,30 @@ const STOP = new Set([
   // so a "Single-player" flag still reaches a "Singleplayer" market.
   "player",
   "players",
-  // ── #195: a shared common word is not a shared interest ──
-  // A `…playing card…` flag claimed the browser tag "Can't stop playing" on the bare word
-  // `playing`. The whole-word cousin of #173: no stemmer over-reach, just one high-frequency
-  // English gerund a flag phrase and a portal's engagement tag both happen to contain, carrying
-  // none of the flag's meaning. Stopped like "game" and "player" — the qualifier survives in the
-  // compound forms, so "playing card" still reaches a card market through `playingcard` and
-  // through its own significant word, `card`. A wrong match is worse than no match.
-  "playing",
-  "building",
-  "running",
-  "going",
+  // #195's four entries — "playing", "building", "running", "going" — are GONE (#212). They were
+  // one token each of a family the head-noun rule below now covers structurally: `Can't stop
+  // playing` narrows `playing` with `stop`, exactly as `City Builder` narrows `builder` with
+  // `city`. Stopping the token was also the wrong shape of fix — it had to be dropped from the
+  // flag too, and the very next over-reach arrived on `builder`, the neighbour of the `building`
+  // that had just been stopped. What stays here is only what NO qualifier rule can reach: words
+  // that are noise wherever they stand, in any position, on either side.
 ]);
 const rawWords = (s: string) =>
   String(s ?? "")
     .toLowerCase()
     .split(/[^a-z0-9]+/)
     .filter(Boolean);
-const wordsOf = (s: string) => rawWords(s).filter((w) => w.length >= 4 && !STOP.has(w));
+/** A token that can carry an interest at all: long enough to mean something, not stoplisted. */
+const significant = (w: string) => w.length >= 4 && !STOP.has(w);
+const wordsOf = (s: string) => rawWords(s).filter(significant);
+/** Tokens a label states PLAINLY — every token of a field except one standing immediately behind
+ *  a significant token, which is a narrowed head, not a plain statement (#212). Unfiltered by
+ *  length, because this is the market's side of a whole-word test: a flag word "RPGs" must still
+ *  reach a three-letter `RPG`. */
+const freeTokensOf = (s: string) => {
+  const raw = rawWords(s);
+  return new Set(raw.filter((_, i) => i === 0 || !significant(raw[i - 1])));
+};
 
 // ── Collapsed vocabulary (#157) ──
 // The word matcher below splits on every non-alphanumeric, so a standing flag reaches the market
@@ -305,9 +311,31 @@ const fold = (t: string) => VARIANTS.reduce((s, [re, to]) => s.replace(re, to), 
 // stemming a SINGLE word may only meet a joined pair — the closed compound it was invented to
 // reach. `deckbuild` (pair) still finds `Deckbuilding` (word, stemmed); `build` no longer finds
 // `Building`. Structural, so there is no list of generic roots for anyone to maintain.
+// ── Head-noun discipline (#212) ──
+// The rule above splits a token's FORMS apart; this one splits its POSITION apart, and it is the
+// general form of #173, #195 and #212 — three over-reaches where flag and market shared a token
+// that denoted different things on each side. `builder` is significant in both "deck builder" and
+// "City Builder" by any frequency measure, so no stoplist can separate them: the entry that
+// catches "City Builder" also breaks the match the flag exists to make. What separates them is
+// position. A market that writes "City Builder" is telling you it is a CITY-building market; the
+// bare head it shares with a deck-builder flag is the generic tail of its own compound, not a
+// statement about itself. So: THE MARKET'S OWN QUALIFIER IS AUTHORITATIVE. A flag may claim a
+// market through a token the market states plainly (nothing significant in front of it) or
+// through a closed compound both sides write — never through a head the market has already
+// narrowed with a qualifier of its own.
+//
+// It is deliberately one-sided. A flag's head may still carry a claim: "playing card mechanics"
+// reaches a market whose tag is simply `Card`, because THAT market states `card` plainly. Making
+// the rule symmetric would kill that live, correctly-steered market — and applying it to the
+// market alone is what lets #195's whole stoplist family retire, since "Can't stop playing"
+// narrows `playing` with `stop` in exactly the way "City Builder" narrows `builder`.
 interface Forms {
-  /** Significant words as written (folded) — the qualifier intact. */
-  word: Set<string>;
+  /** Significant words the label states PLAINLY (folded): first in their field, or behind a token
+   *  too generic to narrow them. Either side may claim through these. */
+  free: Set<string>;
+  /** Significant words a qualifier already narrowed — the head of a compound. Offered from the
+   *  FLAG's side only; a market's own head never carries a claim (#212). */
+  head: Set<string>;
   /** Adjacent words joined then stemmed: the closed compound the other side may write as one. */
   compound: Set<string>;
   /** What stemming left of a single word, when it changed it. Generic by construction. */
@@ -317,31 +345,38 @@ const keep = (into: Set<string>, f: string) => {
   if (f.length >= 4) into.add(f);
 };
 /** Comparison forms of ONE label. Called per field, because the genre and the tag are separate
- *  claims: "Action" × "Deckbuilding" must never yield "actiondeck". */
+ *  claims: "Action" × "Deckbuilding" must never yield "actiondeck" — and, since #212, because a
+ *  genre never qualifies the first word of its tag. */
 const formsOf = (s: string): Forms => {
-  const forms: Forms = { word: new Set(), compound: new Set(), root: new Set() };
-  for (const w of wordsOf(s)) {
+  const forms: Forms = { free: new Set(), head: new Set(), compound: new Set(), root: new Set() };
+  const raw = rawWords(s);
+  raw.forEach((w, i) => {
+    if (!significant(w)) return;
     const plain = fold(w);
-    keep(forms.word, plain);
+    keep(i > 0 && significant(raw[i - 1]) ? forms.head : forms.free, plain);
     const root = fold(stem(w));
     if (root !== plain) keep(forms.root, root);
-  }
-  const raw = rawWords(s);
+  });
   for (let i = 0; i + 1 < raw.length; i++) keep(forms.compound, fold(stem(raw[i] + raw[i + 1])));
   return forms;
 };
 const mergeForms = (a: Forms, b: Forms): Forms => ({
-  word: new Set([...a.word, ...b.word]),
+  free: new Set([...a.free, ...b.free]),
+  head: new Set([...a.head, ...b.head]),
   compound: new Set([...a.compound, ...b.compound]),
   root: new Set([...a.root, ...b.root]),
 });
 const shares = (a: Set<string>, b: Set<string>) => [...a].some((f) => b.has(f));
 /** Whole-token EQUALITY on a shared comparison form, never a substring — with a stemmed root
- *  admitted only against the other side's compounds (#173). */
-const formsMatch = (a: Forms, b: Forms) =>
-  shares(new Set([...a.word, ...a.compound]), new Set([...b.word, ...b.compound])) ||
-  shares(a.root, b.compound) ||
-  shares(a.compound, b.root);
+ *  admitted only against the other side's compounds (#173), and the MARKET side offering only
+ *  what it states plainly, never a head it has qualified itself (#212). */
+const formsMatch = (flag: Forms, market: Forms) =>
+  shares(
+    new Set([...flag.free, ...flag.head, ...flag.compound]),
+    new Set([...market.free, ...market.compound]),
+  ) ||
+  shares(flag.root, market.compound) ||
+  shares(flag.compound, market.root);
 
 export const activeFlags = (flags: string[]) =>
   (flags ?? []).filter((f) => typeof f === "string" && f.trim());
@@ -352,20 +387,16 @@ export const activeFlags = (flags: string[]) =>
  *  route only fires when the market resolves to exactly one family, so `Puzzle × Deckbuilding`
  *  matched nothing (the genre-level family outvoted the tag) even though the vocabulary was there. */
 export function matchSteering(flags: string[], m: { genre: string; tag: string }): string[] {
-  const hay = ` ${`${m.genre} ${m.tag}`
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, " ")
-    .trim()} `;
+  // The whole-word route reads the market's PLAIN tokens, not a flat haystack of its label: a
+  // head the market has qualified itself is not something the market says about itself (#212).
+  const plain = new Set([...freeTokensOf(m.genre), ...freeTokensOf(m.tag)]);
   const marketForms = mergeForms(formsOf(m.genre), formsOf(m.tag));
   const family = loopFamilyFor(m.genre, m.tag) ?? loopFamilyFromLabels([m.genre, m.tag]);
   const out: string[] = [];
   for (const flag of flags) {
     if (typeof flag !== "string" || !flag.trim()) continue;
     const byWord = wordsOf(flag).some(
-      (w) =>
-        hay.includes(` ${w} `) ||
-        hay.includes(` ${w}s `) ||
-        hay.includes(` ${w.replace(/s$/, "")} `),
+      (w) => plain.has(w) || plain.has(`${w}s`) || plain.has(w.replace(/s$/, "")),
     );
     const byForm = formsMatch(formsOf(flag), marketForms);
     const byFamily = family != null && loopFamilyFromLabels([flag]) === family;
