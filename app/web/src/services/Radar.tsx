@@ -1302,7 +1302,8 @@ function OppList({
     <div className="gaplist">
       <p className="gap-legend">
         opportunity = z(demand: median owners) + z(quality ceiling: P90 rating) − z(supply: games) ·
-        median price is context, not scored
+        median price is context, not scored · pairs under 3 tracked games are too thin to rank and
+        are left out
       </p>
       {note && <p className="gap-legend">{note}</p>}
       {gaps.map((g, i) => (

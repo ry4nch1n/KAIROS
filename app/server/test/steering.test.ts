@@ -268,11 +268,13 @@ describe("GET /api/steam steering lens is wired to the full ranking (#167)", () 
   it("reports a matched-but-unlisted market instead of calling the flag unmatched", async () => {
     const db = await freshMemoryDb();
     const games: RawGame[] = [];
+    // Three games per cell, not two: below the shared market-supply floor a genre × tag cell is
+    // not a market and never enters the ranking at all (#211).
     for (let i = 0; i < 9; i++)
-      for (const n of [1, 2])
+      for (const n of [1, 2, 3])
         games.push(g(`f${i}-${n}`, "Casual", `Filler ${i}`, 400_000 - i * 20_000, 4.6));
     // The deck market is the weakest of the ten — even lifted it cannot climb into the top 8.
-    for (const n of [1, 2]) games.push(g(`d${n}`, "Puzzle", "Deckbuilding", 1_000, 2.0));
+    for (const n of [1, 2, 3]) games.push(g(`d${n}`, "Puzzle", "Deckbuilding", 1_000, 2.0));
     await loadGames(db, "steam", STEAM_BASE_URL, games, "2026-06-30T00:00:00.000Z");
     await q.setBriefSteering(db, ["Luck/deck builder synergy games"]);
 
