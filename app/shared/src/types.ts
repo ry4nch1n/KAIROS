@@ -471,11 +471,20 @@ export interface BriefMarketItem {
   date?: string | null;
   source?: string;
 }
+// A Top Signal carries its own source URL (briefPayload v2). The section renders ABOVE the
+// cards, so a reader who cannot click through has to scroll down and guess which item is meant
+// — the same "citation with nowhere to go" defect the card `source` field already fixed.
+// The plain-string form stays legal: editions published before v2 have no source to give, and
+// brief validation is advisory, so they must keep rendering rather than blank the section.
+export interface BriefTopSignal {
+  text: string;
+  source?: string; // absolute URL; validated by the routine's link gate like any card source
+}
 export interface BriefPayload {
   weekday?: string;
   phase_badge?: string;
   edition_label?: string;
-  top_signals?: string[];
+  top_signals?: (string | BriefTopSignal)[];
   new_notable?: BriefNotable[];
   browser?: BriefNotable[];
   tooling?: { headline?: string; items?: BriefToolingItem[] };

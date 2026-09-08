@@ -13,7 +13,7 @@ import type { BriefEditionMeta, BriefEdition, BriefNotable, BriefSteering } from
 import { api } from "../lib/api.ts";
 import { isSameWeek } from "../lib/week.ts";
 import { rowSummary } from "../lib/briefTracker.ts";
-import { cardImage, groupBrowserCards } from "../lib/briefCards.ts";
+import { cardImage, groupBrowserCards, topSignal } from "../lib/briefCards.ts";
 
 function fmt(date: string): string {
   return new Date(date + "T00:00:00Z").toLocaleDateString("en-US", {
@@ -342,12 +342,27 @@ export function Brief({ hidden, onGoto }: { hidden: boolean; onGoto?: (svc: Serv
                     <span className="n">1</span>Top signals
                   </div>
                   <div className="card" style={{ gap: 10 }}>
-                    {p.top_signals.map((s, i) => (
-                      <div key={i} style={{ display: "flex", gap: 10, fontSize: "var(--fs-3)" }}>
-                        <span style={{ color: "var(--primary)" }}>▸</span>
-                        <span dangerouslySetInnerHTML={{ __html: md(s) }} />
-                      </div>
-                    ))}
+                    {p.top_signals.map((raw, i) => {
+                      const s = topSignal(raw);
+                      return (
+                        <div key={i} style={{ display: "flex", gap: 10, fontSize: "var(--fs-3)" }}>
+                          <span style={{ color: "var(--primary)" }}>▸</span>
+                          <span>
+                            <span dangerouslySetInnerHTML={{ __html: md(s.text) }} />
+                            {s.source && (
+                              <a
+                                href={s.source}
+                                target="_blank"
+                                rel="noreferrer"
+                                style={{ ...srcLink, marginTop: 0, marginLeft: 8 }}
+                              >
+                                source ↗
+                              </a>
+                            )}
+                          </span>
+                        </div>
+                      );
+                    })}
                   </div>
                 </>
               )}

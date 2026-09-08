@@ -15,7 +15,7 @@ value means bumping the relevant version in the same commit.**
 |-------|---------|
 | `(top level)` | **28** |
 | `pitch` | **8** |
-| `briefPayload` | **1** |
+| `briefPayload` | **2** |
 | `taxonomy` | **3** |
 
 ## Taxonomies
