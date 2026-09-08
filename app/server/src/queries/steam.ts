@@ -31,7 +31,7 @@ import {
   classifyTrajectory,
   classifySupply,
   genreSupplyTrend,
-  steerRow,
+  steerRanking,
   steeringLens,
   type SupplyInfo,
 } from "./shared.ts";
@@ -918,28 +918,28 @@ export async function rankSteamOpportunity(db: Querier): Promise<SteamGap[]> {
   const zDem = z(rows.map((r) => num(r.demand)));
   const zSup = z(rows.map((r) => num(r.supply_n)));
   const zQual = z(rows.map((r) => num(r.quality)));
-  return rows
-    .map((r) => ({
-      label: `${r.genre} × ${r.tag}`,
-      genre: r.genre,
-      tag: r.tag,
-      supplyN: num(r.supply_n),
-      medianOwners: Math.round(num(r.demand)),
-      qualityCeil: +num(r.quality).toFixed(2),
-      medianPriceCents: Math.round(num(r.med_price)),
-      score: +(zDem(num(r.demand)) + zQual(num(r.quality)) - zSup(num(r.supply_n))).toFixed(2),
-      // Same intermediates the score above sums — surfaced, not re-derived (#87). Signs match:
-      // demand/quality lift, supply is negated. Rounded independently; sum ≈ score ±0.02.
-      components: {
-        demand: +zDem(num(r.demand)).toFixed(2),
-        quality: +zQual(num(r.quality)).toFixed(2),
-        supply: +(-zSup(num(r.supply_n))).toFixed(2),
-      },
-      examples: ex.get(`${r.genre} × ${r.tag}`) ?? [],
-      supplyRising: supply.get(r.genre)?.trend === "rising",
-    }))
-    .map((g) => steerRow(g, flags)) // standing flags re-score the ranking (#12b)
-    .sort((a, b) => b.score - a.score);
+  const scored = rows.map((r) => ({
+    label: `${r.genre} × ${r.tag}`,
+    genre: r.genre,
+    tag: r.tag,
+    supplyN: num(r.supply_n),
+    medianOwners: Math.round(num(r.demand)),
+    qualityCeil: +num(r.quality).toFixed(2),
+    medianPriceCents: Math.round(num(r.med_price)),
+    score: +(zDem(num(r.demand)) + zQual(num(r.quality)) - zSup(num(r.supply_n))).toFixed(2),
+    // Same intermediates the score above sums — surfaced, not re-derived (#87). Signs match:
+    // demand/quality lift, supply is negated. Rounded independently; sum ≈ score ±0.02.
+    components: {
+      demand: +zDem(num(r.demand)).toFixed(2),
+      quality: +zQual(num(r.quality)).toFixed(2),
+      supply: +(-zSup(num(r.supply_n))).toFixed(2),
+    },
+    examples: ex.get(`${r.genre} × ${r.tag}`) ?? [],
+    supplyRising: supply.get(r.genre)?.trend === "rising",
+  }));
+  // Standing flags re-score the ranking before its sort and top-N cut (#12b), with the lift
+  // scaled to THIS ranking's own visible band and confined to a candidate band (#200).
+  return steerRanking(scored, flags, OPPORTUNITY_TOP_N);
 }
 
 // The displayed opportunity list — the ranked set's top slice.

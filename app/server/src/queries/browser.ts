@@ -33,7 +33,7 @@ import {
   classifyTrajectory,
   classifySupply,
   genreSupplyTrend,
-  steerRow,
+  steerRanking,
   steeringLens,
 } from "./shared.ts";
 import { getBriefSteering } from "./library.ts";
@@ -516,29 +516,27 @@ export async function rankMarketGaps(db: Querier, platform: Platform): Promise<M
   const zApp = z(clean.map((r) => num(r.appetite)));
   const zSup = z(clean.map((r) => num(r.supply_n)));
   const zQual = z(clean.map((r) => num(r.quality_ceil)));
-  return clean
-    .map((r) => ({
-      label: `${r.genre} × ${r.tag}`,
-      genre: r.genre,
-      tag: r.tag,
-      supplyN: num(r.supply_n),
-      appetite: Math.round(num(r.appetite)),
-      qualityCeil: +num(r.quality_ceil).toFixed(2),
-      score: +(zApp(num(r.appetite)) + zQual(num(r.quality_ceil)) - zSup(num(r.supply_n))).toFixed(
-        2,
-      ),
-      // Same intermediates the score above sums — surfaced, not re-derived (#87). Signs match:
-      // demand/quality lift, supply is negated. Rounded independently; sum ≈ score ±0.02.
-      components: {
-        demand: +zApp(num(r.appetite)).toFixed(2),
-        quality: +zQual(num(r.quality_ceil)).toFixed(2),
-        supply: +(-zSup(num(r.supply_n))).toFixed(2),
-      },
-      examples: gex.get(`${r.genre} × ${r.tag}`) ?? [],
-      supplyRising: supply.get(r.genre)?.trend === "rising",
-    }))
-    .map((g) => steerRow(g, flags)) // standing flags re-score the ranking (#142)
-    .sort((a, b) => b.score - a.score);
+  const scored = clean.map((r) => ({
+    label: `${r.genre} × ${r.tag}`,
+    genre: r.genre,
+    tag: r.tag,
+    supplyN: num(r.supply_n),
+    appetite: Math.round(num(r.appetite)),
+    qualityCeil: +num(r.quality_ceil).toFixed(2),
+    score: +(zApp(num(r.appetite)) + zQual(num(r.quality_ceil)) - zSup(num(r.supply_n))).toFixed(2),
+    // Same intermediates the score above sums — surfaced, not re-derived (#87). Signs match:
+    // demand/quality lift, supply is negated. Rounded independently; sum ≈ score ±0.02.
+    components: {
+      demand: +zApp(num(r.appetite)).toFixed(2),
+      quality: +zQual(num(r.quality_ceil)).toFixed(2),
+      supply: +(-zSup(num(r.supply_n))).toFixed(2),
+    },
+    examples: gex.get(`${r.genre} × ${r.tag}`) ?? [],
+    supplyRising: supply.get(r.genre)?.trend === "rising",
+  }));
+  // Standing flags re-score the ranking before its sort and top-N cut (#142), with the lift
+  // scaled to THIS ranking's own visible band and confined to a candidate band (#200).
+  return steerRanking(scored, flags, GAPS_TOP_N);
 }
 
 // The displayed gap list — the ranked set's top slice.
