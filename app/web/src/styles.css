@@ -3268,6 +3268,7 @@ a.conv-chip:hover {
 }
 .vgate-title {
   font-family: "Fira Code";
+  white-space: nowrap;
   font-size: var(--fs-1);
   font-weight: 700;
   letter-spacing: 0.6px;
