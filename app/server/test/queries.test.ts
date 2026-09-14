@@ -219,7 +219,13 @@ describe("A_explorer queries", () => {
     const genres = await q.getGenres(db, "all");
     expect(genres.length).toBeGreaterThan(0);
     expect(genres[0].games).toBeGreaterThan(0);
-    expect(genres[0].p90Votes).toBeGreaterThanOrEqual(genres[0].medianVotes);
+    // No raw level pooled across vote bases on `all` — the within-portal percentile instead (#204 S4).
+    expect(genres[0].medianVotes).toBeNull();
+    expect(genres[0].p90VotePct!).toBeGreaterThanOrEqual(genres[0].medianVotePct!);
+    expect(genres[0].p90VotePct!).toBeLessThanOrEqual(100);
+    const pokiLevels = (await q.getGenres(db, "poki"))[0];
+    expect(pokiLevels.p90Votes!).toBeGreaterThanOrEqual(pokiLevels.medianVotes!);
+    expect(pokiLevels.medianVotePct).toBeNull();
     expect(genres[0].p90Rating).toBeGreaterThan(0);
     expect(genres[0].votesPerDay).toBeNull(); // no pooled rate on `all` (#204 S3)
     expect(genres[0].momentum.length).toBeGreaterThan(0);
@@ -282,7 +288,14 @@ describe("A_landscape quality-saturation", () => {
       expect(p.supply).toBeGreaterThan(0);
       expect(p.p75Rating).toBeGreaterThan(0);
       expect(p.p75Rating).toBeLessThanOrEqual(5);
-      expect(p.totalVotes).toBeGreaterThanOrEqual(0);
+      // `all` weighs by within-portal percentile, never a raw sum across vote bases (#204 S4).
+      expect(p.totalVotes).toBeNull();
+      expect(p.voteWeight!).toBeGreaterThanOrEqual(0);
+      expect(p.voteWeight!).toBeLessThanOrEqual(p.supply);
+    }
+    for (const p of await q.getGenreLandscape(db, "poki")) {
+      expect(p.totalVotes!).toBeGreaterThanOrEqual(0);
+      expect(p.voteWeight).toBeNull();
     }
   });
 });

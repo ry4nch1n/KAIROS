@@ -9,6 +9,7 @@ const browserGap: MarketGap = {
   tag: "Merge",
   supplyN: 14,
   appetite: 12345.4,
+  appetiteUnit: "votes",
   qualityCeil: 9.126,
   score: 2.345,
   components: { demand: 1, quality: 0.5, supply: -0.2 },
@@ -25,6 +26,15 @@ describe("gap seeds", () => {
         "Appetite: 12,345 median votes per title\nSupply: 14 games · supply rising\n" +
         "Quality ceiling: 9.13 (P90 rating)\nOpportunity score: 2.3\nExamples: Merge Lab · Tile Town",
     );
+  });
+
+  it("browser on All Browser: appetite is a within-portal percentile, never 'median votes' (#204 S4)", () => {
+    const s = browserGapSeed(
+      { ...browserGap, appetite: 61.6, appetiteUnit: "votePercentile" },
+      ctx,
+    );
+    expect(s).toContain("Appetite: P62 median vote percentile per title (within its portal)");
+    expect(s).not.toContain("median votes");
   });
 
   it("steam: median reviews with owners as context, price, missing fields omitted", () => {

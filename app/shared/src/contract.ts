@@ -216,7 +216,18 @@ export const CONTRACT = {
   //      gains `risingByPortal` (`RisingGenre[]`); `risingGenre` / `risingVotesPerDay` become
   //      nullable (null on `all`; the rate null on a window portal). Poki values are unchanged.
   //      Breaking for readers of `momentum.dates` or unconditional `votesPerDay` formatting.
-  version: 32,
+  // v33: vote LEVELS on `all` use within-portal percentiles (#204 S4). Before any median, sum or
+  //      ordering, each title's votes become its percentile (0–100) within its own portal's live
+  //      catalogue; a single portal is unchanged. The unit is named, never implied:
+  //      `Overview.levelUnit`, `MarketGap.appetiteUnit` and `LoopFamilyMarket.appetiteUnit` are
+  //      "votes" | "votePercentile". On `all`: gap, quadrant and loop-family `appetite` are median
+  //      percentiles; quadrant `weight` is Σ percentile ÷ 100 (vote-weighted titles).
+  //      `ScatterPoint.votePct` is the gem-selection percentile (null on one portal).
+  //      `GenreRow.medianVotes` / `p90Votes` and `GenreLandscapePoint.totalVotes` become nullable
+  //      (null on `all`) beside `medianVotePct` / `p90VotePct` / `voteWeight`. Hidden Gems on `all`
+  //      take rating and vote percentiles within portal and interleave each portal's own ranking;
+  //      New Releases on `all` alternates portals. Breaking for readers of those fields on `all`.
+  version: 33,
   pitch: {
     // v2: added visual-card fields — setting, artStyle, codeName, headerUrl, shotUrl.
     // v3: rating rework — scoreFields d1Fit/steamCeiling/buildCost → browserFit/steamFit/buildEase.

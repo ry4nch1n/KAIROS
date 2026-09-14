@@ -25,6 +25,7 @@ import type {
   GlossaryRow,
   SettingFacet,
   VoteBasis,
+  LevelUnit,
 } from "shared";
 import { CONTRACT } from "../../../shared/src/contract.ts";
 import { coTagHits, DEFAULTED_GENRES, loopFamilyFor } from "../data/loopFamilyMap.ts";
@@ -42,6 +43,9 @@ import {
   voteMomentumOf,
   steerRanking,
   steeringLens,
+  voteLevel,
+  levelUnitOf,
+  VOTE_PCT_OVER,
   MIN_MARKET_SUPPLY,
   MIN_RANKABLE_CELLS,
 } from "./shared.ts";
@@ -476,8 +480,13 @@ async function gemBase(db: Querier, platform: Platform) {
               -- anchor the new-release window uses (never the wall clock, so reads stay
               -- deterministic). first_seen_at is crawl discovery, not a release date.
               greatest(0, floor(extract(epoch FROM (${newAnchor(platform)} - g.first_seen_at)) / 86400))::int AS days_tracked,
-              percent_rank() OVER (ORDER BY l.rating) AS rp,
-              percent_rank() OVER (ORDER BY l.votes)  AS vp
+              -- Both percentiles are WITHIN the title's portal (#204 S4), so a gem is "top 25% on
+              -- rating, bottom 25% on votes of its own catalogue". Votes: one portal's count is a
+              -- running total, the other's a recent window. Rating too: measured 2026-09-14, the
+              -- CrazyGames gems' ratings ran 4.75–4.90 against Poki's 4.46–4.77, so a pooled cut
+              -- would hand one portal the list. One portal: partitioning by it changes nothing.
+              percent_rank() OVER (PARTITION BY src.name ORDER BY l.rating) AS rp,
+              ${VOTE_PCT_OVER} AS vp
        FROM v_latest l
        JOIN games g ON g.id = l.game_id
        JOIN sources src ON src.id = g.source_id
@@ -501,6 +510,8 @@ export async function getScatter(
     rating: num(r.rating),
     votes: num(r.votes),
     gem: !!r.gem,
+    // The x a mixed-portal scatter can honestly plot (#204 S4): the percentile gem selection used.
+    votePct: platform === "all" ? +(100 * num(r.vp)).toFixed(1) : null,
   }));
 }
 
@@ -549,21 +560,35 @@ async function voteCaptures(db: Querier, ids: number[]): Promise<Captures> {
   );
 }
 
+/** Merge per-portal rankings rank by rank (#204 S4): each portal's rows keep their own order and
+ *  take turns, so a ranking never compares one portal's rating or vote count with the other's. One
+ *  portal is simply its own top `n`. Portals alternate in name order; a short list lets the other
+ *  fill the remaining slots. */
+export function interleaveByPortal<T extends { source: string }>(rows: T[], n: number): T[] {
+  const by = new Map<string, T[]>();
+  for (const r of rows) by.set(r.source, [...(by.get(r.source) ?? []), r]);
+  const lists = [...by.keys()].sort().map((k) => by.get(k)!);
+  const out: T[] = [];
+  for (let i = 0; out.length < n && lists.some((l) => i < l.length); i++)
+    for (const l of lists) if (i < l.length && out.length < n) out.push(l[i]);
+  return out;
+}
+
 export async function getHiddenGems(
   db: Querier,
   platform: Platform,
   rows?: Record<string, any>[],
 ): Promise<HiddenGem[]> {
   rows ??= await gemBase(db, platform);
-  const top = rows
+  const ranked = rows
     .filter((r) => r.gem)
     // Rank by Bayesian-shrunk rating so well-supported quality outranks thin-sample flukes.
     .sort(
       (a, b) =>
         bayesianGemScore(num(b.rating), num(b.votes)) -
         bayesianGemScore(num(a.rating), num(a.votes)),
-    )
-    .slice(0, 30);
+    );
+  const top = interleaveByPortal(ranked, 30);
   // Second axis (#176). Rating × votes alone gives one number, and one number cannot tell
   // "under-discovered" from "stalled years ago" — the two look identical on it. Age since
   // first sighting plus vote momentum ANNOTATE the ranking (the sort is deliberately
@@ -599,15 +624,20 @@ export async function rankMarketGaps(db: Querier, platform: Platform): Promise<M
   // on the Steam side — steering can surface a market the raw score kept off the list. The flags
   // are a global setting, so the same lens reshapes both reads. None set → no-op.
   const { flags } = await getBriefSteering(db);
+  // Appetite is a vote LEVEL: raw median votes on one portal, the median within-portal percentile
+  // on `all` (#204 S4), so a portal's structurally smaller counts no longer read as low demand.
+  const lv = voteLevel(platform);
+  const appetiteUnit = levelUnitOf(platform);
   const [rows, gex] = await Promise.all([
     db.query(
       `SELECT ${canonSql("l.genre")} AS genre, ${canonSql("t.name")} AS tag,
               count(DISTINCT g.id)::int AS supply_n,
-              percentile_cont(0.5) WITHIN GROUP (ORDER BY l.votes)::float AS appetite,
+              percentile_cont(0.5) WITHIN GROUP (ORDER BY ${lv.level})::float AS appetite,
               percentile_cont(0.9) WITHIN GROUP (ORDER BY l.rating)::float AS quality_ceil
        FROM v_latest l
        JOIN games g ON g.id = l.game_id
        JOIN sources src ON src.id = g.source_id
+       ${lv.join}
        JOIN game_tags gt ON gt.game_id = g.id
        JOIN tags t ON t.id = gt.tag_id
        WHERE g.is_live AND l.genre IS NOT NULL ${pf(platform)}
@@ -635,6 +665,7 @@ export async function rankMarketGaps(db: Querier, platform: Platform): Promise<M
     tag: r.tag,
     supplyN: num(r.supply_n),
     appetite: Math.round(num(r.appetite)),
+    appetiteUnit,
     qualityCeil: +num(r.quality_ceil).toFixed(2),
     score: +(zApp(num(r.appetite)) + zQual(num(r.quality_ceil)) - zSup(num(r.supply_n))).toFixed(2),
     // Same intermediates the score above sums — surfaced, not re-derived (#87). Signs match:
@@ -686,6 +717,9 @@ export interface LoopFamilyMarketRow {
 export interface LoopFamilyMarket {
   platform: Platform;
   subtitle: string;
+  // Unit of every row's browser `appetite` (#204 S4): supply-weighted median votes on one portal,
+  // supply-weighted median within-portal vote percentile (0–100) on `all`.
+  appetiteUnit: LevelUnit;
   rows: LoopFamilyMarketRow[]; // covered families, sorted by supply-weighted demand
   uncovered: string[]; // loopFamilies values NEITHER surface hit
 }
@@ -695,16 +729,21 @@ export async function getLoopFamilyMarket(
 ): Promise<LoopFamilyMarket> {
   // A Steam-platform read has one surface: scoring Steam against itself would manufacture a lean.
   const cross = platform !== "steam";
+  // Demand is a vote LEVEL: within-portal percentile on `all` (#204 S4), raw votes elsewhere.
+  const lv = voteLevel(platform);
   const [genreRows, splitRows, supply, steamEcon] = await Promise.all([
-    // Per-genre spine: distinct games (supply) + median votes (demand).
+    // Per-genre spine: distinct games (supply) + median level (demand).
     db.query(
       `SELECT ${canonSql("l.genre")} AS genre, count(DISTINCT g.id)::int AS supply_n,
-              percentile_cont(0.5) WITHIN GROUP (ORDER BY l.votes)::float AS appetite
+              percentile_cont(0.5) WITHIN GROUP (ORDER BY ${lv.level})::float AS appetite
        FROM v_latest l JOIN games g ON g.id = l.game_id JOIN sources src ON src.id = g.source_id
+       ${lv.join}
        WHERE g.is_live AND l.genre IS NOT NULL ${pf(platform)}
        GROUP BY ${canonSql("l.genre")}`,
     ),
-    db.query(gameTagSql(platform, ", max(l.votes)::float AS votes", true), [DEFAULTED_GENRES]),
+    db.query(gameTagSql(platform, `, max(${lv.level})::float AS votes`, true, lv.join), [
+      DEFAULTED_GENRES,
+    ]),
     genreSupplyTrend(db, platform),
     cross ? steamFamilyEconomics(db) : emptySteamSide(),
   ]);
@@ -782,15 +821,22 @@ export async function getLoopFamilyMarket(
   // Contract families NEITHER surface reached — the whitespace signal.
   const covered = new Set(rows.map((r) => r.family));
   const uncovered = CONTRACT.pitch.loopFamilies.filter((f) => !covered.has(f));
-  return { platform, subtitle: subtitleFor(platform), rows, uncovered };
+  return {
+    platform,
+    subtitle: subtitleFor(platform),
+    appetiteUnit: levelUnitOf(platform),
+    rows,
+    uncovered,
+  };
 }
 
 /** Per-GAME genre + tag rows — the grain the tag axis needs. `skipDefaulted` drops the genres
  *  carrying a default ($1): assigned whole, so their games never need the split. */
-function gameTagSql(platform: Platform, cols: string, skipDefaulted: boolean): string {
+function gameTagSql(platform: Platform, cols: string, skipDefaulted: boolean, join = ""): string {
   const gx = canonSql("l.genre");
   return `SELECT ${gx} AS genre, array_agg(DISTINCT ${canonSql("t.name")}) AS tags${cols}
      FROM v_latest l JOIN games g ON g.id = l.game_id JOIN sources src ON src.id = g.source_id
+     ${join}
      JOIN game_tags gt ON gt.game_id = g.id JOIN tags t ON t.id = gt.tag_id
      WHERE g.is_live AND l.genre IS NOT NULL ${pf(platform)}
        ${skipDefaulted ? `AND lower(${gx}) <> ALL($1::text[])` : ""}
@@ -917,12 +963,17 @@ const median = (xs: number[]): number => {
 };
 
 export async function getGenres(db: Querier, platform: Platform): Promise<GenreRow[]> {
+  // Level columns (#204 S4): raw votes on one portal; on `all` the within-portal percentile, and
+  // the raw fields go null rather than carry a median pooled across two vote bases.
+  const lv = voteLevel(platform);
+  const pctUnit = levelUnitOf(platform) === "votePercentile";
   const rows = await db.query(
     `SELECT ${canonSql("l.genre")} AS genre, count(*)::int AS games, avg(l.rating)::float AS avg_rating,
-            percentile_cont(0.5) WITHIN GROUP (ORDER BY l.votes)::float AS med_votes,
-            percentile_cont(0.9) WITHIN GROUP (ORDER BY l.votes)::float AS p90_votes,
+            percentile_cont(0.5) WITHIN GROUP (ORDER BY ${lv.level})::float AS med_votes,
+            percentile_cont(0.9) WITHIN GROUP (ORDER BY ${lv.level})::float AS p90_votes,
             percentile_cont(0.9) WITHIN GROUP (ORDER BY l.rating)::float AS p90_rating
      FROM v_latest l JOIN games g ON g.id = l.game_id JOIN sources src ON src.id = g.source_id
+     ${lv.join}
      WHERE g.is_live AND l.genre IS NOT NULL ${pf(platform)}
      GROUP BY ${canonSql("l.genre")} ORDER BY games DESC`,
   );
@@ -943,8 +994,10 @@ export async function getGenres(db: Querier, platform: Platform): Promise<GenreR
       genre: r.genre,
       games: num(r.games),
       avgRating: +num(r.avg_rating).toFixed(2),
-      medianVotes: Math.round(num(r.med_votes)),
-      p90Votes: Math.round(num(r.p90_votes)),
+      medianVotes: pctUnit ? null : Math.round(num(r.med_votes)),
+      p90Votes: pctUnit ? null : Math.round(num(r.p90_votes)),
+      medianVotePct: pctUnit ? Math.round(num(r.med_votes)) : null,
+      p90VotePct: pctUnit ? Math.round(num(r.p90_votes)) : null,
       p90Rating: +num(r.p90_rating).toFixed(2),
       votesPerDay: solo ? solo.votesPerDay : null,
       trajectory: solo ? solo.trajectory : null,
@@ -977,11 +1030,21 @@ export async function getDevelopers(db: Querier, platform: Platform): Promise<De
 }
 
 export async function getNewReleases(db: Querier, platform: Platform): Promise<NewRelease[]> {
+  const cols = `g.id AS id, g.title AS title, g.url AS url, src.name AS source, ${canonSql("l.genre")} AS genre, l.rating AS rating, l.votes AS votes`;
+  const from = `FROM games g JOIN sources src ON src.id = g.source_id JOIN v_latest l ON l.game_id = g.id
+     WHERE g.is_live ${pf(platform)} AND g.first_seen_at >= ${newAnchor(platform)} - interval '14 days'`;
   const rows = await db.query(
-    `SELECT g.id AS id, g.title AS title, g.url AS url, src.name AS source, ${canonSql("l.genre")} AS genre, l.rating AS rating, l.votes AS votes
-     FROM games g JOIN sources src ON src.id = g.source_id JOIN v_latest l ON l.game_id = g.id
-     WHERE g.is_live ${pf(platform)} AND g.first_seen_at >= ${newAnchor(platform)} - interval '14 days'
-     ORDER BY g.first_seen_at DESC, l.votes DESC NULLS LAST LIMIT 60`,
+    platform !== "all"
+      ? `SELECT ${cols} ${from} ORDER BY g.first_seen_at DESC, l.votes DESC NULLS LAST LIMIT 60`
+      : // All Browser (#204 S4): a portal that lists titles faster must not crowd the other out of
+        // the 60 rows (measured 2026-09-14: 53 of 60 were CrazyGames). Each portal keeps its own
+        // newest-first order and the portals take turns; a portal with fewer rows lets the other fill.
+        `SELECT id, title, url, source, genre, rating, votes FROM (
+           SELECT ${cols}, g.first_seen_at AS fs,
+                  row_number() OVER (PARTITION BY src.name ORDER BY g.first_seen_at DESC, l.votes DESC NULLS LAST) AS rn
+           ${from}
+           ORDER BY rn, src.name LIMIT 60
+         ) x ORDER BY fs DESC, source, rn`,
   );
   // Per-title vote series over the same new-release cohort → age-adjusted votes/day +
   // trajectory, so two titles with equal cumulative votes but different momentum diverge.
@@ -1047,7 +1110,7 @@ export async function getInsights(
     out.push({
       kind: "gap",
       tag: "OPPORTUNITY",
-      meta: `${gaps[0].supplyN} games · ${gaps[0].appetite} median votes`,
+      meta: `${gaps[0].supplyN} games · ${appetiteMeta(gaps[0])}`,
       text: `<b>${gaps[0].label}</b> shows high demand with thin supply.`,
       implication:
         "underserved — a fast browser loop test here meets demand with little competition",
@@ -1082,7 +1145,7 @@ export async function getInsights(
       kind: "gem",
       tag: "HIDDEN GEMS",
       meta: `${gems.length} found · ${live} still climbing`,
-      text: `<b>${gems.length} well-rated games</b> sit in the top 25% on rating with low vote volume — <b>${live}</b> ${rest}.`,
+      text: `<b>${gems.length} well-rated games</b> sit in the top 25% on rating with low vote volume${platform === "all" ? " within their own portal" : ""} — <b>${live}</b> ${rest}.`,
       implication:
         "quality discovery missed — study the ones still climbing for what earns attention late, and treat the flat ones as a warning that good doesn't get found on its own",
     });
@@ -1130,6 +1193,13 @@ async function genreSupplyPressure(
 const PRESSURE_MIN_SHARE = 0.15;
 const PRESSURE_MIN_RECENT = 3;
 
+/** A gap's appetite for short meta text, in its own unit (#204 S4). One portal is unchanged. */
+function appetiteMeta(g: MarketGap): string {
+  return g.appetiteUnit === "votePercentile"
+    ? `P${g.appetite} median vote percentile`
+    : `${g.appetite} median votes`;
+}
+
 /** Pure composition — exported for tests. May contain <b>; rendered like insights. */
 export function composeBrowserRead(args: {
   gap?: MarketGap;
@@ -1141,8 +1211,13 @@ export function composeBrowserRead(args: {
 }): string[] {
   const lines: string[] = [];
   if (args.gap) {
+    // The unit is named (#204 S4): on All Browser appetite is a within-portal percentile.
+    const level =
+      args.gap.appetiteUnit === "votePercentile"
+        ? `P${args.gap.appetite} median vote percentile (within each portal)`
+        : `${args.gap.appetite.toLocaleString("en-US")} median votes`;
     lines.push(
-      `<b>${args.gap.label}</b> is the top gap — ${args.gap.appetite.toLocaleString("en-US")} median votes across only ${args.gap.supplyN} games. → Underserved: the strongest candidate for a quick browser loop test.`,
+      `<b>${args.gap.label}</b> is the top gap — ${level} across only ${args.gap.supplyN} games. → Underserved: the strongest candidate for a quick browser loop test.`,
     );
   }
   const up = (args.movers ?? []).filter((m) => m.v > 0);
@@ -1218,12 +1293,17 @@ async function getKPI(
   };
 }
 
+// Example titles are "the most-voted in this market" — a ranking of vote LEVELS, so on `all` it
+// orders by within-portal percentile (#204 S4); by raw count every example would be the portal
+// whose counts run larger.
 async function genreExamples(db: Querier, platform: Platform): Promise<Map<string, string[]>> {
+  const lv = voteLevel(platform);
   const rows = await db.query(
     `SELECT genre, title FROM (
        SELECT ${canonSql("l.genre")} AS genre, g.title AS title,
-              row_number() OVER (PARTITION BY ${canonSql("l.genre")} ORDER BY l.votes DESC NULLS LAST) AS rn
+              row_number() OVER (PARTITION BY ${canonSql("l.genre")} ORDER BY ${lv.order}) AS rn
        FROM v_latest l JOIN games g ON g.id=l.game_id JOIN sources src ON src.id=g.source_id
+       ${lv.join}
        WHERE g.is_live AND l.genre IS NOT NULL ${pf(platform)}
      ) t WHERE rn <= 3 ORDER BY genre, rn`,
   );
@@ -1237,11 +1317,13 @@ async function genreExamples(db: Querier, platform: Platform): Promise<Map<strin
 }
 
 async function gapExamples(db: Querier, platform: Platform): Promise<Map<string, string[]>> {
+  const lv = voteLevel(platform); // ordered by level: within-portal percentile on `all` (#204 S4)
   const rows = await db.query(
     `SELECT genre, tag, title FROM (
        SELECT ${canonSql("l.genre")} AS genre, ${canonSql("t.name")} AS tag, g.title AS title,
-              row_number() OVER (PARTITION BY ${canonSql("l.genre")}, ${canonSql("t.name")} ORDER BY l.votes DESC NULLS LAST) AS rn
+              row_number() OVER (PARTITION BY ${canonSql("l.genre")}, ${canonSql("t.name")} ORDER BY ${lv.order}) AS rn
        FROM v_latest l JOIN games g ON g.id=l.game_id JOIN sources src ON src.id=g.source_id
+       ${lv.join}
        JOIN game_tags gt ON gt.game_id=g.id JOIN tags t ON t.id=gt.tag_id
        WHERE g.is_live AND l.genre IS NOT NULL ${pf(platform)}
      ) x WHERE rn <= 3 ORDER BY genre, tag, rn`,
@@ -1289,12 +1371,17 @@ export async function getGenreLandscape(
   db: Querier,
   platform: Platform,
 ): Promise<GenreLandscapePoint[]> {
+  // Bubble weight is a vote LEVEL (#204 S4): raw total votes on one portal; on `all`, vote-weighted
+  // titles (Σ within-portal percentile ÷ 100), since a raw sum is dominated by the larger counts.
+  const lv = voteLevel(platform);
+  const pctUnit = levelUnitOf(platform) === "votePercentile";
   const [rows, ex] = await Promise.all([
     db.query(
       `SELECT ${canonSql("l.genre")} AS genre, count(*)::int AS supply,
               percentile_cont(0.75) WITHIN GROUP (ORDER BY l.rating)::float AS p75,
-              avg(l.rating)::float AS avgr, coalesce(sum(l.votes),0)::float AS tv
+              avg(l.rating)::float AS avgr, coalesce(sum(${lv.level}),0)::float AS tv
        FROM v_latest l JOIN games g ON g.id = l.game_id JOIN sources src ON src.id = g.source_id
+       ${lv.join}
        WHERE g.is_live AND l.genre IS NOT NULL AND l.rating IS NOT NULL ${pf(platform)}
        GROUP BY ${canonSql("l.genre")} HAVING count(*) >= 4 ORDER BY supply DESC`,
     ),
@@ -1305,7 +1392,8 @@ export async function getGenreLandscape(
     supply: num(r.supply),
     p75Rating: +num(r.p75).toFixed(2),
     avgRating: +num(r.avgr).toFixed(2),
-    totalVotes: Math.round(num(r.tv)),
+    totalVotes: pctUnit ? null : Math.round(num(r.tv)),
+    voteWeight: pctUnit ? +(num(r.tv) / 100).toFixed(1) : null,
     examples: ex.get(r.genre) ?? [],
   }));
 }
@@ -1314,11 +1402,16 @@ export async function getGenreLandscape(
 // x = supply, y = appetite (demand), bubble = commercial weight, colour = supply momentum.
 export async function getGenreQuadrant(db: Querier, platform: Platform): Promise<QuadrantPoint[]> {
   const supply = await genreSupplyTrend(db, platform);
+  // Appetite and weight are vote LEVELS (#204 S4): raw votes on one portal; on `all` the median
+  // within-portal percentile and vote-weighted titles (Σ percentile ÷ 100, one decimal).
+  const lv = voteLevel(platform);
+  const pctUnit = levelUnitOf(platform) === "votePercentile";
   const rows = await db.query(
     `SELECT ${canonSql("l.genre")} AS genre, count(*)::int AS supply,
-            percentile_cont(0.5) WITHIN GROUP (ORDER BY l.votes)::float AS appetite,
-            coalesce(sum(l.votes), 0)::float AS weight
+            percentile_cont(0.5) WITHIN GROUP (ORDER BY ${lv.level})::float AS appetite,
+            coalesce(sum(${lv.level}), 0)::float AS weight
      FROM v_latest l JOIN games g ON g.id = l.game_id JOIN sources src ON src.id = g.source_id
+     ${lv.join}
      WHERE g.is_live AND l.genre IS NOT NULL AND l.votes IS NOT NULL ${pf(platform)}
      GROUP BY ${canonSql("l.genre")} HAVING count(*) >= 4`,
   );
@@ -1326,7 +1419,7 @@ export async function getGenreQuadrant(db: Querier, platform: Platform): Promise
     genre: r.genre,
     supply: num(r.supply),
     appetite: Math.round(num(r.appetite)),
-    weight: Math.round(num(r.weight)),
+    weight: pctUnit ? +(num(r.weight) / 100).toFixed(1) : Math.round(num(r.weight)),
     supplyTrend: supply.get(r.genre)?.trend ?? "quiet",
   }));
 }
@@ -1338,16 +1431,18 @@ async function getTagGlossary(
 ): Promise<GlossaryRow[]> {
   if (!tagNames.length) return [];
   const ph = tagNames.map((_, i) => `$${i + 1}`).join(",");
+  const lv = voteLevel(platform); // examples by level: within-portal percentile on `all` (#204 S4)
   const rows = await db.query(
     `SELECT tag, title, cnt FROM (
        SELECT ${canonSql("t.name")} AS tag, gg.title AS title,
-              row_number() OVER (PARTITION BY ${canonSql("t.name")} ORDER BY l.votes DESC NULLS LAST) AS rn,
+              row_number() OVER (PARTITION BY ${canonSql("t.name")} ORDER BY ${lv.order}) AS rn,
               count(*) OVER (PARTITION BY ${canonSql("t.name")}) AS cnt
        FROM tags t
        JOIN game_tags gt ON gt.tag_id = t.id
        JOIN games gg ON gg.id = gt.game_id
        JOIN sources src ON src.id = gg.source_id
        JOIN v_latest l ON l.game_id = gg.id
+       ${lv.join}
        WHERE gg.is_live AND ${canonSql("t.name")} IN (${ph}) ${pf(platform)}
      ) x WHERE rn <= 3 ORDER BY tag, rn`,
     tagNames,
@@ -1425,6 +1520,7 @@ export async function getOverview(db: Querier, platform: Platform): Promise<Over
     glossary,
     settings,
     platform,
+    levelUnit: levelUnitOf(platform),
     subtitle: subtitleFor(platform),
   };
 }

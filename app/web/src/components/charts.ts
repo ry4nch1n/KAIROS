@@ -10,6 +10,7 @@ import type {
   GenreVelocityBar,
   ScaleTierRow,
   VoteBasis,
+  LevelUnit,
 } from "shared";
 
 const AX = "#5b6b86",
@@ -141,27 +142,50 @@ export function treemapOption(tags: TagFreq[]): EChartsOption {
   };
 }
 
+/** A within-portal vote percentile (0–100) as read on All Browser (#204 S4): "P62". */
+export const fmtVotePct = (v: number) => `P${Math.round(v)}`;
+/** What a browser vote LEVEL is called, by unit. */
+export const levelName = (unit: LevelUnit | undefined, raw: string) =>
+  unit === "votePercentile" ? "median vote percentile" : raw;
+export const VOTE_PCT_TIP =
+  "All Browser: each title's votes are ranked within its own portal (P0 = that portal's least-voted title, P100 = its most-voted), because one portal's count is a running total and the other's covers only recent engagement. Medians and sums are taken over those percentiles, never over raw counts pooled across portals.";
+
 export function scatterOption(points: ScatterPoint[]): EChartsOption {
-  // [votes, rating, title, genre] — title/genre kept for the tooltip
-  const crowd = points
-    .filter((p) => !p.gem)
-    .map((p) => [Math.max(p.votes, 1), p.rating, p.title, p.genre]);
-  const gems = points
-    .filter((p) => p.gem)
-    .map((p) => [Math.max(p.votes, 1), p.rating, p.title, p.genre]);
+  // On All Browser (#204 S4) x is each title's vote percentile within its own portal: raw counts on
+  // different bases never share an axis. A single portal keeps raw votes on a log axis.
+  const pct = points.some((p) => p.votePct != null);
+  // [x, rating, title, genre, raw votes] — title/genre/votes kept for the tooltip
+  const pt = (p: ScatterPoint) => [
+    pct ? (p.votePct ?? 0) : Math.max(p.votes, 1),
+    p.rating,
+    p.title,
+    p.genre,
+    p.votes,
+  ];
+  const crowd = points.filter((p) => !p.gem).map(pt);
+  const gems = points.filter((p) => p.gem).map(pt);
   const fmtPt = (p: any) =>
-    `<b>${p.value[2]}</b><br>${p.value[3]} · rating ${p.value[1]}<br>${Number(p.value[0]).toLocaleString()} votes`;
+    `<b>${p.value[2]}</b><br>${p.value[3]} · rating ${p.value[1]}<br>` +
+    (pct
+      ? `${fmtVotePct(Number(p.value[0]))} vote percentile within its portal`
+      : `${Number(p.value[0]).toLocaleString()} votes`);
   return {
     tooltip: { ...tip, formatter: fmtPt },
     grid: { ...baseGrid, left: 40, top: 18 },
     xAxis: {
-      type: "log",
-      name: "votes (visibility) →",
+      type: pct ? "value" : "log",
+      ...(pct ? { min: 0, max: 100 } : {}),
+      name: pct ? "vote percentile within portal (visibility) →" : "votes (visibility) →",
       nameLocation: "middle",
       nameGap: 26,
       nameTextStyle: { color: AX, fontFamily: FONT, fontSize: 11 },
       axisLine: { lineStyle: { color: GRID } },
-      axisLabel: { color: AX, fontFamily: FONT, fontSize: 11 },
+      axisLabel: {
+        color: AX,
+        fontFamily: FONT,
+        fontSize: 11,
+        ...(pct ? { formatter: (v: number) => fmtVotePct(v) } : {}),
+      },
       splitLine: { lineStyle: { color: GRID } },
     },
     yAxis: {
@@ -259,8 +283,11 @@ export function heatmapOption(h: FeatureHeatmap): EChartsOption {
   };
 }
 
+/** Landscape bubble weight: raw total votes on one portal, vote-weighted titles on All Browser. */
+const landscapeWeight = (p: GenreLandscapePoint) => p.totalVotes ?? p.voteWeight ?? 0;
 export function landscapeOption(pts: GenreLandscapePoint[]): EChartsOption {
-  const maxV = Math.max(1, ...pts.map((p) => p.totalVotes));
+  const pct = pts.some((p) => p.totalVotes == null && p.voteWeight != null);
+  const maxV = Math.max(1e-9, ...pts.map(landscapeWeight));
   const supplies = pts.map((p) => p.supply);
   const ratings = pts.map((p) => p.p75Rating);
   const xMin = Math.max(1, Math.floor(Math.min(...supplies) * 0.6));
@@ -268,14 +295,14 @@ export function landscapeOption(pts: GenreLandscapePoint[]): EChartsOption {
   const yMin = Math.max(0, +(Math.min(...ratings) - 0.2).toFixed(1));
   const yMax = Math.min(5, +(Math.max(...ratings) + 0.2).toFixed(1));
   const data = pts.map((p) => ({
-    value: [p.supply, p.p75Rating, p.totalVotes, p.genre, (p.examples ?? []).join(", ")],
-    symbolSize: 12 + 34 * Math.sqrt(p.totalVotes / maxV),
+    value: [p.supply, p.p75Rating, landscapeWeight(p), p.genre, (p.examples ?? []).join(", ")],
+    symbolSize: 12 + 34 * Math.sqrt(landscapeWeight(p) / maxV),
   }));
   return {
     tooltip: {
       ...tip,
       formatter: (p: any) =>
-        `<b>${p.value[3]}</b><br>${p.value[0]} games · P75 rating ${p.value[1]}<br>${Number(p.value[2]).toLocaleString()} total votes${p.value[4] ? `<br><span style="opacity:.7">e.g. ${p.value[4]}</span>` : ""}`,
+        `<b>${p.value[3]}</b><br>${p.value[0]} games · P75 rating ${p.value[1]}<br>${Number(p.value[2]).toLocaleString()} ${pct ? "vote-weighted titles (within-portal percentile)" : "total votes"}${p.value[4] ? `<br><span style="opacity:.7">e.g. ${p.value[4]}</span>` : ""}`,
     },
     grid: { left: 64, right: 40, top: 20, bottom: 48 },
     xAxis: {
@@ -340,14 +367,24 @@ const median = (xs: number[]): number => {
 };
 export function quadrantOption(
   pts: QuadrantPoint[],
-  opt: { yName: string; weightName: string },
+  // `percentile` (All Browser, #204 S4): appetite is a within-portal vote percentile, so y is a
+  // bounded 0–100 linear axis read as "P62", not a log count.
+  opt: { yName: string; weightName: string; percentile?: boolean },
 ): EChartsOption {
-  const maxW = Math.max(1, ...pts.map((p) => p.weight));
+  const pct = !!opt.percentile;
+  const yFmt = (v: number) => (pct ? fmtVotePct(v) : Number(v).toLocaleString());
+  const maxW = Math.max(1e-9, ...pts.map((p) => p.weight));
   const medSupply = median(pts.map((p) => p.supply));
   const medApp = median(pts.map((p) => p.appetite));
   const data = pts.map((p) => ({
-    value: [Math.max(p.supply, 1), Math.max(p.appetite, 1), p.weight, p.genre, p.supplyTrend],
-    symbolSize: 12 + 30 * Math.sqrt(p.weight / maxW),
+    value: [
+      Math.max(p.supply, 1),
+      pct ? p.appetite : Math.max(p.appetite, 1),
+      p.weight,
+      p.genre,
+      p.supplyTrend,
+    ],
+    symbolSize: 12 + 30 * Math.sqrt(Math.max(p.weight, 0) / maxW),
     itemStyle: {
       color: (SUPPLY_COLOR[p.supplyTrend] ?? CONTEXT) + "cc",
       borderColor: "#fff",
@@ -358,7 +395,7 @@ export function quadrantOption(
     tooltip: {
       ...tip,
       formatter: (p: any) =>
-        `<b>${p.value[3]}</b> · <span style="opacity:.7">supply ${p.value[4]}</span><br>${p.value[0]} titles · ${Number(p.value[1]).toLocaleString()} ${opt.yName}<br>${Number(p.value[2]).toLocaleString()} ${opt.weightName}`,
+        `<b>${p.value[3]}</b> · <span style="opacity:.7">supply ${p.value[4]}</span><br>${p.value[0]} titles · ${yFmt(Number(p.value[1]))} ${opt.yName}<br>${Number(p.value[2]).toLocaleString()} ${opt.weightName}`,
     },
     grid: { left: 64, right: 40, top: 20, bottom: 48 },
     xAxis: {
@@ -372,14 +409,20 @@ export function quadrantOption(
       splitLine: { lineStyle: { color: GRID } },
     },
     yAxis: {
-      type: "log",
+      type: pct ? "value" : "log",
+      ...(pct ? { min: 0, max: 100 } : {}),
       name: opt.yName + " (demand) →",
       nameLocation: "middle",
       nameGap: 48,
       nameRotate: 90,
       nameTextStyle: { color: AX, fontFamily: FONT, fontSize: 11 },
       axisLine: { lineStyle: { color: GRID } },
-      axisLabel: { color: AX, fontFamily: FONT, fontSize: 11 },
+      axisLabel: {
+        color: AX,
+        fontFamily: FONT,
+        fontSize: 11,
+        ...(pct ? { formatter: (v: number) => fmtVotePct(v) } : {}),
+      },
       splitLine: { lineStyle: { color: GRID } },
     },
     series: [

@@ -4,6 +4,7 @@
 // other (which would be a circular import).
 import type { Querier } from "../db/db.ts";
 import type {
+  LevelUnit,
   Platform,
   ScoreComponents,
   SteeringLens,
@@ -161,6 +162,39 @@ export const voteBasisOf = (source: string): VoteBasis => VOTE_BASIS[source] ?? 
 /** Display name of a portal for server-composed prose — reads that must say which portal a number is from. */
 const PORTAL_NAME: Readonly<Record<string, string>> = { poki: "Poki", crazygames: "CrazyGames" };
 export const portalName = (source: string): string => PORTAL_NAME[source] ?? source;
+
+// ── Vote LEVELS across portals (#204 S4) ──
+// A running total and a recent-window count are different quantities, so on `all` a raw vote LEVEL
+// is never pooled, compared or ranked across portals: every title's votes become its percentile
+// within its OWN portal's live catalogue, and the aggregate (median, sum, ordering) runs on that.
+// A single portal (and Steam) keeps the raw count, so those reads do not move.
+/** Within-portal vote percentile of a title, 0–1. Expects `l` (v_latest) and `src` (sources) in
+ *  scope. `percent_rank`: tied counts share the lowest rank; a portal's lowest count reads 0. */
+export const VOTE_PCT_OVER = "percent_rank() OVER (PARTITION BY src.name ORDER BY l.votes)";
+/** The unit a browser vote LEVEL is reported in: raw votes on one portal, a within-portal
+ *  percentile (0–100) on `all`. */
+export const levelUnitOf = (platform: Platform): LevelUnit =>
+  platform === "all" ? "votePercentile" : "votes";
+export interface VoteLevel {
+  join: string; // LEFT JOIN supplying the level; "" when the raw count is the level
+  level: string; // SQL expression of the title's level — NULL where votes are NULL, as l.votes is
+  order: string; // ORDER BY clause: highest level first, deterministic on `all`
+}
+/** THE building block for any vote LEVEL a browser query aggregates or ranks. Joins on
+ *  `l.game_id`, so the caller needs `l` (v_latest) in scope. */
+export function voteLevel(platform: Platform): VoteLevel {
+  if (platform !== "all") return { join: "", level: "l.votes", order: "l.votes DESC NULLS LAST" };
+  return {
+    join: `LEFT JOIN (
+       SELECT l.game_id, 100 * ${VOTE_PCT_OVER} AS pct
+       FROM v_latest l JOIN games g ON g.id = l.game_id JOIN sources src ON src.id = g.source_id
+       WHERE g.is_live AND l.votes IS NOT NULL ${pf("all")}
+     ) vl ON vl.game_id = l.game_id`,
+    level: "vl.pct",
+    // Two portals' top titles both sit at 100: break ties on id, never on the raw count.
+    order: "vl.pct DESC NULLS LAST, l.game_id",
+  };
+}
 
 /** Deadband, in %/wk, inside which a window series reads `plateau`. ~0.7%/day sustained: above the
  *  median single down-step of titles ≥1k votes (−0.46% / −0.75%, #236), so ordinary day-to-day

@@ -321,10 +321,19 @@ export interface TagFreq {
 export interface ScatterPoint {
   title: string;
   genre: string;
-  votes: number;
+  votes: number; // this title's own raw count — never plotted against another portal's
   rating: number;
   gem: boolean;
+  // The title's vote percentile within its own portal, 0–100 — the one gem selection used (#204 S4).
+  // Set on `all`, where it is the x axis; null on a single portal, which plots raw votes.
+  votePct: number | null;
 }
+
+// How a browser vote LEVEL is reported (#204 S4). `votes`: the raw count (one portal, or Steam
+// reviews). `votePercentile`: each title's percentile within its OWN portal's live catalogue, 0–100,
+// then aggregated as before (median, sum, ordering) — on `all`, where counts on different bases are
+// never pooled or ranked against each other.
+export type LevelUnit = "votes" | "votePercentile";
 
 // What a browser portal's vote count measures (#204). Poki's `votes` is `cumulative` — a running
 // total that only rises, so its delta is audience growth (votes/day). CrazyGames' is a `window` of
@@ -370,7 +379,8 @@ export interface MarketGap {
   genre: string;
   tag: string;
   supplyN: number;
-  appetite: number;
+  appetite: number; // median level per title, in `appetiteUnit`
+  appetiteUnit: LevelUnit; // "votes" on one portal; "votePercentile" (0–100, within portal) on `all`
   qualityCeil: number;
   score: number;
   components: ScoreComponents; // the score's breakdown (#87) — sums to `score`
@@ -410,7 +420,9 @@ export interface GenreLandscapePoint {
   supply: number;
   p75Rating: number;
   avgRating: number;
-  totalVotes: number;
+  totalVotes: number | null; // raw sum on one portal; null on `all`, where raw counts never pool
+  // `all` only (#204 S4): vote-weighted titles — Σ within-portal vote percentile ÷ 100. null on one portal.
+  voteWeight: number | null;
   examples: string[];
 }
 
@@ -421,7 +433,9 @@ export interface GenreLandscapePoint {
 export interface QuadrantPoint {
   genre: string;
   supply: number; // # live titles (x)
-  appetite: number; // demand — median votes (browser) / median owners (Steam) (y)
+  // Browser units follow `Overview.levelUnit` (#204 S4): on `all` appetite is the median within-portal
+  // vote percentile (0–100) and weight is vote-weighted titles (Σ percentile ÷ 100, one decimal).
+  appetite: number; // demand — median votes (browser) / median reviews (Steam) (y)
   weight: number; // bubble — total votes (browser) / revenue proxy $ (Steam)
   supplyTrend: SupplyTrend;
 }
@@ -474,6 +488,9 @@ export interface Overview {
   glossary: GlossaryRow[];
   settings: SettingFacet[];
   platform: Platform;
+  // Unit of every vote LEVEL on this overview — gap/quadrant appetite, quadrant weight, landscape
+  // weight, scatter x (#204 S4): "votes" on one portal, "votePercentile" on `all`.
+  levelUnit: LevelUnit;
   subtitle: string;
 }
 
@@ -591,8 +608,13 @@ export interface GenreRow {
   genre: string;
   games: number;
   avgRating: number;
-  medianVotes: number;
-  p90Votes: number;
+  // Raw vote levels on one portal; null on `all`, where raw counts on different bases never pool
+  // (#204 S4) — read `medianVotePct` / `p90VotePct` there (within-portal percentile, 0–100; null on
+  // one portal).
+  medianVotes: number | null;
+  p90Votes: number | null;
+  medianVotePct: number | null;
+  p90VotePct: number | null;
   p90Rating: number;
   // Momentum of the genre's median-votes series, per portal in its own unit (#204 S3) — the delta
   // read ("is this changing?") a static level column can't give. `momentum` has one entry on a

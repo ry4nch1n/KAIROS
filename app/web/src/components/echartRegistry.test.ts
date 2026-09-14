@@ -75,8 +75,8 @@ const builtOptions = [
     { tag: "Puzzle", count: 55 },
   ] satisfies TagFreq[]),
   scatterOption([
-    { title: "Crowd", genre: "Action", votes: 500, rating: 3.8, gem: false },
-    { title: "Gem", genre: "Puzzle", votes: 200, rating: 4.8, gem: true },
+    { title: "Crowd", genre: "Action", votes: 500, rating: 3.8, gem: false, votePct: null },
+    { title: "Gem", genre: "Puzzle", votes: 200, rating: 4.8, gem: true, votePct: null },
   ] satisfies ScatterPoint[]),
   heatmapOption({
     weeks: ["★★★★★", "★★★★☆"],
@@ -93,6 +93,7 @@ const builtOptions = [
       p75Rating: 4.6,
       avgRating: 4.2,
       totalVotes: 1_000_000,
+      voteWeight: null,
       examples: ["A"],
     },
     {
@@ -101,6 +102,7 @@ const builtOptions = [
       p75Rating: 4.1,
       avgRating: 3.8,
       totalVotes: 200_000,
+      voteWeight: null,
       examples: ["C"],
     },
   ] satisfies GenreLandscapePoint[]),
