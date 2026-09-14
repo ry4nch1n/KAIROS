@@ -327,9 +327,12 @@ export interface HiddenGem {
   // `engagementPctPerWeek`; a `window` row carries `votesPerDay: null` — never 0 standing in for
   // "not this unit" — and `engagementPctPerWeek`, the signed least-squares slope over mean level,
   // ×7×100, one decimal (null when there is no measurable series).
+  // `captures` = distinct capture instants in that series (#204 S2). A trajectory needs three: at
+  // two, the rate / %/wk is measured but `plateau` is the default, not a verdict — read it as early.
   daysTracked: number;
   votesPerDay: number | null;
   engagementPctPerWeek: number | null;
+  captures: number;
   trajectory: Trajectory;
 }
 
@@ -586,6 +589,7 @@ export interface NewRelease {
   // null on a `window` row, which reports `engagementPctPerWeek` instead.
   votesPerDay: number | null;
   engagementPctPerWeek: number | null;
+  captures: number; // distinct capture instants; see HiddenGem (a trend needs three)
   trajectory: Trajectory;
 }
 

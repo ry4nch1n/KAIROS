@@ -2607,6 +2607,26 @@ textarea {
   background: color-mix(in srgb, var(--primary) 10%, var(--surface));
   color: var(--primary);
 }
+/* Too few captures for a trend (#204): deliberately not a chip, so it can't read as a verdict */
+.traj-early {
+  background: transparent;
+  color: var(--text-3);
+  font-weight: 400;
+  font-style: italic;
+  border: 1px dashed var(--border);
+}
+/* Portal marker beside a momentum figure on mixed-portal lists — units differ per portal */
+.dtable td.momentum {
+  white-space: nowrap;
+}
+.portal-tag {
+  font-family: "Fira Code";
+  font-size: var(--fs-1);
+  color: var(--text-3);
+  text-decoration: none;
+  cursor: help;
+  margin-right: var(--sp-1);
+}
 
 /* Team-size "est." chips on Steam comparables (issue #9) */
 .est-chip {

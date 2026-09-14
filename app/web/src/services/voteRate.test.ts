@@ -3,7 +3,7 @@
 // is the low-vote cohort BY CONSTRUCTION, and 28 of 30 live rows rendered "0" — four of them
 // beside "▲ rising". A blank axis that looks measured is worse than no axis at all.
 import { describe, expect, it } from "vitest";
-import { voteRateText, voteRateTip } from "./Radar.tsx";
+import { portalTag, trendChip, voteRateText, voteRateTip } from "./Radar.tsx";
 
 describe("voteRateText keeps a fractional rate legible", () => {
   it("renders a fraction of a vote per day instead of rounding it away", () => {
@@ -28,10 +28,43 @@ describe("voteRateText keeps a fractional rate legible", () => {
     expect(voteRateTip(0.4, "rising")).toContain("2.8 votes/week");
     expect(voteRateTip(0, "decaying")).toMatch(/no votes gained/);
   });
-  it("a window-basis row shows its signed engagement change, never a fake zero (#204)", () => {
-    expect(voteRateText(null, "decaying", -7.9)).toBe("-7.9%/wk");
+});
+
+describe("a window-basis row reads as signed engagement change (#204)", () => {
+  it("signs the change with a true minus, one decimal, per week", () => {
+    expect(voteRateText(null, "decaying", -7.9)).toBe("−7.9%/wk");
     expect(voteRateText(null, "rising", 32.6)).toBe("+32.6%/wk");
+    expect(voteRateText(null, "plateau", 0)).toBe("0.0%/wk");
+  });
+  it("no series or no measurable level is 'no data', never a fake zero", () => {
     expect(voteRateText(null, "new", null)).toBe("no data");
-    expect(voteRateTip(null, "plateau")).toMatch(/recent engagement/);
+    expect(voteRateText(null, "plateau", null)).toBe("no data");
+  });
+  it("the cell tooltip names the unit and why it differs from votes/day", () => {
+    expect(voteRateTip(null, "decaying", -19.3)).toMatch(/engagement down 19\.3% a week/);
+    expect(voteRateTip(null, "rising", 4.2)).toMatch(/engagement up 4\.2% a week/);
+    expect(voteRateTip(null, "plateau", -1)).toMatch(/recent window, not all time/);
+    expect(voteRateTip(null, "new", null)).toMatch(/not the same as zero/);
+  });
+});
+
+describe("a trend chip only appears once the series has earned one", () => {
+  it("fewer than three captures is an early read, on either basis", () => {
+    expect(trendChip("plateau", 2)).toBe("early");
+    expect(trendChip("plateau", 3)).toBe("plateau");
+    expect(trendChip("decaying", 5)).toBe("decaying");
+    expect(trendChip("rising", 4)).toBe("rising");
+  });
+  it("no series stays 'new' — early read is for a measured figure without a verdict", () => {
+    expect(trendChip("new", 0)).toBe("new");
+    expect(trendChip("new", 1)).toBe("new");
+  });
+});
+
+describe("portal marker", () => {
+  it("maps known portals to a compact tag with the full name, and degrades for unknown ones", () => {
+    expect(portalTag("crazygames")).toEqual(["CG", "CrazyGames"]);
+    expect(portalTag("poki")).toEqual(["PK", "Poki"]);
+    expect(portalTag("itch")).toEqual(["IT", "itch"]);
   });
 });

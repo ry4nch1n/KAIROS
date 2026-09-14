@@ -202,7 +202,11 @@ export const CONTRACT = {
   //      "not this unit". Poki rows are byte-for-byte unchanged apart from the three new fields. A
   //      window row's trajectory follows its engagement change (±5%/wk deadband, three captures).
   //      Breaking for a reader that formats `votesPerDay` unconditionally.
-  version: 30,
+  // v31: `HiddenGem` and `NewRelease` gain `captures` — distinct capture instants in the vote series
+  //      the momentum was fitted on (#204 S2). A trajectory needs three; a two-capture row reports a
+  //      measured rate or %/wk beside a default `plateau` that is not a verdict, so readers render
+  //      it as an early read rather than a trend. Additive.
+  version: 31,
   pitch: {
     // v2: added visual-card fields — setting, artStyle, codeName, headerUrl, shotUrl.
     // v3: rating rework — scoreFields d1Fit/steamCeiling/buildCost → browserFit/steamFit/buildEase.

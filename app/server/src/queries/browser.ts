@@ -422,6 +422,7 @@ function momentumOf(source: string, g?: { t: number[]; v: number[] }) {
   return {
     source,
     voteBasis,
+    captures: g?.t.length ?? 0, // rows are grouped per captured_at, so each entry is one instant
     ...voteMomentumOf(voteBasis, g?.v ?? [], days[days.length - 1] ?? 0, days),
   };
 }
@@ -942,16 +943,28 @@ export async function getInsights(
     // found late, a flat one has stopped being found at all.
     // Read in each row's own unit (#204): a CrazyGames gem whose engagement window is shrinking is
     // not climbing, and its null votes/day must not be mistaken for a measured zero.
-    const live = gems.filter(
+    const climbing = gems.filter(
       (g) =>
         ((g.voteBasis === "window" ? g.engagementPctPerWeek : g.votesPerDay) ?? 0) > 0 &&
         g.trajectory !== "decaying",
-    ).length;
+    );
+    const live = climbing.length;
+    // The wording follows the unit (#204 S2): a window portal's falling count is fading engagement,
+    // not a stalled total, so "gaining votes" is only said of running-total rows. Mixed lists name
+    // the split rather than pooling two units under one verb.
+    const liveWindow = climbing.filter((g) => g.voteBasis === "window").length;
+    const bases = new Set(gems.map((g) => g.voteBasis));
+    const rest =
+      bases.size > 1
+        ? `are still climbing (${live - liveWindow} gaining votes, ${liveWindow} with growing recent engagement), the rest are flat or fading`
+        : bases.has("window")
+          ? "still show growing recent engagement, the rest are flat or fading"
+          : "are still gaining votes, the rest have stalled";
     out.push({
       kind: "gem",
       tag: "HIDDEN GEMS",
       meta: `${gems.length} found · ${live} still climbing`,
-      text: `<b>${gems.length} well-rated games</b> sit in the top 25% on rating with low vote volume — <b>${live}</b> are still gaining votes, the rest have stalled.`,
+      text: `<b>${gems.length} well-rated games</b> sit in the top 25% on rating with low vote volume — <b>${live}</b> ${rest}.`,
       implication:
         "quality discovery missed — study the ones still climbing for what earns attention late, and treat the flat ones as a warning that good doesn't get found on its own",
     });
