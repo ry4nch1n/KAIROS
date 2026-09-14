@@ -20,8 +20,11 @@ import type {
   GenreLandscapePoint,
   QuadrantPoint,
   GenreVelocityBar,
+  GenrePortalMomentum,
+  RisingGenre,
   GlossaryRow,
   SettingFacet,
+  VoteBasis,
 } from "shared";
 import { CONTRACT } from "../../../shared/src/contract.ts";
 import { coTagHits, DEFAULTED_GENRES, loopFamilyFor } from "../data/loopFamilyMap.ts";
@@ -30,9 +33,11 @@ import {
   pf,
   canonSql,
   isCurationTag,
+  classifyEngagement,
   classifyTrajectory,
   classifySupply,
   genreSupplyTrend,
+  portalName,
   voteBasisOf,
   voteMomentumOf,
   steerRanking,
@@ -159,43 +164,136 @@ function defineTag(name: string): string {
     : `A platform tag with no formal definition (inferred).`;
 }
 
-interface GenreDates {
+// ── Genre momentum, per portal (#204 S3) ──
+// A genre's median-votes series is built per portal on its own capture instants: a running total
+// and a recent-window count are different quantities, so on `all` they are never pooled into one
+// median, one rate or one ranking.
+interface PortalGenreDates {
+  source: string;
+  voteBasis: VoteBasis;
   dates: string[];
-  order: string[];
-  byGenre: Record<string, number[]>;
+  days: number[]; // capture instants, days from this portal's first
+  order: string[]; // genres by summed median level, this portal only
+  byGenre: Record<string, number[]>; // zero where the genre had no median at an instant (pre-#204 input)
+  seen: Record<string, boolean[]>; // whether it did
   daySpan: number;
 }
-async function genreVotesByDate(db: Querier, platform: Platform): Promise<GenreDates> {
+async function genreVotesByDate(db: Querier, platform: Platform): Promise<PortalGenreDates[]> {
   const rows = await db.query(
-    `SELECT ${canonSql("s.genre")} AS genre, s.captured_at AS d,
+    `SELECT src.name AS source, ${canonSql("s.genre")} AS genre, s.captured_at AS d,
             percentile_cont(0.5) WITHIN GROUP (ORDER BY s.votes) AS med
      FROM game_snapshots s
      JOIN games g ON g.id = s.game_id
      JOIN sources src ON src.id = g.source_id
      WHERE g.is_live AND s.votes IS NOT NULL AND s.genre IS NOT NULL ${pf(platform)}
-     GROUP BY ${canonSql("s.genre")}, s.captured_at`,
+     GROUP BY src.name, ${canonSql("s.genre")}, s.captured_at`,
   );
+  const bySource = new Map<string, Record<string, any>[]>();
+  if (platform !== "all") bySource.set(platform, []); // a single portal always reads as itself
+  for (const r of rows) bySource.set(r.source, [...(bySource.get(r.source) ?? []), r]);
+  return [...bySource.keys()].sort().map((s) => portalGenreDates(s, bySource.get(s)!));
+}
+function portalGenreDates(source: string, rows: Record<string, any>[]): PortalGenreDates {
   const times = [...new Set(rows.map((r) => new Date(r.d).getTime()))].sort((a, b) => a - b);
   const idx = new Map(times.map((t, i) => [t, i]));
-  const dates = times.map((t) => fmtDate(t));
-  const daySpan = times.length > 1 ? (times[times.length - 1] - times[0]) / 86400000 : 0;
   const byGenre: Record<string, number[]> = {};
+  const seen: Record<string, boolean[]> = {};
   const totalVotes: Record<string, number> = {};
   for (const r of rows) {
     const g = r.genre as string;
-    if (!byGenre[g]) byGenre[g] = new Array(times.length).fill(0);
-    byGenre[g][idx.get(new Date(r.d).getTime())!] = num(r.med);
+    const i = idx.get(new Date(r.d).getTime())!;
+    if (!byGenre[g]) {
+      byGenre[g] = new Array(times.length).fill(0);
+      seen[g] = new Array(times.length).fill(false);
+    }
+    byGenre[g][i] = num(r.med);
+    seen[g][i] = true;
     totalVotes[g] = (totalVotes[g] ?? 0) + num(r.med);
   }
-  const order = Object.keys(byGenre).sort((a, b) => totalVotes[b] - totalVotes[a]);
-  return { dates, order, byGenre, daySpan };
+  return {
+    source,
+    voteBasis: voteBasisOf(source),
+    dates: times.map((t) => fmtDate(t)),
+    days: times.map((t) => (t - times[0]) / 86400000),
+    order: Object.keys(byGenre).sort((a, b) => totalVotes[b] - totalVotes[a]),
+    byGenre,
+    seen,
+    daySpan: times.length > 1 ? (times[times.length - 1] - times[0]) / 86400000 : 0,
+  };
 }
 
-async function genreCounts(db: Querier, platform: Platform): Promise<Map<string, number>> {
+/** One genre's momentum on one portal, in its unit. Cumulative is exactly the pre-#204 genre read
+ *  (endpoint velocity, rounded; half-over-half trajectory on the zero-filled series), so Poki's
+ *  numbers do not move. Window fits `classifyEngagement` over the real instants that carried the
+ *  genre — a missing capture is absent, not a zero. */
+function genreMomentumRead(pd: PortalGenreDates, genre: string): GenrePortalMomentum {
+  const series = pd.byGenre[genre];
+  const seen = pd.seen[genre] ?? [];
+  const base = {
+    source: pd.source,
+    voteBasis: pd.voteBasis,
+    captures: seen.filter(Boolean).length,
+  };
+  if (pd.voteBasis === "window") {
+    const at = seen.flatMap((s, i) => (s ? [i] : []));
+    const fit = classifyEngagement(
+      at.map((i) => series[i]),
+      pd.daySpan,
+      at.map((i) => pd.days[i]),
+    );
+    return { ...base, votesPerDay: null, ...fit };
+  }
+  return {
+    ...base,
+    votesPerDay: series ? Math.round(velocity(series, pd.daySpan)) : 0,
+    engagementPctPerWeek: null,
+    trajectory: series ? classifyTrajectory(series, pd.daySpan).trajectory : "new",
+  };
+}
+/** Within-portal ranking value — raw votes/day or %/wk. Only ever compared inside one portal. */
+const moverRank = (pd: PortalGenreDates, genre: string): number | null =>
+  pd.voteBasis === "window"
+    ? genreMomentumRead(pd, genre).engagementPctPerWeek
+    : velocity(pd.byGenre[genre], pd.daySpan);
+
+/** A genre needs this many live titles on the portal before it can headline a mover read. */
+const GENRE_MIN_VOL = 4;
+interface Mover {
+  source: string;
+  voteBasis: VoteBasis;
+  genre: string;
+  v: number; // raw, in the portal's unit
+  trajectory: Trajectory;
+}
+/** The strongest genre mover on one portal (KPI + read), ranked on that portal's unit only. */
+function topMover(
+  pd: PortalGenreDates,
+  vol: Map<string, number>,
+): { rising: RisingGenre; mover: Mover } | undefined {
+  const best = pd.order
+    .filter((genre) => (vol.get(genre) ?? 0) >= GENRE_MIN_VOL)
+    .map((genre) => ({ genre, v: moverRank(pd, genre) }))
+    .filter((x): x is { genre: string; v: number } => x.v != null)
+    .sort((a, b) => b.v - a.v)[0];
+  if (!best) return undefined;
+  const m = genreMomentumRead(pd, best.genre);
+  return {
+    rising: { genre: best.genre, ...m },
+    mover: { ...best, source: pd.source, voteBasis: pd.voteBasis, trajectory: m.trajectory },
+  };
+}
+
+/** Live titles per genre, per portal. */
+async function genreCounts(
+  db: Querier,
+  platform: Platform,
+): Promise<Map<string, Map<string, number>>> {
   const rows = await db.query(
-    `SELECT ${canonSql("l.genre")} AS genre, count(*)::int AS n FROM v_latest l JOIN games g ON g.id=l.game_id JOIN sources src ON src.id=g.source_id WHERE g.is_live AND l.genre IS NOT NULL ${pf(platform)} GROUP BY ${canonSql("l.genre")}`,
+    `SELECT src.name AS source, ${canonSql("l.genre")} AS genre, count(*)::int AS n FROM v_latest l JOIN games g ON g.id=l.game_id JOIN sources src ON src.id=g.source_id WHERE g.is_live AND l.genre IS NOT NULL ${pf(platform)} GROUP BY src.name, ${canonSql("l.genre")}`,
   );
-  return new Map(rows.map((r) => [r.genre, num(r.n)]));
+  const out = new Map<string, Map<string, number>>();
+  for (const r of rows) out.set(r.source, (out.get(r.source) ?? new Map()).set(r.genre, num(r.n)));
+  return out;
 }
 
 // velocity = (last - first) / spanDays, guarded for <2 points or zero span
@@ -221,14 +319,19 @@ function subtitleFor(platform: Platform): string {
   return "Poki + CrazyGames · last 90 days";
 }
 
+/** Genre median-vote levels over time — one chart's worth per portal, never both on one axis. */
 export async function getGenreMomentum(
   db: Querier,
   platform: Platform,
-  gd?: GenreDates,
-): Promise<GenreMomentum> {
-  gd ??= await genreVotesByDate(db, platform);
-  const top = gd.order.slice(0, 4);
-  return { dates: gd.dates, series: top.map((genre) => ({ genre, values: gd.byGenre[genre] })) };
+  pds?: PortalGenreDates[],
+): Promise<GenreMomentum[]> {
+  pds ??= await genreVotesByDate(db, platform);
+  return pds.map((pd) => ({
+    source: pd.source,
+    voteBasis: pd.voteBasis,
+    dates: pd.dates,
+    series: pd.order.slice(0, 4).map((genre) => ({ genre, values: pd.byGenre[genre] })),
+  }));
 }
 
 const RATING_BANDS = ["<3.5", "3.5–4.0", "4.0–4.4", "4.4–4.7", "≥4.7"];
@@ -823,12 +926,19 @@ export async function getGenres(db: Querier, platform: Platform): Promise<GenreR
      WHERE g.is_live AND l.genre IS NOT NULL ${pf(platform)}
      GROUP BY ${canonSql("l.genre")} ORDER BY games DESC`,
   );
-  const [gd, supply] = await Promise.all([
+  const [pds, supply] = await Promise.all([
     genreVotesByDate(db, platform),
     genreSupplyTrend(db, platform),
   ]);
   return rows.map((r) => {
     const sup = supply.get(r.genre);
+    // Delta read: is this genre's median-vote series accelerating or fading? A level column seen
+    // ten times carries no information — its change does. Per portal, in its unit (#204 S3); on
+    // `all` a portal that does not carry the genre is left out rather than shown as "new".
+    const momentum = pds
+      .map((pd) => genreMomentumRead(pd, r.genre))
+      .filter((m) => platform !== "all" || m.captures > 0);
+    const solo = platform === "all" ? null : momentum[0];
     return {
       genre: r.genre,
       games: num(r.games),
@@ -836,12 +946,9 @@ export async function getGenres(db: Querier, platform: Platform): Promise<GenreR
       medianVotes: Math.round(num(r.med_votes)),
       p90Votes: Math.round(num(r.p90_votes)),
       p90Rating: +num(r.p90_rating).toFixed(2),
-      votesPerDay: gd.byGenre[r.genre] ? Math.round(velocity(gd.byGenre[r.genre], gd.daySpan)) : 0,
-      // Delta read: is this genre's median-vote series accelerating or fading? A level
-      // column seen ten times carries no information — its change does.
-      trajectory: gd.byGenre[r.genre]
-        ? classifyTrajectory(gd.byGenre[r.genre], gd.daySpan).trajectory
-        : "new",
+      votesPerDay: solo ? solo.votesPerDay : null,
+      trajectory: solo ? solo.trajectory : null,
+      momentum,
       supplyTrend: sup?.trend ?? "quiet",
       recentEntrants: sup?.recent ?? 0,
     };
@@ -901,25 +1008,36 @@ export async function getInsights(
   db: Querier,
   platform: Platform,
   deps?: {
-    gd?: GenreDates;
+    pds?: PortalGenreDates[];
     gaps?: MarketGap[];
     landscape?: GenreLandscapePoint[];
     gems?: HiddenGem[];
   },
 ): Promise<Insight[]> {
-  const gd = deps?.gd ?? (await genreVotesByDate(db, platform));
-  const vels = gd.order.map((genre) => ({ genre, v: velocity(gd.byGenre[genre], gd.daySpan) }));
+  const pds = deps?.pds ?? (await genreVotesByDate(db, platform));
   const out: Insight[] = [];
   // Every insight carries an implication — the decision clause. An observation without
   // "so what" is chart furniture; the read is what the user came for.
-  // (1) Rising genre by votes/day
-  if (vels.length) {
-    const top = vels.reduce((best, cur) => (cur.v > best.v ? cur : best), vels[0]);
+  // (1) Rising genre, per portal in its own unit (#204 S3). On `all` each portal gets its own
+  // insight naming it; a window portal's leader is only called rising when its engagement grew.
+  for (const pd of pds) {
+    const ranked = pd.order
+      .map((genre) => ({ genre, v: moverRank(pd, genre) }))
+      .filter((x): x is { genre: string; v: number } => x.v != null);
+    if (!ranked.length) continue;
+    const top = ranked.reduce((best, cur) => (cur.v > best.v ? cur : best), ranked[0]);
+    const win = pd.voteBasis === "window";
+    if (win && !(top.v > 0)) continue;
+    const on = platform === "all" ? `On ${portalName(pd.source)}, ` : "";
     out.push({
       kind: "up",
       tag: "RISING",
-      meta: `+${Math.round(top.v)} votes/day`,
-      text: `<b>${top.genre}</b> is gaining the most votes/day across the window.`,
+      meta:
+        (platform === "all" ? `${portalName(pd.source)} · ` : "") +
+        (win ? `+${top.v.toFixed(1)}%/wk recent engagement` : `+${Math.round(top.v)} votes/day`),
+      text: win
+        ? `${on}<b>${top.genre}</b> shows the strongest growth in recent engagement across the window.`
+        : `${on}<b>${top.genre}</b> is gaining the most votes/day across the window.`,
       implication: `demand is shifting toward ${top.genre} — weight new loop tests accordingly`,
     });
   }
@@ -1015,7 +1133,10 @@ const PRESSURE_MIN_RECENT = 3;
 /** Pure composition — exported for tests. May contain <b>; rendered like insights. */
 export function composeBrowserRead(args: {
   gap?: MarketGap;
-  mover?: { genre: string; v: number; trajectory: Trajectory };
+  // One strongest mover per portal, `v` raw in that portal's unit (#204 S3). `byPortal` (the `all`
+  // view) names each portal in one line; movers are listed side by side, never ranked across bases.
+  movers?: Mover[];
+  byPortal?: boolean;
   pressure: { genre: string; total: number; recent: number }[];
 }): string[] {
   const lines: string[] = [];
@@ -1024,15 +1145,31 @@ export function composeBrowserRead(args: {
       `<b>${args.gap.label}</b> is the top gap — ${args.gap.appetite.toLocaleString("en-US")} median votes across only ${args.gap.supplyN} games. → Underserved: the strongest candidate for a quick browser loop test.`,
     );
   }
-  if (args.mover && args.mover.v > 0) {
-    const tone =
-      args.mover.trajectory === "rising"
+  const up = (args.movers ?? []).filter((m) => m.v > 0);
+  const rate = (m: Mover) =>
+    m.voteBasis === "window"
+      ? `+${m.v.toFixed(1)}%/wk in recent engagement`
+      : `+${Math.round(m.v)} votes/day`;
+  const tone = (m: Mover) =>
+    m.voteBasis === "window"
+      ? m.trajectory === "rising"
+        ? "and climbing"
+        : "but not yet a trend"
+      : m.trajectory === "rising"
         ? "and accelerating"
-        : args.mover.trajectory === "decaying"
+        : m.trajectory === "decaying"
           ? "but slowing"
           : "holding steady";
+  if (!args.byPortal && up[0]) {
     lines.push(
-      `<b>${args.mover.genre}</b> is the biggest mover at +${Math.round(args.mover.v)} votes/day ${tone}. → Demand is shifting toward it — weight new pitches accordingly.`,
+      `<b>${up[0].genre}</b> is the biggest mover at ${rate(up[0])} ${tone(up[0])}. → Demand is shifting toward it — weight new pitches accordingly.`,
+    );
+  } else if (args.byPortal && up.length) {
+    const each = up.map(
+      (m) => `${portalName(m.source)}: <b>${m.genre}</b> at ${rate(m)} ${tone(m)}`,
+    );
+    lines.push(
+      `Biggest movers, each in its portal's own unit — ${each.join("; ")}. → Demand is shifting toward ${up.length > 1 ? "them" : "it"} — weight new pitches accordingly.`,
     );
   }
   const crowding = args.pressure
@@ -1050,7 +1187,7 @@ async function getKPI(
   db: Querier,
   platform: Platform,
   gaps: MarketGap[],
-  deps?: { gd?: GenreDates; vol?: Map<string, number> },
+  rising: RisingGenre[],
 ): Promise<OverviewKPI> {
   const g = await db.query(
     `SELECT count(*)::int AS n FROM games g JOIN sources src ON src.id = g.source_id WHERE g.is_live ${pf(platform)}`,
@@ -1062,13 +1199,10 @@ async function getKPI(
     `SELECT count(*)::int AS n FROM games g JOIN sources src ON src.id = g.source_id
      WHERE g.is_live ${pf(platform)} AND g.first_seen_at >= ${newAnchor(platform)} - interval '14 days'`,
   );
-  const gd = deps?.gd ?? (await genreVotesByDate(db, platform));
-  const vol = deps?.vol ?? (await genreCounts(db, platform));
-  const MIN_VOL = 4;
-  const rising = gd.order
-    .filter((genre) => (vol.get(genre) ?? 0) >= MIN_VOL)
-    .map((genre) => ({ genre, v: velocity(gd.byGenre[genre], gd.daySpan) }))
-    .sort((a, b) => b.v - a.v)[0] ?? { genre: "—", v: 0 };
+  // Single portal: its mover as the shorthand ("—" / 0 when none, as before). `all`: none — the
+  // per-portal list is the read (#204 S3).
+  const solo = platform === "all" ? null : rising[0];
+  const soloRate = solo ? solo.votesPerDay : voteBasisOf(platform) === "window" ? null : 0;
   const p90 = await db.query(
     `SELECT percentile_cont(0.9) WITHIN GROUP (ORDER BY l.rating)::float AS p FROM v_latest l JOIN games g ON g.id = l.game_id JOIN sources src ON src.id = g.source_id WHERE g.is_live AND l.rating IS NOT NULL ${pf(platform)}`,
   );
@@ -1077,8 +1211,9 @@ async function getKPI(
     newGames: num(newGames[0].n),
     avgRating: +num(avg[0].r).toFixed(2),
     avgRatingP90: +num(p90[0].p).toFixed(2),
-    risingGenre: rising.genre,
-    risingVotesPerDay: Math.round(rising.v),
+    risingGenre: platform === "all" ? null : (solo?.genre ?? "—"),
+    risingVotesPerDay: platform === "all" ? null : soloRate,
+    risingByPortal: rising,
     openGaps: gaps.filter((c) => c.score > 0).length,
   };
 }
@@ -1121,20 +1256,33 @@ async function gapExamples(db: Querier, platform: Platform): Promise<Map<string,
   return m;
 }
 
+/** Top-12 genre bars per portal, each group ranked on its own unit (#204 S3). A window genre with
+ *  no measurable change has no bar rather than a zero one. */
 export async function getGenreVelocityBars(
   db: Querier,
   platform: Platform,
-  gd?: GenreDates,
-  vol?: Map<string, number>,
+  pds?: PortalGenreDates[],
+  vols?: Map<string, Map<string, number>>,
 ): Promise<GenreVelocityBar[]> {
-  gd ??= await genreVotesByDate(db, platform);
-  vol ??= await genreCounts(db, platform);
-  const MIN_VOL = 4;
-  return gd.order
-    .filter((g) => (vol!.get(g) ?? 0) >= MIN_VOL)
-    .map((g) => ({ genre: g, votesPerDay: Math.round(velocity(gd!.byGenre[g], gd!.daySpan)) }))
-    .sort((a, b) => b.votesPerDay - a.votesPerDay)
-    .slice(0, 12);
+  pds ??= await genreVotesByDate(db, platform);
+  const counts = vols ?? (await genreCounts(db, platform));
+  const value = (b: GenreVelocityBar) =>
+    b.voteBasis === "window" ? b.engagementPctPerWeek : b.votesPerDay;
+  return pds.flatMap((pd) => {
+    const vol = counts.get(pd.source) ?? new Map<string, number>();
+    return pd.order
+      .filter((g) => (vol.get(g) ?? 0) >= GENRE_MIN_VOL)
+      .map((genre) => {
+        const { source, voteBasis, votesPerDay, engagementPctPerWeek } = genreMomentumRead(
+          pd,
+          genre,
+        );
+        return { genre, source, voteBasis, votesPerDay, engagementPctPerWeek };
+      })
+      .filter((b) => value(b) != null)
+      .sort((a, b) => value(b)! - value(a)!)
+      .slice(0, 12);
+  });
 }
 
 export async function getGenreLandscape(
@@ -1223,7 +1371,7 @@ async function getTagGlossary(
 }
 
 export async function getOverview(db: Querier, platform: Platform): Promise<Overview> {
-  const [gd, vol, gemRows, tags, heatmap, gapsRanked, landscape, quadrant, pressure, settings] =
+  const [pds, vols, gemRows, tags, heatmap, gapsRanked, landscape, quadrant, pressure, settings] =
     await Promise.all([
       genreVotesByDate(db, platform),
       genreCounts(db, platform),
@@ -1239,23 +1387,25 @@ export async function getOverview(db: Querier, platform: Platform): Promise<Over
   const gaps = gapsRanked.slice(0, GAPS_TOP_N);
   const scatter = await getScatter(db, platform, gemRows);
   const gems = await getHiddenGems(db, platform, gemRows);
-  const momentum = await getGenreMomentum(db, platform, gd);
-  const velocityBars = await getGenreVelocityBars(db, platform, gd, vol);
-  const insights = await getInsights(db, platform, { gd, gaps, landscape, gems });
-  const kpi = await getKPI(db, platform, gaps, { gd, vol });
+  const momentum = await getGenreMomentum(db, platform, pds);
+  const velocityBars = await getGenreVelocityBars(db, platform, pds, vols);
+  const insights = await getInsights(db, platform, { pds, gaps, landscape, gems });
+  // Biggest mover per portal (KPI + read): the strongest genre with enough volume to matter.
+  const movers = pds.flatMap((pd) => topMover(pd, vols.get(pd.source) ?? new Map()) ?? []);
+  const kpi = await getKPI(
+    db,
+    platform,
+    gaps,
+    movers.map((m) => m.rising),
+  );
   const tagNames = [...new Set([...gaps.map((g) => g.tag), ...tags.map((t) => t.tag)])];
   const glossary: GlossaryRow[] = await getTagGlossary(db, platform, tagNames);
-  // Biggest mover for the read: highest-velocity genre with enough volume to matter.
-  const MIN_VOL = 4;
-  const mover = gd.order
-    .filter((genre) => (vol.get(genre) ?? 0) >= MIN_VOL)
-    .map((genre) => ({
-      genre,
-      v: velocity(gd.byGenre[genre], gd.daySpan),
-      trajectory: classifyTrajectory(gd.byGenre[genre], gd.daySpan).trajectory,
-    }))
-    .sort((a, b) => b.v - a.v)[0];
-  const read = composeBrowserRead({ gap: gaps[0], mover, pressure });
+  const read = composeBrowserRead({
+    gap: gaps[0],
+    movers: movers.map((m) => m.mover),
+    byPortal: platform === "all",
+    pressure,
+  });
   return {
     kpi,
     read,

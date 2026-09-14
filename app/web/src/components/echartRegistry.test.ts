@@ -62,6 +62,8 @@ const SERIES_COMPONENT_KEYS = ["markLine", "markPoint", "markArea"] as const;
 // Representative inputs — one per builder, exercising the shapes charts.ts branches on.
 const builtOptions = [
   momentumOption({
+    source: "poki",
+    voteBasis: "cumulative",
     dates: ["06-01", "06-08"],
     series: [
       { genre: "Action", values: [100, 120] },
@@ -116,8 +118,20 @@ const builtOptions = [
     { tier: "est_indie", games: 3 },
   ] satisfies ScaleTierRow[]),
   velocityBarOption([
-    { genre: "Action", votesPerDay: 120 },
-    { genre: "Puzzle", votesPerDay: -30 },
+    {
+      genre: "Action",
+      source: "poki",
+      voteBasis: "cumulative",
+      votesPerDay: 120,
+      engagementPctPerWeek: null,
+    },
+    {
+      genre: "Puzzle",
+      source: "crazygames",
+      voteBasis: "window",
+      votesPerDay: null,
+      engagementPctPerWeek: -30,
+    },
   ] satisfies GenreVelocityBar[]),
 ];
 

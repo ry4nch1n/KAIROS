@@ -42,9 +42,12 @@ describe("A3 overview", () => {
     expect(all.kpi.gamesTracked).toBeGreaterThan(0);
     expect(all.kpi.avgRating).toBeGreaterThan(0);
     expect(all.kpi.avgRating).toBeLessThanOrEqual(5);
-    expect(typeof all.kpi.risingGenre).toBe("string");
+    // #204 S3: no single rising genre on `all` — one mover per portal, each in its own unit.
+    expect(all.kpi.risingGenre).toBeNull();
+    expect(all.kpi.risingVotesPerDay).toBeNull();
     expect(all.kpi.avgRatingP90).toBeGreaterThanOrEqual(all.kpi.avgRating);
-    expect(all.kpi.risingGenre.length).toBeGreaterThan(0);
+    expect(all.kpi.risingByPortal.length).toBeGreaterThan(0);
+    for (const r of all.kpi.risingByPortal) expect(r.genre.length).toBeGreaterThan(0);
     expect(typeof all.kpi.newGames).toBe("number");
     expect(all.kpi.newGames).toBeGreaterThanOrEqual(0);
 
@@ -58,10 +61,13 @@ describe("A3 overview", () => {
 
 describe("A4 momentum (median votes over dates)", () => {
   it("series align to real dates", async () => {
-    const m = await q.getGenreMomentum(db, "all");
-    expect(Array.isArray(m.dates)).toBe(true);
-    for (const s of m.series) expect(s.values.length).toBe(m.dates.length);
-    expect(m.dates.every((d) => !/^W\d+$/.test(d))).toBe(true); // no fake "W15" labels
+    const portals = await q.getGenreMomentum(db, "all");
+    expect(portals.length).toBeGreaterThan(0);
+    for (const m of portals) {
+      expect(Array.isArray(m.dates)).toBe(true);
+      for (const s of m.series) expect(s.values.length).toBe(m.dates.length);
+      expect(m.dates.every((d) => !/^W\d+$/.test(d))).toBe(true); // no fake "W15" labels
+    }
   });
 });
 
@@ -215,7 +221,10 @@ describe("A_explorer queries", () => {
     expect(genres[0].games).toBeGreaterThan(0);
     expect(genres[0].p90Votes).toBeGreaterThanOrEqual(genres[0].medianVotes);
     expect(genres[0].p90Rating).toBeGreaterThan(0);
-    expect(typeof genres[0].votesPerDay).toBe("number");
+    expect(genres[0].votesPerDay).toBeNull(); // no pooled rate on `all` (#204 S3)
+    expect(genres[0].momentum.length).toBeGreaterThan(0);
+    const poki = await q.getGenres(db, "poki");
+    expect(typeof poki[0].votesPerDay).toBe("number");
   });
   it("developers rollup is sorted by games desc with bounded ratings", async () => {
     const devs = await q.getDevelopers(db, "all");
@@ -279,12 +288,18 @@ describe("A_landscape quality-saturation", () => {
 });
 
 describe("iter2 fixes", () => {
-  it("velocity bars are sorted desc with numeric votes/day", async () => {
+  it("velocity bars are sorted desc within each portal, each in exactly one unit", async () => {
     const bars = await q.getGenreVelocityBars(db, "all");
     expect(bars.length).toBeGreaterThan(0);
+    const val = (b: (typeof bars)[number]) =>
+      (b.voteBasis === "window" ? b.engagementPctPerWeek : b.votesPerDay) as number;
+    for (const b of bars) {
+      expect(typeof val(b)).toBe("number");
+      expect(b.voteBasis === "window" ? b.votesPerDay : b.engagementPctPerWeek).toBeNull();
+    }
     for (let i = 1; i < bars.length; i++)
-      expect(bars[i - 1].votesPerDay).toBeGreaterThanOrEqual(bars[i].votesPerDay);
-    expect(typeof bars[0].votesPerDay).toBe("number");
+      if (bars[i - 1].source === bars[i].source)
+        expect(val(bars[i - 1])).toBeGreaterThanOrEqual(val(bars[i]));
   });
   it("landscape points and overview glossary carry example games", async () => {
     const ov = await q.getOverview(db, "all");
@@ -442,7 +457,9 @@ describe("A12 decision layer — this week's read (evaluation Phase A1)", () => 
   it("genre rows carry a trajectory delta read", async () => {
     const rows = await q.getGenres(db, "all");
     expect(rows.length).toBeGreaterThan(0);
-    for (const r of rows) expect(["rising", "plateau", "decaying", "new"]).toContain(r.trajectory);
+    for (const r of rows)
+      for (const m of r.momentum)
+        expect(["rising", "plateau", "decaying", "new"]).toContain(m.trajectory);
   });
 
   it("crowding warning needs both share (≥15%) and count (≥3) — one release can't cry wolf", () => {

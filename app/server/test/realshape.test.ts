@@ -39,12 +39,13 @@ describe("real-shape: gems are relative & named", () => {
 
 describe("real-shape: honest labels & no silent zeros", () => {
   it("momentum uses real dates, never W## tokens", async () => {
-    const m = await q.getGenreMomentum(db, "all");
-    expect(m.dates.every((d) => !/^W\d+$/.test(d))).toBe(true);
+    for (const m of await q.getGenreMomentum(db, "all"))
+      expect(m.dates.every((d) => !/^W\d+$/.test(d))).toBe(true);
   });
   it("overview KPIs are populated from real data (no featured dependency)", async () => {
     const ov = await q.getOverview(db, "all");
-    expect(ov.kpi.risingGenre.length).toBeGreaterThan(0);
+    expect(ov.kpi.risingByPortal.length).toBeGreaterThan(0);
+    for (const r of ov.kpi.risingByPortal) expect(r.genre.length).toBeGreaterThan(0);
     expect(ov.landscape.length).toBeGreaterThan(0);
     expect(ov.heatmap.cells.some((c) => c.value > 0)).toBe(true);
   });

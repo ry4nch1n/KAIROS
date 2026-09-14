@@ -29,7 +29,8 @@ describe("A13 API routes", () => {
     expect(r.status).toBe(200);
     const j = await r.json();
     expect(j.kpi.gamesTracked).toBeGreaterThan(0);
-    expect(j.momentum.series.length).toBeGreaterThan(0);
+    expect(j.momentum[0].source).toBe("poki");
+    expect(j.momentum[0].series.length).toBeGreaterThan(0);
     expect(j.platform).toBe("poki");
   });
 

@@ -9,6 +9,7 @@ import type {
   QuadrantPoint,
   GenreVelocityBar,
   ScaleTierRow,
+  VoteBasis,
 } from "shared";
 
 const AX = "#5b6b86",
@@ -63,6 +64,10 @@ const tip = {
 };
 const baseGrid = { left: 46, right: 18, top: 24, bottom: 30 };
 
+/** One portal's genre levels (#204 S3). The y label says which kind of count it is: a running
+ *  total and a recent-window count are different quantities, so they never share this axis. */
+export const momentumAxisName = (basis: VoteBasis) =>
+  basis === "window" ? "median votes (recent window)" : "median votes (running total)";
 export function momentumOption(m: GenreMomentum): EChartsOption {
   return {
     tooltip: { trigger: "axis", ...tip },
@@ -83,7 +88,7 @@ export function momentumOption(m: GenreMomentum): EChartsOption {
     },
     yAxis: {
       type: "value",
-      name: "median votes",
+      name: momentumAxisName(m.voteBasis),
       nameLocation: "middle",
       nameGap: 44,
       nameRotate: 90,
@@ -472,19 +477,45 @@ export function tierBarOption(tiers: ScaleTierRow[]): EChartsOption {
   };
 }
 
+/** Split a portal-grouped bar list into one group per portal, in server order (#204 S3). */
+export function barsByPortal(
+  bars: GenreVelocityBar[],
+): { source: string; voteBasis: VoteBasis; bars: GenreVelocityBar[] }[] {
+  const groups: { source: string; voteBasis: VoteBasis; bars: GenreVelocityBar[] }[] = [];
+  for (const b of bars) {
+    const g = groups.find((x) => x.source === b.source);
+    if (g) g.bars.push(b);
+    else groups.push({ source: b.source, voteBasis: b.voteBasis, bars: [b] });
+  }
+  return groups;
+}
+const signedPct1 = (v: number) => `${v > 0 ? "+" : v < 0 ? "−" : ""}${Math.abs(v).toFixed(1)}%`;
+
+/** Genre bars for ONE vote basis. The unit follows the first bar's basis and any bar on another
+ *  basis is dropped, so two units can never share this axis — split `all` with `barsByPortal`. */
 export function velocityBarOption(bars: GenreVelocityBar[]): EChartsOption {
-  const data = [...bars].reverse(); // largest on top for a horizontal bar
+  const basis = bars[0]?.voteBasis ?? "cumulative";
+  const win = basis === "window";
+  const barValue = (b: GenreVelocityBar) => (win ? b.engagementPctPerWeek : b.votesPerDay) ?? 0;
+  const fmtV = (v: number) => (win ? signedPct1(v) : Number(v).toLocaleString());
+  const data = bars.filter((b) => b.voteBasis === basis).reverse(); // largest on top
   return {
     tooltip: {
       ...tip,
-      formatter: (p: any) => `${p.name}<br><b>${Number(p.value).toLocaleString()}</b> votes/day`,
+      formatter: (p: any) =>
+        `${p.name}<br><b>${fmtV(Number(p.value))}</b> ${win ? "a week in recent engagement" : "votes/day"}`,
     },
     grid: { left: 116, right: 36, top: 10, bottom: 26 },
     xAxis: {
       type: "value",
-      name: "votes/day",
+      name: win ? "%/wk" : "votes/day",
       nameTextStyle: { color: AX, fontFamily: FONT, fontSize: 11 },
-      axisLabel: { color: AX, fontFamily: FONT, fontSize: 11 },
+      axisLabel: {
+        color: AX,
+        fontFamily: FONT,
+        fontSize: 11,
+        ...(win ? { formatter: (v: number) => `${v}%` } : {}),
+      },
       splitLine: { lineStyle: { color: GRID } },
     },
     yAxis: {
@@ -498,8 +529,8 @@ export function velocityBarOption(bars: GenreVelocityBar[]): EChartsOption {
         type: "bar",
         barWidth: "62%",
         data: data.map((b) => ({
-          value: b.votesPerDay,
-          itemStyle: { color: b.votesPerDay >= 0 ? POSITIVE : NEGATIVE },
+          value: barValue(b),
+          itemStyle: { color: barValue(b) >= 0 ? POSITIVE : NEGATIVE },
         })),
         label: {
           show: true,
@@ -507,7 +538,7 @@ export function velocityBarOption(bars: GenreVelocityBar[]): EChartsOption {
           color: AX,
           fontFamily: FONT,
           fontSize: 11,
-          formatter: (p: any) => Number(p.value).toLocaleString(),
+          formatter: (p: any) => fmtV(Number(p.value)),
         },
       },
     ],

@@ -177,6 +177,34 @@ test.describe("mobile — layout fits at 375px", () => {
     }
   });
 
+  // #204 S3: on All Browser the Rising-genre KPI stacks one line per portal, the genre bars render
+  // one chart per portal, the Genre Explorer stacks per-portal momentum lines and Trends gains a
+  // portal selector. None of it may scroll the page or clip a KPI value.
+  test("All Browser per-portal genre momentum fits (KPI, bars, explorer, trends)", async ({
+    page,
+  }) => {
+    await page.goto("/");
+    await page.getByRole("tab", { name: "All Browser", exact: true }).click();
+    await expect(page.locator(`${panel("radar")} .kpi-portals`)).toBeVisible({ timeout: 15_000 });
+    await settle(page);
+    await assertFits(page, panel("radar"), "radar/all/Overview");
+    for (const view of ["Genre Explorer", "Trends"]) {
+      await page.locator(`${panel("radar")} .nav-toggle`).click();
+      await page.locator(`${panel("radar")} .nav-item`, { hasText: view }).click();
+      await expect(page.locator(`${panel("radar")} .card`).first()).toBeVisible({
+        timeout: 15_000,
+      });
+      await settle(page);
+      await assertFits(page, panel("radar"), `radar/all/${view}`);
+    }
+    await page
+      .locator(`${panel("radar")} .portal-seg .seg-btn`)
+      .last()
+      .click();
+    await settle(page);
+    await assertFits(page, panel("radar"), "radar/all/Trends (second portal)");
+  });
+
   test("a wide Radar data table scrolls in-container, not the page", async ({ page }) => {
     await page.goto("/");
     // On mobile the sub-nav lives in a drawer — open it, jump to a table-heavy view.

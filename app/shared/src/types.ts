@@ -270,16 +270,45 @@ export interface OverviewKPI {
   newGames: number;
   avgRating: number;
   avgRatingP90: number;
-  risingGenre: string;
-  risingVotesPerDay: number;
+  // The strongest genre mover, read per portal in that portal's own unit (#204 S3): one entry on a
+  // single portal, one per portal on `all` — movers on different vote bases are never ranked
+  // against each other. `risingGenre` / `risingVotesPerDay` are the single-portal shorthand: null on
+  // `all` (there is no one mover), and `risingVotesPerDay` is null on a window portal ("—" / 0 when
+  // a single portal has no mover yet, as before).
+  risingGenre: string | null;
+  risingVotesPerDay: number | null;
+  risingByPortal: RisingGenre[];
   openGaps: number;
+}
+
+// One genre's momentum on one portal, in that portal's unit (#204 S3) — the per-title split of
+// HiddenGem applied to the genre's median-votes series. `cumulative`: `votesPerDay` (whole votes/day,
+// endpoints over the portal's crawl span, signed) and the half-over-half trajectory;
+// `engagementPctPerWeek` null. `window`: `votesPerDay` null; `engagementPctPerWeek` = signed LS slope
+// ÷ mean level × 7 × 100 over the captures that carried the genre, trajectory on the ±5%/wk band.
+// `captures` = capture instants at which the genre had a median; a trend needs three.
+export interface GenrePortalMomentum {
+  source: string;
+  voteBasis: VoteBasis;
+  votesPerDay: number | null;
+  engagementPctPerWeek: number | null;
+  trajectory: Trajectory;
+  captures: number;
+}
+export interface RisingGenre extends GenrePortalMomentum {
+  genre: string;
 }
 
 export interface MomentumSeries {
   genre: string;
   values: number[]; // one per date, aligned to `dates`
 }
+// One portal's genre-median vote LEVELS over its own capture dates (#204 S3). Levels on different
+// bases (a running total vs a recent window) never share an axis, so `Overview.momentum` carries
+// one of these per portal.
 export interface GenreMomentum {
+  source: string;
+  voteBasis: VoteBasis;
   dates: string[]; // e.g. ["06-15","06-22",...] — real MM-DD dates
   series: MomentumSeries[];
 }
@@ -397,9 +426,15 @@ export interface QuadrantPoint {
   supplyTrend: SupplyTrend;
 }
 
+// A bar in one portal's unit (#204 S3): `votesPerDay` on cumulative portals, `engagementPctPerWeek`
+// on window portals (the other null). On `all` the list is grouped per portal, each group ranked on
+// its own unit — render each group on its own axis.
 export interface GenreVelocityBar {
   genre: string;
-  votesPerDay: number;
+  source: string;
+  voteBasis: VoteBasis;
+  votesPerDay: number | null;
+  engagementPctPerWeek: number | null;
 }
 
 // One row per setting/theme present in the catalogue (#25). Setting is an axis orthogonal
@@ -426,7 +461,7 @@ export interface Overview {
   // top gap with its route framing, biggest mover, and a saturation warning. The answer
   // strip; the charts below are the evidence.
   read: string[];
-  momentum: GenreMomentum;
+  momentum: GenreMomentum[]; // one per portal (#204 S3)
   tags: TagFreq[];
   scatter: ScatterPoint[];
   heatmap: FeatureHeatmap;
@@ -559,10 +594,14 @@ export interface GenreRow {
   medianVotes: number;
   p90Votes: number;
   p90Rating: number;
-  votesPerDay: number;
-  // Later-half vs earlier-half momentum of the genre's median-votes series — the delta
-  // read ("is this changing?") a static level column can't give.
-  trajectory: Trajectory;
+  // Momentum of the genre's median-votes series, per portal in its own unit (#204 S3) — the delta
+  // read ("is this changing?") a static level column can't give. `momentum` has one entry on a
+  // single portal and one per portal carrying the genre on `all`. `votesPerDay` / `trajectory` are
+  // the single-portal shorthand for `momentum[0]` (`votesPerDay` null on a window portal); both are
+  // null on `all`, where no pooled number exists.
+  votesPerDay: number | null;
+  trajectory: Trajectory | null;
+  momentum: GenrePortalMomentum[];
   supplyTrend: SupplyTrend; // new-entrant momentum (crowding signal)
   recentEntrants: number; // titles first seen in the trailing window
 }
