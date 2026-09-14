@@ -19,7 +19,12 @@ import {
 } from "../src/checks/steamDataQuality.ts";
 import { steamCohortCounts } from "../src/checks/steamCohort.ts";
 import { browserCaptureCohorts } from "../src/checks/browserCaptureYield.ts";
-import { formatFreshness, voteFreshnessReport } from "../src/checks/voteFreshness.ts";
+import {
+  browserVoteSteps,
+  formatFreshness,
+  formatVoteSteps,
+  voteFreshnessReport,
+} from "../src/checks/voteFreshness.ts";
 
 // Golden appids: known-correct classifications that must hold regardless of thresholds.
 const GOLDEN_INDIE = new Set(["1145360"]); // Hades (self-pub megahit) â†’ NOT aaa
@@ -137,6 +142,7 @@ const GOLDEN_AAA = new Set(["730", "578080"]); // CS2 (Valve), PUBG (Krafton) â†
   try {
     for (const s of await voteFreshnessReport(db))
       console.log("Vote freshness:", formatFreshness(s));
+    for (const p of await browserVoteSteps(db)) console.log("Vote steps:", formatVoteSteps(p));
   } catch (err) {
     console.warn("Vote freshness report unavailable:", err);
   }

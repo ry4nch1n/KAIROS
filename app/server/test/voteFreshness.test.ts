@@ -2,7 +2,9 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { freshMemoryDb, type Querier } from "../src/db/db.ts";
 import {
   browserVoteSeries,
+  browserVoteSteps,
   formatFreshness,
+  formatVoteSteps,
   summarizeVoteSeries,
   voteFreshnessReport,
   type VoteSeries,
@@ -108,6 +110,24 @@ describe("browserVoteSeries — real SQL (#204)", () => {
       [1, 1, 0, 0],
     ]);
     expect((await browserVoteSeries(db, [rows[0].id])).map((r) => r.id)).toEqual([rows[0].id]);
+  });
+
+  it("profiles capture-to-capture steps per portal and peak size", async () => {
+    await seed([
+      { source: "crazygames", votes: [500, 490, 480, 485], days: [0, 3, 6, 9] }, // <1k: 2 down, 1 up
+      { source: "crazygames", votes: [20000, 20000, 18000], days: [0, 4, 8] }, // >=10k: flat, then a purge
+      { source: "poki", votes: [100, 110], days: [0, 2] },
+    ]);
+    const steps = await browserVoteSteps(db);
+    expect(steps.map((p) => [p.source, p.size, p.up, p.down, p.flat])).toEqual([
+      ["crazygames", "<1k", 1, 2, 0],
+      ["crazygames", ">=10k", 0, 1, 1],
+      ["poki", "<1k", 1, 0, 0],
+    ]);
+    const small = steps[0];
+    expect(small.medianDownPct).toBeCloseTo(2.02, 1); // 500→490 is 2%, 490→480 is 2.04%
+    expect(small.medianGapDays).toBe(3);
+    expect(formatVoteSteps(steps[1])).toContain("median step down −10%");
   });
 
   it("reports gems, popular and catalogue per portal", async () => {
