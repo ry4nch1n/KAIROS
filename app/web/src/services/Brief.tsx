@@ -188,12 +188,12 @@ export function Brief({ hidden, onGoto }: { hidden: boolean; onGoto?: (svc: Serv
   const [steering, setSteering] = useState<BriefSteering | null>(null);
 
   useEffect(() => {
-    api.briefEditions().then((l) => {
+    api.briefEditions().then((all) => {
+      // The list shows editions that exist; synthesized `missing` slots are not rendered.
+      const l = all.filter((e) => !e.missing);
       setList(l);
       setLoaded(true);
-      // A gap row is not selectable — the first REAL edition is what opens.
-      const first = l.find((e) => !e.missing);
-      if (first) setSel(first.editionDate);
+      if (l[0]) setSel(l[0].editionDate);
     });
     api.briefSteering().then(setSteering, () => setSteering(null));
   }, []);
@@ -210,11 +210,7 @@ export function Brief({ hidden, onGoto }: { hidden: boolean; onGoto?: (svc: Serv
   const now = new Date();
   const thisWeek = list.filter((e) => isSameWeek(e.editionDate, now));
   const earlier = list.filter((e) => !isSameWeek(e.editionDate, now));
-  const gaps = list.filter((e) => e.missing && !e.weakened);
-  // A weekday sliding out of the inferred cadence (#193). It is not "one more missed slot" —
-  // it is the alarm about to go quiet, so it gets its own words in the header.
-  const stopped = list.filter((e) => e.weakened);
-  const last = list.find((e) => !e.missing);
+  const last = list[0];
   const daysAgo = last
     ? Math.max(
         0,
@@ -225,29 +221,12 @@ export function Brief({ hidden, onGoto }: { hidden: boolean; onGoto?: (svc: Serv
         ),
       )
     : null;
-  // The header states the gap in words — a greyed row is easy to skim past, and one missed
-  // slot is the threshold, not several (#180).
   const headline =
     daysAgo === null
       ? null
-      : `last edition ${daysAgo === 0 ? "today" : daysAgo === 1 ? "1 day ago" : `${daysAgo} days ago`}` +
-        (gaps.length
-          ? ` · ${gaps.length} expected edition${gaps.length === 1 ? "" : "s"} missing`
-          : "") +
-        stopped.map((e) => ` · ${DAYS_LONG[dow(e.editionDate)]} editions have stopped`).join("");
+      : `last edition ${daysAgo === 0 ? "today" : daysAgo === 1 ? "1 day ago" : `${daysAgo} days ago`}`;
   const editionRow = (e: BriefEditionMeta) => {
     const di = dow(e.editionDate);
-    // A missed slot is not a row you can open — it is the absence of one. Static, greyed
-    // text, in its own date order, so the list stops being a record of only what succeeded.
-    if (e.missing)
-      return (
-        <div className={"edition gap" + (e.weakened ? " weak" : "")} key={`gap-${e.editionDate}`}>
-          <span>{fmt(e.editionDate)}</span>
-          <span className="gap-note">
-            {e.weakened ? `${DAYS_SHORT[di]} editions stopped` : `no edition · ${DAYS_SHORT[di]}`}
-          </span>
-        </div>
-      );
     return (
       <button
         type="button"
@@ -279,11 +258,7 @@ export function Brief({ hidden, onGoto }: { hidden: boolean; onGoto?: (svc: Serv
           <b>News Brief</b>
           <span>indie + gaming</span>
         </div>
-        {headline && (
-          <div className={"cadence-note" + (gaps.length || stopped.length ? " alert" : "")}>
-            {headline}
-          </div>
-        )}
+        {headline && <div className="cadence-note">{headline}</div>}
         {thisWeek.length > 0 && <div className="nav-label">This week</div>}
         {thisWeek.map(editionRow)}
         {earlier.length > 0 && <div className="nav-label">Earlier</div>}
