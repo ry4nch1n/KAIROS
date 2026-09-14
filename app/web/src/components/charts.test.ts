@@ -89,6 +89,8 @@ describe("scatterOption", () => {
     ) as any;
     expect(mixed.xAxis).toMatchObject({ type: "value", min: 0, max: 100 });
     expect(mixed.xAxis.name).toContain("percentile");
+    expect(mixed.xAxis.name).toContain("portal"); // the unit stays explicit…
+    expect(mixed.xAxis.name.length).toBeLessThanOrEqual(30); // …and fits a 375px card (#204 S5)
     expect(mixed.xAxis.axisLabel.formatter(62)).toBe("P62");
     const gem = mixed.series.find((s: any) => s.name === "gems").data[0];
     expect(gem.slice(0, 4)).toEqual([12, 4.8, "Gem One", "Puzzle"]);
