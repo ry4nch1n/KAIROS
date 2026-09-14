@@ -25,6 +25,7 @@ import {
   formatVoteSteps,
   voteFreshnessReport,
 } from "../src/checks/voteFreshness.ts";
+import { assessVoteBasis } from "../src/checks/voteBasis.ts";
 
 // Golden appids: known-correct classifications that must hold regardless of thresholds.
 const GOLDEN_INDIE = new Set(["1145360"]); // Hades (self-pub megahit) → NOT aaa
@@ -142,10 +143,18 @@ const GOLDEN_AAA = new Set(["730", "578080"]); // CS2 (Valve), PUBG (Krafton) �
   try {
     for (const s of await voteFreshnessReport(db))
       console.log("Vote freshness:", formatFreshness(s));
-    for (const p of await browserVoteSteps(db)) console.log("Vote steps:", formatVoteSteps(p));
   } catch (err) {
     console.warn("Vote freshness report unavailable:", err);
   }
+
+  // Vote basis (#204 S5) — ASSERTED. The step profile prints as report lines; the per-portal down
+  // share of moving steps must still match VOTE_BASIS, since every momentum and level read depends
+  // on it. The step query is not in a try: an invariant that cannot be measured fails loudly.
+  const voteSteps = await browserVoteSteps(db);
+  for (const p of voteSteps) console.log("Vote steps:", formatVoteSteps(p));
+  const basis = assessVoteBasis(voteSteps);
+  console.log("Vote basis:", basis.lines.join(" · ") || "no browser vote steps");
+  res.failures.push(...basis.failures);
 
   // Golden spot-checks (only assert for appids actually present in the crawl).
   const golden = await db.query(

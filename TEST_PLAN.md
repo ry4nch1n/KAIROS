@@ -72,6 +72,8 @@ is to turn a degenerate crawl red instead of letting it look green.
   enrichment applies to.
 - **Comparables and golden classifications** read all live Steam games, because they test what the UI
   actually serves.
+- **Vote basis** reads every capture-to-capture step of every live browser title, pooled per portal.
+  Only moving steps (up or down) count, so a frozen capture or a faster cadence can't shift the share.
 
 | Invariant | Fails when |
 |---|---|
@@ -82,17 +84,23 @@ is to turn a degenerate crawl red instead of letting it look green.
 | Recent comparables populated | The comparables list collapses |
 | Golden classifications | A known self-published hit reads AAA, or a known major-backed title doesn't |
 | Capture yield, Steam and browser | An optional enrichment the crawl attempts captures 0% over a real cohort |
+| Vote basis per browser portal | A `cumulative` portal's count falls on more than 2% of moving steps, or a `window` portal's on fewer than 20% ([decision](docs/decisions/2026-09-14-crazygames-votes-are-a-window.md)) |
 
 Thresholds are deliberately conservative, so they fire only on real degeneracy. The invariant floors
-live in `DEFAULT_STEAM_QUALITY`; capture yield's minimum cohort is `MIN_CAPTURE_COHORT`. Guarding a new
+live in `DEFAULT_STEAM_QUALITY`; capture yield's minimum cohort is `MIN_CAPTURE_COHORT`; the vote-basis
+bounds and its minimum of moving steps live in `checks/voteBasis.ts`. Guarding a new
 browser enrichment adds one registry row; a Steam enrichment adds a row plus its two counts in the
 cohort query.
 
 **Report-only lines** print beside the invariants without failing the run. A measurement becomes an
-assertion only after its first real readings show where a threshold belongs. The current report-only
-line is **vote-count freshness** per browser portal: Hidden Gems, the popular top 10% and the whole
-catalogue, each split into moving (and whether the count ended up or down), unchanged for a week or
-more, unchanged for less, and fewer than two captures.
+assertion only after its first real readings show where a threshold belongs. Two are current, both
+per browser portal:
+
+- **Vote-count freshness**: Hidden Gems, the popular top 10% and the whole catalogue, each split into
+  moving (and whether the count ended up or down), unchanged for a week or more, unchanged for less,
+  and fewer than two captures.
+- **Vote step profile**: up, down and flat steps by title size, with the median size of a step and the
+  median gap between captures. The vote-basis invariant is asserted from these same steps.
 
 **Live Steam validation.** `server/scripts/validate-steam.ts` crawls a small live sample
 (`STEAM_VALIDATE_LIMIT`) into an in-memory database and applies the same invariants. Run it after

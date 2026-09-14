@@ -175,7 +175,8 @@ export function scatterOption(points: ScatterPoint[]): EChartsOption {
     xAxis: {
       type: pct ? "value" : "log",
       ...(pct ? { min: 0, max: 100 } : {}),
-      name: pct ? "vote percentile within portal (visibility) →" : "votes (visibility) →",
+      // Short enough to fit a 375px card: the full title clipped at both edges on All Browser.
+      name: pct ? "vote percentile, per portal →" : "votes (visibility) →",
       nameLocation: "middle",
       nameGap: 26,
       nameTextStyle: { color: AX, fontFamily: FONT, fontSize: 11 },

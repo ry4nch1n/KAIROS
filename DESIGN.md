@@ -129,6 +129,19 @@ Language-model work (writing the brief, drafting pitches, building prototypes) h
 app in scheduled routines. It enters through token-gated write endpoints and the contract, so the
 app stays deterministic and a routine's output is validated before it can reach a panel.
 
+**Votes have a basis per portal.** Poki's vote count is a running total (`cumulative`); CrazyGames'
+covers only recent engagement (`window`). `VOTE_BASIS` declares each portal, and raw counts on
+different bases are never pooled, subtracted or ranked against each other
+([decision](docs/decisions/2026-09-14-crazygames-votes-are-a-window.md)). It follows that:
+
+- **Momentum is in the portal's unit.** A cumulative portal reads votes gained per day. A window
+  portal reads the signed percent change per week of its engagement level; a trend needs at least
+  three captures and a move of 5%/wk either way. On All Browser momentum is shown per portal, never
+  pooled.
+- **Levels on All Browser are within-portal percentiles.** Each title's votes become its percentile
+  in its own portal's live catalogue before any median, sum or ordering, and the payload names the
+  unit. Single-portal views keep raw counts.
+
 **Market-gap ranking (the core read).** Each genre × tag cell is scored as
 `z(demand) + z(quality ceiling) − z(supply)` over the cells being ranked. Three rules keep the
 ranking honest:
@@ -136,8 +149,9 @@ ranking honest:
 - **A cell is a market only above a supply floor** (`MIN_MARKET_SUPPLY`, shared by both platforms). A
   two-game cell is a sample, and the negated supply term would otherwise reward the thinnest cells
   most.
-- **Demand is a continuous count** (median votes/reviews), never a bucketed estimate. A median of
-  SteamSpy owner buckets ties unrelated markets on one value
+- **Demand is continuous, never a bucketed estimate.** On a single portal or Steam it is a median
+  count (votes or reviews); on All Browser it is the median within-portal vote percentile. A median
+  of SteamSpy owner buckets ties unrelated markets on one value
   ([decision](docs/decisions/2026-07-20-steam-demand-is-median-reviews.md)).
 - **Too few cells means no ranking.** Below a minimum cell count the list is empty rather than a z-score
   of the sample itself.
@@ -148,9 +162,12 @@ reorder comparable markets and bring a near miss onto the list, but it can never
 over the one the market data put first. The steering lens reports what matched, what reached the list
 and what fell just below.
 
-**Hidden gems** are titles in the top rating quartile and bottom visibility quartile, above a vote
-floor, ranked by a Bayesian-shrunk rating. Age and vote momentum *annotate* the list without
-re-sorting it, so "not yet found" can be told apart from "stalled".
+**Hidden gems** are titles in the top rating quartile and bottom vote quartile *of their own
+portal*, above a raw vote floor, ranked by a Bayesian-shrunk rating. Both percentiles partition by
+portal, because the portals differ in vote basis and in rating distribution. On All Browser each
+portal ranks its own gems and the list alternates between portals, so no rating or count is compared
+across them. Age and momentum *annotate* the list without re-sorting it, so "not yet found" can be
+told apart from "stalled".
 
 ---
 
