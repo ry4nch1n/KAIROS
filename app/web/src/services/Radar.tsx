@@ -1516,7 +1516,7 @@ function NewReleasesTable({ rows }: { rows: SteamNewRelease[] }) {
 const FOLLOWERS_TIP =
   "Followers of the store page. An unreleased game has no reviews and no owners, so this is its only demand reading — and the accepted public stand-in for the wishlist counts Steam does not publish. Blank means not measured, never zero.";
 const FOLL_DAY_TIP =
-  "Followers gained per day, across the last two days this game was measured. The total says how big the audience already is; only the rate says whether it is still growing. Blank until two days have been measured.";
+  "Followers gained per day, averaged over the longest measured span up to two weeks (hover a value for its window). The total says how big the audience already is; only the rate says whether it is still growing. Blank until two days have been measured.";
 function UpcomingTable({ rows }: { rows: SteamUpcoming[] }) {
   const anyArt = rows.some((r) => !!r.capsuleUrl);
   if (!rows.length)

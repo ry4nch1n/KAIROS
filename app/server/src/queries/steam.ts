@@ -803,12 +803,21 @@ export async function getSteamNewReleases(db: Querier): Promise<SteamNewRelease[
 // and not on comparables: an unshipped title has no reviews and no owners, so followers are its
 // only demand number — the public stand-in for the wishlist counts Steam won't publish. Velocity
 // mirrors newReleases' `reviewsPerDay` idiom instead of inventing a second one: a per-day RATE,
-// null (never 0) when unmeasurable, read off the last two snapshots that actually CARRY a value
-// rather than the last two rows — so a day whose follower fetch failed widens the window instead
-// of reporting a fake 0/day, and MIN_WINDOW_DAYS drops a same-day re-crawl whose near-zero window
-// would divide a small delta into a wild rate.
-export const FOLLOWER_HISTORY_DEPTH = 6;
+// null (never 0) when unmeasurable, read only off snapshots that actually CARRY a value — so a day
+// whose follower fetch failed never reports a fake 0/day.
+// The window is the LONGEST available, not the shortest (#201): latest vs the OLDEST measured
+// snapshot no more than MAX_WINDOW_DAYS before it. A 1-day delta on a daily crawl is mostly fetch
+// noise; a two-week span smooths it while still reading as "now" — it matches Steam's own
+// two-week trend windows and is short enough that a festival / Next Fest surge is not averaged
+// away into months of flat history. The cap is on elapsed TIME, not row count, so a crawl that
+// skipped days (or a stale row surviving in the buffer) can never stretch the window past it.
+// MIN_WINDOW_DAYS stays as a floor: a same-day re-crawl whose near-zero window would divide a
+// small delta into a wild rate is rejected (→ null). HISTORY_DEPTH is sized so a daily crawl can
+// fill the full cap; the LATERAL read is a per-game LIMIT walking idx_snap_game_time, so it stays
+// bounded at DEPTH rows per coming-soon game.
+export const FOLLOWER_HISTORY_DEPTH = 15;
 export const FOLLOWER_MIN_WINDOW_DAYS = 0.5;
+export const FOLLOWER_MAX_WINDOW_DAYS = 14;
 
 /** Pure — exported for tests. `snaps` in any order; nulls, never zeros, when unmeasurable. */
 export function followerTraction(snaps: { followers: unknown; capturedAt: unknown }[]) {
@@ -819,7 +828,12 @@ export function followerTraction(snaps: { followers: unknown; capturedAt: unknow
     .sort((a, b) => b.t - a.t);
   const [latest] = seen;
   if (!latest) return { followers: null, followerVelocity: null, followerWindowDays: null };
-  const prior = seen.find((s) => latest.t - s.t >= FOLLOWER_MIN_WINDOW_DAYS * 86400000);
+  // Newest-first, so the in-window snapshots are contiguous; take the LAST (oldest) of them.
+  const inWindow = seen.filter((s) => {
+    const gap = latest.t - s.t;
+    return gap >= FOLLOWER_MIN_WINDOW_DAYS * 86400000 && gap <= FOLLOWER_MAX_WINDOW_DAYS * 86400000;
+  });
+  const prior = inWindow[inWindow.length - 1];
   const days = prior ? (latest.t - prior.t) / 86400000 : null;
   return {
     followers: latest.f as number | null,
