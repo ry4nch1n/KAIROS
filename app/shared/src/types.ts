@@ -229,7 +229,7 @@ export interface SteamUpcoming {
   genre: string;
   priceCents: number | null; // announced store price; null until the page carries one
   followers: number | null; // latest measured follower count (null = not measured, never 0)
-  followerVelocity: number | null; // followers/day across the last two measured snapshots — null with <2
+  followerVelocity: number | null; // followers/day, latest vs oldest measured snapshot ≤14 days back — null with <2
   followerWindowDays: number | null; // days the velocity is measured over; null when velocity is null
   capsuleUrl: string | null; // Steam header capsule; null when not crawled
 }

@@ -6,6 +6,8 @@ import { freshMemoryDb, type Querier } from "../src/db/db.ts";
 import { loadGames } from "../src/crawler/load.ts";
 import type { RawGame } from "../src/crawler/base.ts";
 import {
+  FOLLOWER_HISTORY_DEPTH,
+  FOLLOWER_MAX_WINDOW_DAYS,
   followerTraction,
   getSteamUpcoming,
   getSteamNewReleases,
@@ -43,6 +45,34 @@ describe("#164 followerTraction (pure)", () => {
       snap(1000, "2026-08-11"),
     ]);
     expect(t).toMatchObject({ followerVelocity: 150, followerWindowDays: 2 }); // window widens
+  });
+
+  it("#201: with a week+ of snapshots it measures the LONGEST window, not the shortest", () => {
+    // Nine daily snapshots, 2026-08-05 … 08-13, +100/day except a noisy last day (+700).
+    const days = Array.from({ length: 9 }, (_, i) => `2026-08-${String(5 + i).padStart(2, "0")}`);
+    const snaps = days.map((d, i) => snap(i === 8 ? 2400 : 1000 + i * 100, d));
+    const t = followerTraction(snaps);
+    expect(t).toMatchObject({ followers: 2400, followerWindowDays: 8, followerVelocity: 175 });
+  });
+
+  it("#201: caps the window at FOLLOWER_MAX_WINDOW_DAYS — older snapshots are excluded", () => {
+    expect(FOLLOWER_MAX_WINDOW_DAYS).toBe(14);
+    const t = followerTraction([
+      snap(3000, "2026-08-31"),
+      snap(1600, "2026-08-17"), // exactly 14 days back — the longest allowed
+      snap(1500, "2026-08-16"), // 15 days back — excluded
+      snap(0, "2026-06-01"), // stale row — must not stretch the window
+    ]);
+    expect(t).toMatchObject({ followerWindowDays: 14, followerVelocity: 100 });
+  });
+
+  it("#201: only snapshots older than the cap → null rate (never a stretched window or 0)", () => {
+    const t = followerTraction([snap(3000, "2026-08-31"), snap(1000, "2026-07-01")]);
+    expect(t).toEqual({ followers: 3000, followerVelocity: null, followerWindowDays: null });
+  });
+
+  it("#201: the history depth can fill the full cap on a daily crawl", () => {
+    expect(FOLLOWER_HISTORY_DEPTH).toBeGreaterThanOrEqual(FOLLOWER_MAX_WINDOW_DAYS + 1);
   });
 
   it("ignores a same-day re-crawl, whose near-zero window would invent a wild rate", () => {
