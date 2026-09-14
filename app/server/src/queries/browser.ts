@@ -24,7 +24,7 @@ import type {
   SettingFacet,
 } from "shared";
 import { CONTRACT } from "../../../shared/src/contract.ts";
-import { DEFAULTED_GENRES, loopFamilyFor } from "../data/loopFamilyMap.ts";
+import { coTagHits, DEFAULTED_GENRES, loopFamilyFor } from "../data/loopFamilyMap.ts";
 import {
   num,
   pf,
@@ -697,16 +697,20 @@ type Slice = { family: string; genre: string; label: string; games: GameRow[] };
  *  the game's mapped tags takes it — none or several disagreeing leaves it unassigned, the map's
  *  own ambiguity guard applied a game at a time. Shared by BOTH surfaces: joining them on
  *  families only means anything if both were folded the same way. */
-function tagSlices(rows: GameRow[]): Slice[] {
+export function tagSlices(rows: GameRow[]): Slice[] {
   const out = new Map<string, Slice>();
   for (const r of rows) {
     const def = loopFamilyFor(r.genre);
     const hits = new Map<string, string>(); // family -> the first tag that produced it
-    if (!def)
-      for (const t of Array.isArray(r.tags) ? r.tags : []) {
+    const tags = Array.isArray(r.tags) ? r.tags : [];
+    if (!def) {
+      // A tag PAIR (#217) is one more vote under the same guard — never an override.
+      for (const [f, pair] of coTagHits(tags)) if (!hits.has(f)) hits.set(f, pair);
+      for (const t of tags) {
         const f = loopFamilyFor(r.genre, t);
         if (f && !hits.has(f)) hits.set(f, t);
       }
+    }
     const family = def ?? (hits.size === 1 ? [...hits.keys()][0] : null);
     if (!family) continue;
     const label = def ? r.genre : `${r.genre} × ${hits.get(family)}`;

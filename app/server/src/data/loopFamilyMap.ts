@@ -76,9 +76,8 @@ const GENRE_TAG: Record<string, Record<string, LoopFamily>> = {
 // larger half of this pass: tags naming a SETTING or mode (Open World, Singleplayer, Co-op, Story
 // Rich, First-Person, Horror, Exploration) and shelves no one family holds (Puzzle, Management,
 // Resource Management, Building, Base-Building, Crafting, Survival, Open World Survival Craft,
-// Action Roguelike, Bullet Hell, Souls-like, Card Battler). So `minimal-input-survivors` stays
-// Steam-unmapped: this crawl carries no Survivors-like / Bullet Heaven tag at all, and saying so
-// is exactly the answer the `steam-unmapped` lean exists to give.
+// Action Roguelike, Bullet Hell, Souls-like, Card Battler). Action Roguelike and Bullet Hell stay
+// absent ALONE (Hades/Dead Cells; shmups) — their intersection is CO_TAG's job below.
 const TAG: Record<string, LoopFamily> = {
   "extraction shooter": "extraction-lite",
   "extraction-shooter": "extraction-lite",
@@ -103,6 +102,26 @@ const TAG: Record<string, LoopFamily> = {
   "survivor-like": "minimal-input-survivors",
   "bullet heaven": "minimal-input-survivors",
 };
+
+// Co-tag keys (#217) — a PAIR of tags that together name a loop neither names alone. Only the
+// per-game fold can use this tier, because only it holds a game's whole tag set. The crawl has no
+// Survivors-like / Bullet Heaven tag, but Action Roguelike ∩ Bullet Hell is that shelf: the
+// roguelike run structure plus the dense-projectile screen, which neither tag carries by itself.
+// A co-tag hit is ONE MORE vote in the fold's ambiguity guard, not an override: a game whose
+// other tags point at a different family stays unassigned, the same rule single tags follow.
+const CO_TAG: [string, string, LoopFamily][] = [
+  ["action roguelike", "bullet hell", "minimal-input-survivors"],
+];
+
+/** [family, "TagA + TagB"] for every curated tag PAIR present in `tags` (#217), labelled in the
+ *  crawl's own spelling; empty when none matches. */
+export function coTagHits(tags: (string | null | undefined)[]): [LoopFamily, string][] {
+  const have = new Map(tags.filter(Boolean).map((t) => [normalizeKey(t), String(t)]));
+  return CO_TAG.filter(([a, b]) => have.has(a) && have.has(b)).map(([a, b, f]) => [
+    f,
+    `${have.get(a)} + ${have.get(b)}`,
+  ]);
+}
 
 /** Genres carrying a genre-level default — assigned WHOLE, so the per-game tag split skips them. */
 export const DEFAULTED_GENRES: readonly string[] = Object.keys(GENRE);
@@ -135,7 +154,11 @@ const SYNONYMS: [string, LoopFamily][] = [
 ];
 
 // Every distinct family this map can emit — the test asserts each is a live contract family.
-const TAG_FAMILIES = [...Object.values(TAG), ...Object.values(GENRE_TAG).flatMap(Object.values)];
+const TAG_FAMILIES = [
+  ...Object.values(TAG),
+  ...Object.values(GENRE_TAG).flatMap(Object.values),
+  ...CO_TAG.map(([, , f]) => f),
+];
 export const MAPPED_FAMILIES: readonly LoopFamily[] = [
   ...new Set<LoopFamily>([...Object.values(GENRE), ...TAG_FAMILIES, ...SYNONYMS.map(([, f]) => f)]),
 ];
