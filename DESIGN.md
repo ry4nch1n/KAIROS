@@ -77,8 +77,8 @@ and the browser never reduces the corpus. The cost is many explicit endpoints in
 query endpoint; each is cacheable, documented, and offers no injection surface.
 
 **The data contract is the coordination mechanism.** `shared/src/contract.ts` is the single source of
-truth for payload shapes and taxonomy, served at `GET /api/contract` and enforced on write. Anything
-that produces data for KAIROS (the brief, pitch and prototype routines) reads it at run start. Pitch
+truth for payload shapes and taxonomy, served at `GET /api/contract` and enforced on write. Every
+producer reads it before writing. Pitch
 validation is **strict**, because it gates publishing; brief validation is **advisory**, so a format
 lag can never blank the live dashboard. A shape or taxonomy change bumps its version in the same
 commit. Current versions: [`docs/reference/contract.md`](docs/reference/contract.md).
@@ -89,21 +89,23 @@ commit. Current versions: [`docs/reference/contract.md`](docs/reference/contract
 
 ```mermaid
 flowchart LR
-  L["list URLs<br/>sitemap window + seeds"] --> P["parse one page<br/>→ RawGame"]
+  L["list URLs<br/>listing + seeds"] --> P["parse one page<br/>→ RawGame"]
   P --> U["upsert identity<br/>(source, source_game_id)"]
   U --> S["insert snapshot<br/>UNIQUE (game, crawl)"]
   S --> G["data-quality gate<br/>detects, never prevents"]
 ```
 
-- **Discovery.** Portal sitemaps carry no modification dates, so each run reads a **rotating window**
-  of the sitemap, advanced by the source's crawl count, plus the portal's own new-releases and
-  homepage shelves as seeds. A fixed prefix would never discover a new release, and every
-  supply-velocity signal would read a structural zero.
+- **Discovery.** Browser portal sitemaps carry no modification dates, so each run reads a **rotating
+  window** of the sitemap, advanced by the source's crawl count, plus seeds: each portal's
+  new-releases listing and, on CrazyGames, its homepage shelf. A fixed prefix would never discover a
+  new release, and every supply-velocity signal would read a structural zero. Steam has no sitemap
+  and discovers from seed lists instead (§7).
 - **Idempotency.** One crawl row per source per day, and snapshots are unique on `(game, crawl)`.
   Re-running a day inserts nothing.
 - **Failure isolation.** One game's fetch or parse error logs and skips; the run finishes. Every
-  request goes through one polite fetch with a fixed user agent and a per-request timeout, so a hung
-  upstream fails fast instead of stalling the crawl.
+  request goes through one polite fetch with a fixed user agent, a pause between requests and a
+  per-request timeout, so a hung upstream fails fast instead of stalling the crawl.
+- **Thumbnails are hotlinked** from the source's CDN and never re-hosted.
 - **Detection, not prevention.** The load has already happened when the post-crawl gate runs. A
   degenerate crawl turns the run red rather than looking green (see [TEST_PLAN.md](TEST_PLAN.md)).
 - **Tradeoff.** A snapshot of every game every day uses more storage than delta-only capture, but it
@@ -137,8 +139,8 @@ ranking honest:
 - **Demand is a continuous count** (median votes/reviews), never a bucketed estimate. A median of
   SteamSpy owner buckets ties unrelated markets on one value
   ([decision](docs/decisions/2026-07-20-steam-demand-is-median-reviews.md)).
-- **Too few cells means no ranking.** Below a minimum cell count the list is empty with a reason, rather
-  than a z-score of the sample itself.
+- **Too few cells means no ranking.** Below a minimum cell count the list is empty rather than a z-score
+  of the sample itself.
 
 **Standing flags steer, they don't override.** The founder's standing interests add a visible lift to
 matching markets *before* the sort and cut, scaled to the ranking's own shown band. Steering can
@@ -154,7 +156,7 @@ re-sorting it, so "not yet found" can be told apart from "stalled".
 
 ## 6. The KAIROS shell
 
-GameRadar is one of four services behind a thin icon rail:
+Radar is one of four services behind a thin icon rail:
 
 ```mermaid
 flowchart LR
@@ -166,8 +168,9 @@ flowchart LR
   RAIL -.selects.-> REV[Revenue]
 ```
 
-- **One app, one deploy, one URL, and deliberately no router.** The shell mounts every service at once
-  and toggles them with a `hidden` prop, so switching costs no refetch and no remount.
+- **One app, one deploy, and deliberately no router library.** The shell mounts every service at once
+  and toggles them with a `hidden` prop, so switching costs no refetch and no remount. Services and
+  sections are addressable by URL hash, so a link can still open a specific view.
 - **One database, one namespace.** Radar's crawl tables sit beside `brief_editions`, `brief_steering`,
   `library_items` and `pitches`, so a pitch can join a market row without a federation layer.
 - **Radar** reads the crawl. **Brief** renders editions the brief routine publishes as structured JSON.
@@ -192,9 +195,10 @@ funnel**.
   A self-published breakout caps at established-indie however large it grows; only a major-backed
   title is AAA. Matching publisher and developer labels is whole-word, because Steam shows short forms
   of long publisher names.
-- **Free endpoints only, no API key:** store app details, the review summary and SteamSpy per app. The
-  seed interleaves indie top-sellers, trending and featured lists round-robin, so the AAA-heavy lists
-  can't crowd the indie stream out at small limits.
+- **Free public endpoints only, no API key** (the list is in [OPERATIONS.md](OPERATIONS.md)). The seed
+  interleaves a curated indie canon, recent indie top-sellers, the popular-upcoming shelf, trending,
+  featured and the indie tag list round-robin, so the AAA-heavy lists can't crowd the indie stream
+  out at small limits.
 - **Released and upcoming are separate cohorts.** Market analytics read released titles only; upcoming
   titles get their own surface, where follower momentum stands in for wishlists
   ([decision](docs/decisions/2026-08-24-upcoming-cohort-gets-its-own-surface.md)).
@@ -215,13 +219,20 @@ KAIROS is organised around the five factors that pick a shippable game:
 
 How the surfaces answer them:
 
-- **Every service opens with an answer.** A server-computed read of one to three decision-framed
-  sentences comes before the charts, and each insight carries its "→ so what".
+- **Radar opens with an answer.** A server-computed read of one to three decision-framed sentences
+  comes before the charts, and each insight carries its "→ so what".
 - **Names are canonical before aggregation.** Genre and tag names collapse a trailing "Game(s)" in SQL,
   before any median is taken, since medians can't be merged afterwards.
 - **Supply has a velocity, not just a count.** New entrants in adjacent trailing windows, anchored to
   the data's newest date rather than the wall clock, flag a genre whose supply is rising.
 - **Demand and supply share one quadrant** per platform, coloured by supply momentum.
+- **Steam economics carry context, not just totals.** A genre row carries a cited wishlist-to-sale
+  signal where one exists, and median playtime reads as a content-expectation proxy, not a quality
+  score.
+- **Revenue is a range, not a point.** Projections show a P25 / median / P75 band, and a comparable
+  can seed the model directly.
+- **The Leaderboard ranks candidates by evidence state first**: a tested candidate beats an untested
+  one, and the paper score only orders candidates at the same state.
 - **A pitch is read through both lenses.** The pitch contract carries scope, hook and founder-fit fields
   beside the browser and Steam fit scores. A pitch-level route-lean chip reads browser fit against
   Steam fit. The market-level Route Lens joins the two platforms on **loop families**, because genre
@@ -244,4 +255,4 @@ How the surfaces answer them:
 | Scheduler | **GitHub Actions** | Free on a public repo, versioned, survives losing any workstation | Coarse schedule control |
 | Hosting | **Netlify** (static SPA + Function + edge auth) | Git-integrated, one deploy for web and API | Production deploys are metered, so they are batched daily |
 | Lint / format | **Biome** | One fast tool, one config | Some rules disabled to reach a green baseline |
-| Tests | **Vitest + Playwright** | Same runner for server and web; Playwright for browser e2e | e2e runs locally, not in CI |
+| Tests | **Vitest + Playwright** | Same runner for server and web; Playwright for browser e2e | Browser e2e is a local gate, not a CI one ([TEST_PLAN.md](TEST_PLAN.md)) |

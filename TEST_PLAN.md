@@ -23,7 +23,7 @@ module that resolves under `tsx` can still break in the bundled Function, and on
 
 | Layer | Where it runs | Catches | Blocks |
 |---|---|---|---|
-| **Lint** (Biome) | CI + local pre-push | Formatting and lint-rule regressions | Merge |
+| **Lint** (Biome) | CI + local pre-push hook | Formatting and lint-rule regressions | Merge |
 | **Unit + integration** (Vitest, server + web) | CI | Logic and query errors, driven against a real PGlite database and real captured fixtures | Merge |
 | **Contract test** | CI | A payload or taxonomy change without its version bump; writes that violate the contract | Merge |
 | **Route parity** | CI | The Express and Netlify Function route surfaces drifting apart | Merge |
@@ -34,7 +34,9 @@ module that resolves under `tsx` can still break in the bundled Function, and on
 
 Everything above the last row is a merge gate: `ci.yml` runs lint → test → build, and branch
 protection makes it required. e2e stays local because a flaky browser suite as a required check would
-block merges on noise; the pre-push hook is the enforcement, and `--no-verify` is the deliberate bypass.
+block merges on noise; the pre-push hook is the enforcement. **The hook is not tracked in the repo**:
+each machine installs its own `.git/hooks/pre-push` (Biome check, then the e2e suite), so a fresh clone
+has no push gate until it does. `--no-verify` is the deliberate bypass.
 
 ## Test conventions
 
@@ -59,10 +61,17 @@ database and exits non-zero on failure. It is the final step of `crawl.yml` and 
 `check-data.yml`. The load has already happened, so the gate **detects rather than prevents**; its job
 is to turn a degenerate crawl red instead of letting it look green.
 
-**Measured over the freshest cohort.** Invariants read the games whose latest snapshot is from the most
-recent crawl day, scoped to released titles. Legacy rows keep nulls a single crawl can't fix, so
-measuring all-time would false-fail forever; unreleased titles have honest nulls that would dilute the
-fills. Unreleased titles are reported as their own count.
+**Each invariant reads the cohort it can judge.**
+
+- **Crawl size, date fill, rating fill and the indie count** read the freshest released cohort: games
+  whose latest snapshot is from the most recent crawl day, excluding unreleased titles. Legacy rows keep
+  nulls a single crawl can't fix, so all-time measurement would false-fail forever, and unreleased
+  titles have honest nulls that would dilute the fills. Unreleased titles are reported as their own
+  count.
+- **Capture yield** reads the same fresh cohort, released or not, restricted to the rows each
+  enrichment applies to.
+- **Comparables and golden classifications** read all live Steam games, because they test what the UI
+  actually serves.
 
 | Invariant | Fails when |
 |---|---|
@@ -74,14 +83,20 @@ fills. Unreleased titles are reported as their own count.
 | Golden classifications | A known self-published hit reads AAA, or a known major-backed title doesn't |
 | Capture yield, Steam and browser | An optional enrichment the crawl attempts captures 0% over a real cohort |
 
-Thresholds are deliberately conservative, so they fire only on real degeneracy, and they live in one
-place (`DEFAULT_STEAM_QUALITY`). Capture-yield rows are a registry: guarding a new enrichment adds one
-row.
+Thresholds are deliberately conservative, so they fire only on real degeneracy. The invariant floors
+live in `DEFAULT_STEAM_QUALITY`; capture yield's minimum cohort is `MIN_CAPTURE_COHORT`. Guarding a new
+browser enrichment adds one registry row; a Steam enrichment adds a row plus its two counts in the
+cohort query.
 
 **Report-only lines** print beside the invariants without failing the run. A measurement becomes an
 assertion only after its first real readings show where a threshold belongs. The current report-only
 line is **vote-count freshness** per browser portal: Hidden Gems, the popular top 10% and the whole
-catalogue, each split into moving, frozen and too-thin series.
+catalogue, each split into moving (and whether the count ended up or down), unchanged for a week or
+more, unchanged for less, and fewer than two captures.
+
+**Live Steam validation.** `server/scripts/validate-steam.ts` crawls a small live sample
+(`STEAM_VALIDATE_LIMIT`) into an in-memory database and applies the same invariants. Run it after
+changing the Steam adapter, before a scheduled crawl finds the problem.
 
 ---
 
@@ -91,7 +106,8 @@ catalogue, each split into moving, frozen and too-thin series.
 2. The pre-push e2e suite passes, including the 375px overflow check.
 3. A change to a payload or taxonomy bumps its contract version in the same commit.
 4. A change to a documented surface regenerates `docs/reference/` in the same commit.
-5. A user-visible change is observed working in the running app, not only in tests.
+5. A user-visible change is observed working in the running app, not only in tests. ECharts canvases
+   don't survive pixel capture in preview tooling, so chart checks read the DOM and computed state.
 6. A change that touches production data paths is followed by a clean data-quality gate run.
 
 ## When something fails
