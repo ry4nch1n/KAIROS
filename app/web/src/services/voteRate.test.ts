@@ -28,4 +28,10 @@ describe("voteRateText keeps a fractional rate legible", () => {
     expect(voteRateTip(0.4, "rising")).toContain("2.8 votes/week");
     expect(voteRateTip(0, "decaying")).toMatch(/no votes gained/);
   });
+  it("a window-basis row shows its signed engagement change, never a fake zero (#204)", () => {
+    expect(voteRateText(null, "decaying", -7.9)).toBe("-7.9%/wk");
+    expect(voteRateText(null, "rising", 32.6)).toBe("+32.6%/wk");
+    expect(voteRateText(null, "new", null)).toBe("no data");
+    expect(voteRateTip(null, "plateau")).toMatch(/recent engagement/);
+  });
 });

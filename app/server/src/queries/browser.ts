@@ -33,6 +33,8 @@ import {
   classifyTrajectory,
   classifySupply,
   genreSupplyTrend,
+  voteBasisOf,
+  voteMomentumOf,
   steerRanking,
   steeringLens,
   MIN_MARKET_SUPPLY,
@@ -366,7 +368,7 @@ export function bayesianGemScore(
 async function gemBase(db: Querier, platform: Platform) {
   return db.query(
     `WITH base AS (
-       SELECT g.id, g.title, ${canonSql("l.genre")} AS genre, l.rating, l.votes,
+       SELECT g.id, g.title, src.name AS source, ${canonSql("l.genre")} AS genre, l.rating, l.votes,
               -- Days since we FIRST SAW the title, measured against the same data-relative
               -- anchor the new-release window uses (never the wall clock, so reads stay
               -- deterministic). first_seen_at is crawl discovery, not a release date.
@@ -378,7 +380,7 @@ async function gemBase(db: Querier, platform: Platform) {
        JOIN sources src ON src.id = g.source_id
        WHERE g.is_live AND l.rating IS NOT NULL AND l.votes IS NOT NULL ${pf(platform)}
      )
-     SELECT id, title, genre, rating, votes, days_tracked, rp, vp,
+     SELECT id, title, source, genre, rating, votes, days_tracked, rp, vp,
             (rp >= ${GEM_RATING_PCTILE} AND vp <= ${GEM_VOTES_PCTILE} AND votes >= ${MIN_GEM_VOTES}) AS gem
      FROM base`,
   );
@@ -399,47 +401,48 @@ export async function getScatter(
   }));
 }
 
-/**
- * Per-title vote momentum for an arbitrary id set, off the append-only snapshot series.
- * Same reading getNewReleases computes over its cohort, hoisted so any list can annotate
- * its rows with "is this still accreting attention, or has it stopped?".
- */
-async function voteMomentum(
-  db: Querier,
-  ids: number[],
-): Promise<Map<number, { votesPerDay: number; trajectory: Trajectory }>> {
-  const out = new Map<number, { votesPerDay: number; trajectory: Trajectory }>();
-  if (!ids.length) return out;
-  const ph = ids.map((_, i) => `$${i + 1}`).join(",");
-  const series = await db.query(
-    `SELECT game_id AS id, captured_at AS d, max(votes) AS votes
-     FROM game_snapshots
-     WHERE game_id IN (${ph}) AND votes IS NOT NULL
-     GROUP BY game_id, captured_at ORDER BY game_id, captured_at`,
-    ids,
-  );
-  const byId = new Map<number, { t: number[]; v: number[] }>();
-  for (const r of series) {
+type Captures = Map<number, { t: number[]; v: number[] }>;
+/** Group per-title (id, d, votes) snapshot rows into capture series, in row order. */
+function groupCaptures(rows: Record<string, any>[]): Captures {
+  const byId: Captures = new Map();
+  for (const r of rows) {
     const id = num(r.id);
-    let g = byId.get(id);
-    if (!g) {
-      g = { t: [], v: [] };
-      byId.set(id, g);
-    }
+    const g = byId.get(id) ?? { t: [], v: [] };
+    byId.set(id, g);
     g.t.push(new Date(r.d).getTime());
     g.v.push(num(r.votes));
   }
-  for (const id of ids) {
-    const g = byId.get(id);
-    if (!g || g.v.length < 2) {
-      out.set(id, { votesPerDay: 0, trajectory: "new" });
-      continue;
-    }
-    // Real capture instants, so an uneven crawl cadence can't bend the fitted slope (#204).
-    const days = g.t.map((t) => (t - g.t[0]) / 86400000);
-    out.set(id, classifyTrajectory(g.v, days[days.length - 1], days));
-  }
-  return out;
+  return byId;
+}
+/** One title's momentum in its portal's unit (#204). Real capture instants, so an uneven crawl
+ *  cadence can't bend the fitted slope; fewer than two captures reads "new" on either basis. */
+function momentumOf(source: string, g?: { t: number[]; v: number[] }) {
+  const voteBasis = voteBasisOf(source);
+  const days = (g?.t ?? []).map((t) => (t - (g?.t[0] ?? 0)) / 86400000);
+  return {
+    source,
+    voteBasis,
+    ...voteMomentumOf(voteBasis, g?.v ?? [], days[days.length - 1] ?? 0, days),
+  };
+}
+
+/**
+ * Per-title vote series for an arbitrary id set, off the append-only snapshot table — the same
+ * reading getNewReleases computes over its cohort, hoisted so any list can annotate its rows
+ * with "is this still accreting attention, or has it stopped?".
+ */
+async function voteCaptures(db: Querier, ids: number[]): Promise<Captures> {
+  if (!ids.length) return new Map();
+  const ph = ids.map((_, i) => `$${i + 1}`).join(",");
+  return groupCaptures(
+    await db.query(
+      `SELECT game_id AS id, captured_at AS d, max(votes) AS votes
+       FROM game_snapshots
+       WHERE game_id IN (${ph}) AND votes IS NOT NULL
+       GROUP BY game_id, captured_at ORDER BY game_id, captured_at`,
+      ids,
+    ),
+  );
 }
 
 export async function getHiddenGems(
@@ -461,7 +464,7 @@ export async function getHiddenGems(
   // "under-discovered" from "stalled years ago" — the two look identical on it. Age since
   // first sighting plus vote momentum ANNOTATE the ranking (the sort is deliberately
   // unchanged) so the reader can separate them instead of trusting the label.
-  const mom = await voteMomentum(
+  const caps = await voteCaptures(
     db,
     top.map((r) => num(r.id)),
   );
@@ -474,7 +477,7 @@ export async function getHiddenGems(
       votes: num(r.votes),
       genre: r.genre ?? "—",
       daysTracked: num(r.days_tracked),
-      ...(mom.get(id) ?? { votesPerDay: 0, trajectory: "new" as Trajectory }),
+      ...momentumOf(r.source, caps.get(id)),
     };
   });
 }
@@ -867,7 +870,7 @@ export async function getDevelopers(db: Querier, platform: Platform): Promise<De
 
 export async function getNewReleases(db: Querier, platform: Platform): Promise<NewRelease[]> {
   const rows = await db.query(
-    `SELECT g.id AS id, g.title AS title, g.url AS url, ${canonSql("l.genre")} AS genre, l.rating AS rating, l.votes AS votes
+    `SELECT g.id AS id, g.title AS title, g.url AS url, src.name AS source, ${canonSql("l.genre")} AS genre, l.rating AS rating, l.votes AS votes
      FROM games g JOIN sources src ON src.id = g.source_id JOIN v_latest l ON l.game_id = g.id
      WHERE g.is_live ${pf(platform)} AND g.first_seen_at >= ${newAnchor(platform)} - interval '14 days'
      ORDER BY g.first_seen_at DESC, l.votes DESC NULLS LAST LIMIT 60`,
@@ -881,23 +884,7 @@ export async function getNewReleases(db: Querier, platform: Platform): Promise<N
        AND s.votes IS NOT NULL
      GROUP BY s.game_id, s.captured_at ORDER BY s.game_id, s.captured_at`,
   );
-  const byId = new Map<number, { t: number[]; v: number[] }>();
-  for (const r of series) {
-    const id = num(r.id);
-    let g = byId.get(id);
-    if (!g) {
-      g = { t: [], v: [] };
-      byId.set(id, g);
-    }
-    g.t.push(new Date(r.d).getTime());
-    g.v.push(num(r.votes));
-  }
-  const momentum = (id: number): { votesPerDay: number; trajectory: Trajectory } => {
-    const g = byId.get(id);
-    if (!g || g.v.length < 2) return { votesPerDay: 0, trajectory: "new" };
-    const days = g.t.map((t) => (t - g.t[0]) / 86400000);
-    return classifyTrajectory(g.v, days[days.length - 1], days);
-  };
+  const byId = groupCaptures(series);
   return rows.map((r) => ({
     gameId: num(r.id),
     title: r.title,
@@ -905,7 +892,7 @@ export async function getNewReleases(db: Querier, platform: Platform): Promise<N
     rating: num(r.rating),
     votes: num(r.votes),
     url: r.url,
-    ...momentum(num(r.id)),
+    ...momentumOf(r.source, byId.get(num(r.id))),
   }));
 }
 
@@ -953,7 +940,13 @@ export async function getInsights(
     // underserved market — the browser panel has no revenue axis to make a demand claim on.
     // Splitting on momentum is what makes it actionable: a gem still accreting votes is being
     // found late, a flat one has stopped being found at all.
-    const live = gems.filter((g) => g.votesPerDay > 0 && g.trajectory !== "decaying").length;
+    // Read in each row's own unit (#204): a CrazyGames gem whose engagement window is shrinking is
+    // not climbing, and its null votes/day must not be mistaken for a measured zero.
+    const live = gems.filter(
+      (g) =>
+        ((g.voteBasis === "window" ? g.engagementPctPerWeek : g.votesPerDay) ?? 0) > 0 &&
+        g.trajectory !== "decaying",
+    ).length;
     out.push({
       kind: "gem",
       tag: "HIDDEN GEMS",

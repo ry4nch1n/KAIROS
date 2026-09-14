@@ -297,12 +297,21 @@ export interface ScatterPoint {
   gem: boolean;
 }
 
+// What a browser portal's vote count measures (#204). Poki's `votes` is `cumulative` — a running
+// total that only rises, so its delta is audience growth (votes/day). CrazyGames' is a `window` of
+// recent engagement — it drops a little most days at every title size — so its level is already
+// engagement and its delta is a signed change in it (percent per week). Counts on different bases
+// are never pooled, subtracted or ranked against each other as raw numbers.
+export type VoteBasis = "cumulative" | "window";
+
 export interface HiddenGem {
   gameId: number;
   title: string;
   rating: number;
   votes: number;
   genre: string;
+  source: string; // the portal (sources.name) — decides `voteBasis`
+  voteBasis: VoteBasis;
   // Discovery annotations (#176). High rating × low votes alone cannot tell "under-discovered"
   // from "shipped, nobody found it, stalled years ago" — these two axes separate them.
   // `daysTracked` = days since KAIROS first saw the title (crawl discovery, NOT a release date);
@@ -314,8 +323,13 @@ export interface HiddenGem {
   // series yet — never confuse the two. The rate is the least-squares slope over every
   // non-null-vote capture (#204), so a downward portal revision at either end of the window
   // shifts it rather than netting a gaining gem to 0.
+  // Per basis (#204): a `cumulative` row carries `votesPerDay` (as above) and a null
+  // `engagementPctPerWeek`; a `window` row carries `votesPerDay: null` — never 0 standing in for
+  // "not this unit" — and `engagementPctPerWeek`, the signed least-squares slope over mean level,
+  // ×7×100, one decimal (null when there is no measurable series).
   daysTracked: number;
-  votesPerDay: number;
+  votesPerDay: number | null;
+  engagementPctPerWeek: number | null;
   trajectory: Trajectory;
 }
 
@@ -565,9 +579,13 @@ export interface NewRelease {
   rating: number;
   votes: number;
   url: string;
+  source: string;
+  voteBasis: VoteBasis; // see HiddenGem: the same per-basis split applies (#204)
   // Votes gained per day over the tracked window (launch-date-independent). Fractional to two
   // decimals since #192; these rows run in the thousands, so the display still reads whole.
-  votesPerDay: number;
+  // null on a `window` row, which reports `engagementPctPerWeek` instead.
+  votesPerDay: number | null;
+  engagementPctPerWeek: number | null;
   trajectory: Trajectory;
 }
 
