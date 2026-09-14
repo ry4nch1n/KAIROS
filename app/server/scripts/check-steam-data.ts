@@ -19,6 +19,7 @@ import {
 } from "../src/checks/steamDataQuality.ts";
 import { steamCohortCounts } from "../src/checks/steamCohort.ts";
 import { browserCaptureCohorts } from "../src/checks/browserCaptureYield.ts";
+import { formatFreshness, voteFreshnessReport } from "../src/checks/voteFreshness.ts";
 
 // Golden appids: known-correct classifications that must hold regardless of thresholds.
 const GOLDEN_INDIE = new Set(["1145360"]); // Hades (self-pub megahit) → NOT aaa
@@ -129,6 +130,16 @@ const GOLDEN_AAA = new Set(["730", "578080"]); // CS2 (Valve), PUBG (Krafton) �
   const browser = assessCaptureYield(await browserCaptureCohorts(db));
   console.log("Browser capture yield (latest crawl cohort):", browser.lines.join(" · "));
   res.failures.push(...browser.failures);
+
+  // Vote-count freshness (#204) — REPORT ONLY. Separates "the gems stopped gaining votes" from
+  // "the capture reads a stale count" by setting them beside each portal's popular baseline. A
+  // failure to compute it is logged and swallowed: an unmeasured report must never fail the gate.
+  try {
+    for (const s of await voteFreshnessReport(db))
+      console.log("Vote freshness:", formatFreshness(s));
+  } catch (err) {
+    console.warn("Vote freshness report unavailable:", err);
+  }
 
   // Golden spot-checks (only assert for appids actually present in the crawl).
   const golden = await db.query(
