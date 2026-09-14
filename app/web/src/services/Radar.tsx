@@ -53,6 +53,9 @@ import {
   velocityBarOption,
   barsByPortal,
   tierBarOption,
+  fmtVotePct,
+  levelName,
+  VOTE_PCT_TIP,
 } from "../components/charts.ts";
 import { InsightSvg, tagClass } from "../components/icons.tsx";
 import { CopySeed } from "../components/CopySeed.tsx";
@@ -336,6 +339,15 @@ function TrendCell({ r, labels }: { r: MomentumRow; labels: Record<string, strin
     </td>
   );
 }
+/** A vote-LEVEL table cell (#204 S4): the raw count on one portal, the within-portal percentile
+ *  ("P62") on All Browser, "—" when neither is present. */
+export function levelCell(
+  votes: number | null | undefined,
+  pct: number | null | undefined,
+): string {
+  if (votes != null) return fmt(votes);
+  return pct != null ? fmtVotePct(pct) : "—";
+}
 // ── Genre momentum per portal (#204 S3) ──
 // A genre's rate in its portal's unit. Running-total portals keep the pre-#204 cell exactly (signed
 // whole votes/day); recent-window portals read the signed %/wk of recent engagement.
@@ -425,10 +437,12 @@ function QuadrantCard({
   points,
   yName,
   weightName,
+  percentile,
 }: {
   points: import("shared").QuadrantPoint[];
   yName: string;
   weightName: string;
+  percentile?: boolean; // All Browser: appetite is a within-portal vote percentile (#204 S4)
 }) {
   if (points.length < 3) return null;
   return (
@@ -448,7 +462,16 @@ function QuadrantCard({
           </span>
         ))}
       </div>
-      <EChart option={quadrantOption(points, { yName, weightName })} style={{ minHeight: 360 }} />
+      {percentile && (
+        <p className="view-head">
+          Demand is each genre's median vote percentile within its own portal
+          <Tip text={VOTE_PCT_TIP} />
+        </p>
+      )}
+      <EChart
+        option={quadrantOption(points, { yName, weightName, percentile })}
+        style={{ minHeight: 360 }}
+      />
     </div>
   );
 }
@@ -548,7 +571,16 @@ function OverviewView({
           <span className="delta up num">appetite &gt; supply</span>
         </div>
       </div>
-      <QuadrantCard points={ov.quadrant} yName="median votes" weightName="total votes" />
+      {ov.levelUnit === "votePercentile" ? (
+        <QuadrantCard
+          points={ov.quadrant}
+          yName={levelName(ov.levelUnit, "median votes")}
+          weightName="vote-weighted titles"
+          percentile
+        />
+      ) : (
+        <QuadrantCard points={ov.quadrant} yName="median votes" weightName="total votes" />
+      )}
       <div className="card hero">
         {head(I.genres, "Genre landscape", "supply × quality × audience — top-left = green-field")}
         <EChart option={landscapeOption(ov.landscape)} style={{ minHeight: 360 }} />
@@ -763,11 +795,15 @@ function GapList({
   onComparables?: (f: ComparablesFilter) => void;
 }) {
   const note = steeringNote(lens);
+  // All Browser (#204 S4): appetite is a within-portal vote percentile, never pooled raw votes.
+  const pct = gaps.some((g) => g.appetiteUnit === "votePercentile");
   return (
     <div className="gaplist">
       <p className="gap-legend">
-        opportunity = z(appetite: median votes/title) + z(quality ceiling: P90 rating) − z(supply:
-        games)
+        opportunity = z(appetite:{" "}
+        {pct ? "median vote percentile, within portal" : "median votes/title"}) + z(quality ceiling:
+        P90 rating) − z(supply: games)
+        {pct && <Tip text={VOTE_PCT_TIP} />}
       </p>
       {note && <p className="gap-legend">{note}</p>}
       {gaps.map((g, i) => (
@@ -792,7 +828,15 @@ function GapList({
           </div>
           <div className="gap-stats num">
             <span>
-              <b>{fmt(g.appetite)}</b> median votes/title
+              {g.appetiteUnit === "votePercentile" ? (
+                <>
+                  <b>{fmtVotePct(g.appetite)}</b> median vote pct
+                </>
+              ) : (
+                <>
+                  <b>{fmt(g.appetite)}</b> median votes/title
+                </>
+              )}
             </span>
             <span>
               <b>{g.supplyN}</b> games
@@ -834,6 +878,7 @@ interface LoopFamilyMarketData {
     routeLean?: "browser" | "steam" | "contested" | "steam-unmapped" | null;
   }[];
   uncovered: string[];
+  appetiteUnit?: "votes" | "votePercentile"; // #204 S4 — absent reads as raw votes
 }
 // [chip label, chip class, tooltip]. Named for the revenue SHAPE, not an internal route label.
 const MARKET_LEAN: Record<string, [string, string, string]> = {
@@ -899,7 +944,13 @@ function LoopFamilyMarketCard({ platform }: { platform: Platform }) {
               <th className="r">Supply</th>
               <th className="r">
                 Appetite
-                <Tip text="Supply-weighted median votes/reviews" />
+                <Tip
+                  text={
+                    data.appetiteUnit === "votePercentile"
+                      ? `Supply-weighted median vote percentile. ${VOTE_PCT_TIP}`
+                      : "Supply-weighted median votes/reviews"
+                  }
+                />
               </th>
               <th>
                 Supply trend
@@ -925,7 +976,13 @@ function LoopFamilyMarketCard({ platform }: { platform: Platform }) {
                   <LeanChip lean={r.routeLean} />
                 </td>
                 <td className="r">{r.supplyN ? fmt(r.supplyN) : "—"}</td>
-                <td className="r">{r.appetite == null ? "—" : fmt(r.appetite)}</td>
+                <td className="r">
+                  {r.appetite == null
+                    ? "—"
+                    : data.appetiteUnit === "votePercentile"
+                      ? fmtVotePct(r.appetite)
+                      : fmt(r.appetite)}
+                </td>
                 <td>
                   <span className={"supply supply-" + r.supplyTrend}>
                     {SUPPLY_LABEL[r.supplyTrend] || r.supplyTrend}
@@ -974,8 +1031,20 @@ function GenresView({ rows, platform }: { rows: GenreRow[]; platform: Platform }
             <th>Genre</th>
             <th className="r">Games</th>
             <th className="r">Avg rating</th>
-            <th className="r">Median votes</th>
-            <th className="r">P90 votes (top-10% bar)</th>
+            {split ? (
+              <>
+                <th className="r">
+                  Median vote pct
+                  <Tip text={VOTE_PCT_TIP} />
+                </th>
+                <th className="r">P90 vote pct (top-10% bar)</th>
+              </>
+            ) : (
+              <>
+                <th className="r">Median votes</th>
+                <th className="r">P90 votes (top-10% bar)</th>
+              </>
+            )}
             <th className="r">P90 rating</th>
             <th className="r">
               Momentum
@@ -1002,8 +1071,8 @@ function GenresView({ rows, platform }: { rows: GenreRow[]; platform: Platform }
               </td>
               <td className="r">{r.games}</td>
               <td className="r">{r.avgRating.toFixed(2)}</td>
-              <td className="r">{fmt(r.medianVotes)}</td>
-              <td className="r">{fmt(r.p90Votes)}</td>
+              <td className="r">{levelCell(r.medianVotes, r.medianVotePct)}</td>
+              <td className="r">{levelCell(r.p90Votes, r.p90VotePct)}</td>
               <td className="r">{r.p90Rating.toFixed(2)}</td>
               <td className="r momentum">
                 {r.momentum.length ? (

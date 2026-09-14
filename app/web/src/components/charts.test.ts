@@ -4,6 +4,8 @@ import {
   velocityBarOption,
   landscapeOption,
   quadrantOption,
+  fmtVotePct,
+  levelName,
   heatmapOption,
   momentumOption,
   treemapOption,
@@ -53,9 +55,9 @@ describe("quadrantOption", () => {
 // ---------------------------------------------------------------------------
 describe("scatterOption", () => {
   const points: ScatterPoint[] = [
-    { title: "Crowd One", genre: "Action", votes: 500, rating: 3.8, gem: false },
-    { title: "Crowd Two", genre: "Puzzle", votes: 300, rating: 3.5, gem: false },
-    { title: "Gem One", genre: "Puzzle", votes: 200, rating: 4.8, gem: true },
+    { title: "Crowd One", genre: "Action", votes: 500, rating: 3.8, gem: false, votePct: null },
+    { title: "Crowd Two", genre: "Puzzle", votes: 300, rating: 3.5, gem: false, votePct: null },
+    { title: "Gem One", genre: "Puzzle", votes: 200, rating: 4.8, gem: true, votePct: null },
   ];
   const opt = scatterOption(points) as any;
 
@@ -79,6 +81,46 @@ describe("scatterOption", () => {
   it("tooltip formatter contains the game title", () => {
     const result = opt.tooltip.formatter({ value: [200, 4.8, "Gem One", "Puzzle"] });
     expect(result).toContain("Gem One");
+  });
+
+  it("All Browser plots the within-portal vote percentile on a 0–100 axis, not raw votes (#204 S4)", () => {
+    const mixed = scatterOption(
+      points.map((p, i) => ({ ...p, votes: p.votes * 100 ** i, votePct: [80, 45.5, 12][i] })),
+    ) as any;
+    expect(mixed.xAxis).toMatchObject({ type: "value", min: 0, max: 100 });
+    expect(mixed.xAxis.name).toContain("percentile");
+    expect(mixed.xAxis.axisLabel.formatter(62)).toBe("P62");
+    const gem = mixed.series.find((s: any) => s.name === "gems").data[0];
+    expect(gem.slice(0, 4)).toEqual([12, 4.8, "Gem One", "Puzzle"]);
+    const tip = mixed.tooltip.formatter({ value: gem });
+    expect(tip).toContain("P12 vote percentile within its portal");
+    expect(tip).not.toMatch(/\d votes/);
+  });
+});
+
+describe("fmtVotePct / levelName (#204 S4)", () => {
+  it("formats a percentile as a whole P-value and names the unit", () => {
+    expect(fmtVotePct(61.6)).toBe("P62");
+    expect(fmtVotePct(0)).toBe("P0");
+    expect(levelName("votePercentile", "median votes")).toBe("median vote percentile");
+    expect(levelName("votes", "median votes")).toBe("median votes");
+    expect(levelName(undefined, "median votes")).toBe("median votes");
+  });
+  it("quadrant on All Browser: linear 0–100 demand axis read as P-values", () => {
+    const opt = quadrantOption(
+      [
+        { genre: "Puzzle", supply: 20, appetite: 47, weight: 9.4, supplyTrend: "quiet" },
+        { genre: "Racing", supply: 12, appetite: 53, weight: 6.1, supplyTrend: "steady" },
+        { genre: "Word", supply: 6, appetite: 0, weight: 0, supplyTrend: "steady" },
+      ],
+      { yName: "median vote percentile", weightName: "vote-weighted titles", percentile: true },
+    ) as any;
+    expect(opt.yAxis).toMatchObject({ type: "value", min: 0, max: 100 });
+    expect(opt.yAxis.axisLabel.formatter(50)).toBe("P50");
+    expect(opt.series[0].data[2].value[1]).toBe(0); // a P0 genre is not bumped to 1
+    expect(opt.tooltip.formatter({ value: [20, 47, 9.4, "Puzzle", "quiet"] })).toContain(
+      "P47 median vote percentile",
+    );
   });
 });
 
@@ -157,6 +199,7 @@ describe("landscapeOption", () => {
       p75Rating: 4.6,
       avgRating: 4.2,
       totalVotes: 1000000,
+      voteWeight: null,
       examples: ["A", "B"],
     },
     {
@@ -165,10 +208,21 @@ describe("landscapeOption", () => {
       p75Rating: 4.1,
       avgRating: 3.8,
       totalVotes: 200000,
+      voteWeight: null,
       examples: ["C"],
     },
   ];
   const opt = landscapeOption(pts) as any;
+
+  it("All Browser: bubbles size on vote-weighted titles and the tooltip names the unit (#204 S4)", () => {
+    const mixed = landscapeOption(
+      pts.map((p, i) => ({ ...p, totalVotes: null, voteWeight: i ? 8.5 : 34 })),
+    ) as any;
+    expect(mixed.series[0].data.map((d: any) => d.value[2])).toEqual([34, 8.5]);
+    const tip = mixed.tooltip.formatter({ value: [90, 4.6, 34, "Action", ""] });
+    expect(tip).toContain("vote-weighted titles");
+    expect(tip).not.toContain("total votes");
+  });
 
   it("xAxis is log scale", () => {
     expect(opt.xAxis.type).toBe("log");

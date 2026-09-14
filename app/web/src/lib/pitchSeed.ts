@@ -24,7 +24,14 @@ function gapSeed(g: Gap, ctx: SeedContext, appetite: string | null, price?: stri
 }
 
 export const browserGapSeed = (g: MarketGap, ctx: SeedContext) =>
-  gapSeed(g, ctx, `Appetite: ${num(g.appetite)} median votes per title`);
+  gapSeed(
+    g,
+    ctx,
+    // On All Browser appetite is a within-portal percentile (#204 S4), never a pooled vote count.
+    g.appetiteUnit === "votePercentile"
+      ? `Appetite: P${Math.round(g.appetite)} median vote percentile per title (within its portal)`
+      : `Appetite: ${num(g.appetite)} median votes per title`,
+  );
 
 export function steamGapSeed(g: SteamGap, ctx: SeedContext): string {
   // Demand is median reviews (#218); owners are a coarse SteamSpy bucket, context only.
