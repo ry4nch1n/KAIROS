@@ -734,6 +734,25 @@ describe("#108 loop-family map", () => {
     for (const t of ["Open World", "Survival", "Crafting", "Souls-like", "Card Battler"])
       expect(loopFamilyFor("Action", t)).toBeNull();
   });
+
+  it("#217 a co-tag pair places a game neither tag places alone, under the same guard", () => {
+    const fam = (genre: string, tags: string[]) =>
+      q.tagSlices([{ genre, tags }]).map((s) => [s.family, s.label]);
+    // The intersection is the survivors shelf; each tag alone stays unmapped (Hades; shmups).
+    expect(fam("Action", ["Action Roguelike", "Bullet Hell", "Pixel Graphics"])).toEqual([
+      ["minimal-input-survivors", "Action × Action Roguelike + Bullet Hell"],
+    ]);
+    expect(fam("Indie", ["Action Roguelike", "Pixel Graphics"])).toEqual([]);
+    expect(fam("Action", ["Bullet Hell", "Shoot 'Em Up"])).toEqual([]);
+    for (const t of ["Action Roguelike", "Bullet Hell"])
+      expect(loopFamilyFor("Action", t)).toBeNull();
+    // A pair is one vote, not an override: another tag naming a different family ⇒ unassigned.
+    expect(fam("Action", ["Action Roguelike", "Bullet Hell", "Tower Defense"])).toEqual([]);
+    // …and it agrees with a single tag naming the same family.
+    expect(fam("Indie", ["Bullet Hell", "Survivors-like", "Action Roguelike"])).toHaveLength(1);
+    // A genre default still wins outright; the pair never pulls a defaulted genre off it.
+    expect(fam("Idle", ["Action Roguelike", "Bullet Hell"])).toEqual([["idle-tycoon", "Idle"]]);
+  });
 });
 
 describe("#108 getLoopFamilyMarket", () => {
