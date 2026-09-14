@@ -2043,6 +2043,10 @@ textarea {
 .bcardfoot {
   margin-top: auto;
   padding-top: var(--sp-2);
+  display: flex; /* source link beside "copy pitch seed" (#69); wraps at 375px */
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
 }
 .bcardfoot a {
   font-family: "Fira Code";
