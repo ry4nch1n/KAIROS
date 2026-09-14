@@ -249,31 +249,89 @@ const GEM_TRAJ_LABEL: Record<string, string> = { ...TRAJ_LABEL, new: "· no seri
 // never collapsed: no series yet is NOT a measured zero, and a measured zero is NOT a fraction
 // rounded away. Server-side `votesPerDay` is floored at 0.01 under any real gain and "rising"
 // requires a positive rate, so this can never print "0" or "no data" beside a rising chip.
-// A `window`-basis row (CrazyGames, #204) carries no votes/day: its signed engagement change stands
-// in here until the per-basis rendering lands — a placeholder, never a fake 0.
-const engagementText = (pct: number | null) =>
-  pct == null ? "—" : `${pct > 0 ? "+" : ""}${pct.toFixed(1)}%/wk`;
+// A `window`-basis row (CrazyGames, #204) carries no votes/day: it reads as the signed % change per
+// week of its recent engagement, with a true minus sign so a fall is never mistaken for a hyphen.
+const signedPct = (pct: number) =>
+  `${pct > 0 ? "+" : pct < 0 ? "−" : ""}${Math.abs(pct).toFixed(1)}%/wk`;
 export function voteRateText(
   votesPerDay: number | null,
   trajectory: Trajectory,
   engagementPctPerWeek: number | null = null,
 ): string {
   if (trajectory === "new") return "no data";
-  if (votesPerDay == null) return engagementText(engagementPctPerWeek);
+  if (votesPerDay == null)
+    return engagementPctPerWeek == null ? "no data" : signedPct(engagementPctPerWeek);
   if (!(votesPerDay > 0)) return "0";
   if (votesPerDay >= 100) return "+" + fmt(Math.round(votesPerDay));
   if (votesPerDay >= 10) return "+" + votesPerDay.toFixed(1);
   return "+" + votesPerDay.toFixed(2);
 }
+const WINDOW_NOTE =
+  "this portal's vote count covers a recent window, not all time, so this is a change in engagement, not new audience.";
 // A fraction per day is hard to feel; the same rate per week is the reading the cohort deserves.
-export const voteRateTip = (votesPerDay: number | null, trajectory: Trajectory): string =>
-  trajectory === "new"
-    ? "Fewer than two snapshots of this title — no rate measured yet, which is not the same as zero."
-    : votesPerDay == null
-      ? "This portal's vote count covers recent engagement, not a running total — shown as its change per week."
-      : votesPerDay > 0
-        ? `≈ ${(votesPerDay * 7).toFixed(votesPerDay * 7 < 10 ? 1 : 0)} votes/week — trend fitted across every snapshot in the tracked window`
-        : "Trend fitted across every snapshot in the tracked window: flat, no votes gained.";
+export function voteRateTip(
+  votesPerDay: number | null,
+  trajectory: Trajectory,
+  engagementPctPerWeek: number | null = null,
+): string {
+  if (trajectory === "new")
+    return "Fewer than two snapshots of this title — no rate measured yet, which is not the same as zero.";
+  if (votesPerDay == null) {
+    const p = engagementPctPerWeek;
+    if (p == null) return `No measurable engagement series yet — ${WINDOW_NOTE}`;
+    const move = p > 0 ? `up ${p.toFixed(1)}%` : p < 0 ? `down ${(-p).toFixed(1)}%` : "flat";
+    return `Recent engagement ${move} a week, fitted across every snapshot — ${WINDOW_NOTE}`;
+  }
+  return votesPerDay > 0
+    ? `≈ ${(votesPerDay * 7).toFixed(votesPerDay * 7 < 10 ? 1 : 0)} votes/week — trend fitted across every snapshot in the tracked window`
+    : "Trend fitted across every snapshot in the tracked window: flat, no votes gained.";
+}
+// A trend chip is a verdict, and a verdict needs three captures (the server's rule on both bases).
+// At two, the momentum figure is measured but the `plateau` beside it is only a default — shown as
+// "early read" so a −19.3%/wk never sits next to a chip that seems to call it flat.
+export const MIN_TREND_CAPTURES = 3;
+export type TrendChip = Trajectory | "early";
+export const trendChip = (trajectory: Trajectory, captures: number): TrendChip =>
+  trajectory !== "new" && captures < MIN_TREND_CAPTURES ? "early" : trajectory;
+const EARLY_TIP = "Fewer than three captures — too few for a trend.";
+// Compact portal marker for mixed-portal lists: rows on different portals carry different units.
+const PORTAL_TAG: Record<string, [string, string]> = {
+  poki: ["PK", "Poki"],
+  crazygames: ["CG", "CrazyGames"],
+};
+export const portalTag = (source: string): [string, string] =>
+  PORTAL_TAG[source] ?? [source.slice(0, 2).toUpperCase(), source];
+const MOMENTUM_TIP =
+  "How each title's attention is moving, in its portal's own unit. Where the vote count is a running total (Poki), it is votes gained per day, fitted across every snapshot — low-vote titles move in fractions, so +0.40/day is ~3 votes a week. Where the vote count covers a recent window rather than all time (CrazyGames), it is the signed % change per week in that recent engagement. The two units are never compared directly. 'no data' means too few snapshots to measure, not zero.";
+const TREND_TIP =
+  "Rising / plateau / decaying. Running-total portals compare later-half vote pace with the earlier half; recent-window portals need engagement to move by more than a small weekly margin. A trend needs three captures — 'early read' means fewer.";
+type MomentumRow = HiddenGem | NewRelease;
+function MomentumCell({ r, showPortal }: { r: MomentumRow; showPortal: boolean }) {
+  const [tag, name] = portalTag(r.source);
+  return (
+    <td
+      className="r momentum"
+      title={voteRateTip(r.votesPerDay, r.trajectory, r.engagementPctPerWeek)}
+    >
+      {showPortal && (
+        <abbr className="portal-tag" title={name}>
+          {tag}
+        </abbr>
+      )}
+      {voteRateText(r.votesPerDay, r.trajectory, r.engagementPctPerWeek)}
+    </td>
+  );
+}
+function TrendCell({ r, labels }: { r: MomentumRow; labels: Record<string, string> }) {
+  const chip = trendChip(r.trajectory, r.captures);
+  return (
+    <td>
+      <span className={"traj traj-" + chip} title={chip === "early" ? EARLY_TIP : undefined}>
+        {chip === "early" ? "early read" : labels[chip] || chip}
+      </span>
+    </td>
+  );
+}
 // Supply-side momentum (B2): new-entrant flow. "rising" = crowding (a warning, so it reads
 // hot/amber, opposite of demand where rising is good); "quiet" = open lane.
 const SUPPLY_LABEL: Record<string, string> = {
@@ -1003,7 +1061,15 @@ function TrendsView({ ov }: { ov: Overview }) {
   );
 }
 
-function GemsView({ ov, rows }: { ov: Overview; rows: HiddenGem[] | null }) {
+function GemsView({
+  ov,
+  rows,
+  platform,
+}: {
+  ov: Overview;
+  rows: HiddenGem[] | null;
+  platform: Platform;
+}) {
   return (
     <>
       <div className="card">
@@ -1031,12 +1097,12 @@ function GemsView({ ov, rows }: { ov: Overview; rows: HiddenGem[] | null }) {
                   <Tip text="Days since KAIROS first crawled this title — discovery age, NOT a release date (browser portals don't publish one). A title seen last month and one seen two years ago mean opposite things at the same rating." />
                 </th>
                 <th className="r">
-                  Votes/day
-                  <Tip text="Votes gained per day, as the trend fitted across every snapshot in the tracked window (so one recounted snapshot can't zero it) — separates a game being found late from one that stopped being found. These are low-vote titles by definition, so the rate is fractional: +0.40/day is ~3 votes a week, and a real signal. 'no data' means too few snapshots to measure, not zero." />
+                  Momentum
+                  <Tip text={MOMENTUM_TIP} />
                 </th>
                 <th>
                   Trend
-                  <Tip text="Later-half momentum vs earlier-half: rising / plateau / decaying. Flat means quality alone is not pulling players in." />
+                  <Tip text={`${TREND_TIP} Flat means quality alone is not pulling players in.`} />
                 </th>
               </tr>
             </thead>
@@ -1050,14 +1116,8 @@ function GemsView({ ov, rows }: { ov: Overview; rows: HiddenGem[] | null }) {
                   </td>
                   <td className="r">{fmt(r.votes)}</td>
                   <td className="r">{r.daysTracked > 0 ? r.daysTracked + "d" : "<1d"}</td>
-                  <td className="r" title={voteRateTip(r.votesPerDay, r.trajectory)}>
-                    {voteRateText(r.votesPerDay, r.trajectory, r.engagementPctPerWeek)}
-                  </td>
-                  <td>
-                    <span className={"traj traj-" + r.trajectory}>
-                      {GEM_TRAJ_LABEL[r.trajectory] || r.trajectory}
-                    </span>
-                  </td>
+                  <MomentumCell r={r} showPortal={platform === "all"} />
+                  <TrendCell r={r} labels={GEM_TRAJ_LABEL} />
                 </tr>
               ))}
             </tbody>
@@ -1068,7 +1128,7 @@ function GemsView({ ov, rows }: { ov: Overview; rows: HiddenGem[] | null }) {
   );
 }
 
-function NewReleasesView({ rows }: { rows: NewRelease[] }) {
+function NewReleasesView({ rows, platform }: { rows: NewRelease[]; platform: Platform }) {
   return (
     <div className="card">
       {head(
@@ -1083,15 +1143,15 @@ function NewReleasesView({ rows }: { rows: NewRelease[] }) {
             <th>Genre</th>
             <th className="r">Rating</th>
             <th className="r">Votes</th>
-            <th
-              className="r"
-              title="Votes gained per day over the tracked window — a rocket and a dead evergreen with equal total votes read differently here"
-            >
-              Votes/day
+            <th className="r">
+              Momentum
+              <Tip
+                text={`${MOMENTUM_TIP} A rocket and a dead evergreen with equal total votes read differently here.`}
+              />
             </th>
             <th>
               Trend
-              <Tip text="Later-half momentum vs earlier-half: rising / plateau / decaying" />
+              <Tip text={TREND_TIP} />
             </th>
           </tr>
         </thead>
@@ -1106,14 +1166,8 @@ function NewReleasesView({ rows }: { rows: NewRelease[] }) {
               <td>{r.genre}</td>
               <td className="r">{r.rating ? r.rating.toFixed(2) : "—"}</td>
               <td className="r">{fmt(r.votes)}</td>
-              <td className="r" title={voteRateTip(r.votesPerDay, r.trajectory)}>
-                {voteRateText(r.votesPerDay, r.trajectory, r.engagementPctPerWeek)}
-              </td>
-              <td>
-                <span className={"traj traj-" + r.trajectory}>
-                  {TRAJ_LABEL[r.trajectory] || r.trajectory}
-                </span>
-              </td>
+              <MomentumCell r={r} showPortal={platform === "all"} />
+              <TrendCell r={r} labels={TRAJ_LABEL} />
             </tr>
           ))}
         </tbody>
@@ -2529,8 +2583,10 @@ export function Radar({
               {view === "developers" &&
                 (extra ? <DevelopersView rows={extra} platform={platform} /> : <Skel />)}
               {view === "trends" && (ov ? <TrendsView ov={ov} /> : <Skel />)}
-              {view === "hidden-gems" && (ov ? <GemsView ov={ov} rows={extra} /> : <Skel />)}
-              {view === "new-releases" && (extra ? <NewReleasesView rows={extra} /> : <Skel />)}
+              {view === "hidden-gems" &&
+                (ov ? <GemsView ov={ov} rows={extra} platform={platform} /> : <Skel />)}
+              {view === "new-releases" &&
+                (extra ? <NewReleasesView rows={extra} platform={platform} /> : <Skel />)}
               {view === "market-gaps" &&
                 (ov ? (
                   <>

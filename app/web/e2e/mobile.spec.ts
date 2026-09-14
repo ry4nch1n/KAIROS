@@ -159,6 +159,24 @@ test.describe("mobile — layout fits at 375px", () => {
     });
   }
 
+  // #204 S2: on All Browser each momentum cell carries a portal marker (units differ per portal),
+  // which widens the column. The table may scroll in its box; the page must not.
+  test("browser Hidden Gems and New Releases on All Browser fit (portal markers)", async ({
+    page,
+  }) => {
+    await page.goto("/");
+    await page.getByRole("tab", { name: "All Browser", exact: true }).click();
+    for (const view of ["Hidden Gems", "New Releases"]) {
+      await page.locator(`${panel("radar")} .nav-toggle`).click();
+      await page.locator(`${panel("radar")} .nav-item`, { hasText: view }).click();
+      await expect(page.locator(`${panel("radar")} .dtable`).last()).toBeVisible({
+        timeout: 15_000,
+      });
+      await settle(page);
+      await assertFits(page, panel("radar"), `radar/all/${view}`);
+    }
+  });
+
   test("a wide Radar data table scrolls in-container, not the page", async ({ page }) => {
     await page.goto("/");
     // On mobile the sub-nav lives in a drawer — open it, jump to a table-heavy view.

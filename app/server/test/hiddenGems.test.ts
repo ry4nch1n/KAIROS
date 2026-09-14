@@ -497,3 +497,42 @@ describe("H7 Hidden Gems and New Releases carry each row's source, basis and uni
     expect(gem?.meta).toBe("3 found · 1 still climbing");
   });
 });
+
+describe("H8 rows carry their capture count, and the insight speaks each basis's unit (#204 S2)", () => {
+  it("captures counts distinct capture instants for both portals, 0/1 where no trend is possible", async () => {
+    const db = await freshMemoryDb();
+    await seedPortals(db);
+    const cg = await getHiddenGems(db, "crazygames");
+    const by = (t: string) => cg.find((g) => g.title === t);
+    expect(by("CgFading")?.captures).toBe(4);
+    expect(by("CgClimbing")?.captures).toBe(4);
+    // Two captures: a measured %/wk beside a default plateau — the case the Radar reads as early.
+    expect(by("CgTwoCaps")).toMatchObject({ captures: 2, trajectory: "plateau" });
+    expect((await getHiddenGems(db, "poki")).find((g) => g.title === "PkGem")?.captures).toBe(3);
+    const nr = await getNewReleases(db, "all");
+    expect(nr.find((r) => r.title === "CgClimbing")?.captures).toBe(4);
+    expect(nr.find((r) => r.title === "PkGem")?.captures).toBe(3);
+    expect(nr.find((r) => r.title === "crazygamesCrowd0")).toMatchObject({
+      captures: 1,
+      trajectory: "new",
+    });
+    // Invariant the render relies on: a non-new trajectory always has at least two captures.
+    for (const r of [...cg, ...nr])
+      if (r.trajectory !== "new") expect(r.captures).toBeGreaterThan(1);
+  });
+  it("a window-only list says engagement, a cumulative-only list says votes, a mixed list says both", async () => {
+    const db = await freshMemoryDb();
+    await seedPortals(db);
+    const text = async (p: "crazygames" | "poki" | "all") =>
+      (await getInsights(db, p)).find((i) => i.kind === "gem")?.text ?? "";
+    const cg = await text("crazygames");
+    expect(cg).toMatch(/still show growing recent engagement, the rest are flat or fading/);
+    expect(cg).not.toMatch(/gaining votes/);
+    expect(await text("poki")).toMatch(/are still gaining votes, the rest have stalled/);
+    const gems = await getHiddenGems(db, "all");
+    expect(new Set(gems.map((g) => g.voteBasis)).size).toBe(2);
+    expect(await text("all")).toMatch(
+      /still climbing \(\d+ gaining votes, \d+ with growing recent engagement\)/,
+    );
+  });
+});
