@@ -186,7 +186,13 @@ export const CONTRACT = {
   //      with #195 (a `…playing card…` flag claiming the tag "Can't stop playing" on the bare
   //      word `playing`) — a raised weight is exactly what turns that into a visible wrong
   //      promotion under a chip asserting the move was intentional.
-  version: 28,
+  // v29: the Steam opportunity ranking scores demand on median REVIEWS, not median owners (#218) —
+  //      the same expression tag economics adopted under #89. owners_est is a SteamSpy bucket
+  //      midpoint: live 2026-09-11, ranks 1–2 both read 15,000,000, five of eight rows sat on two
+  //      bucket values, and demand z took three values. `SteamGap` gained `medianVotes` (the scored
+  //      term); `medianOwners` stays as context. Additive shape + a semantics change to
+  //      `components.demand`; read defensively.
+  version: 29,
   pitch: {
     // v2: added visual-card fields — setting, artStyle, codeName, headerUrl, shotUrl.
     // v3: rating rework — scoreFields d1Fit/steamCeiling/buildCost → browserFit/steamFit/buildEase.

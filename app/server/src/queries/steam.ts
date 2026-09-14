@@ -69,7 +69,7 @@ export function composeSteamRead(args: {
   const top = args.opportunity[0];
   if (top) {
     lines.push(
-      `<b>${top.label}</b> is the top Steam opportunity — ${top.medianOwners.toLocaleString("en-US")} median owners across ${top.supplyN} games at $${(top.medianPriceCents / 100).toFixed(2)} median. → Premium-shaped demand: a Route 1 (demo-funnel) candidate.`,
+      `<b>${top.label}</b> is the top Steam opportunity — ${top.medianVotes.toLocaleString("en-US")} median reviews (≈${top.medianOwners.toLocaleString("en-US")} owners) across ${top.supplyN} games at $${(top.medianPriceCents / 100).toFixed(2)} median. → Premium-shaped demand: a Route 1 (demo-funnel) candidate.`,
     );
   }
   const econ = args.indie.filter((r) => r.games >= 3 && r.medianRevenuePerGame > 0);
@@ -905,6 +905,9 @@ export const OPPORTUNITY_TOP_N = 8;
 // Steam opportunity, FULL ranked candidate set — every genre×tag that cleared the supply floor,
 // steered and sorted but not cut. `getSteamOpportunity` is this list's top slice; the steering
 // lens needs the rest, because a market steering lifted can still land below the cut (#167).
+// Demand is median REVIEWS — the exact expression tag economics uses (#89) — not median owners
+// (#218): owners_est is a SteamSpy bucket midpoint, so cells tied on one bucket value and demand z
+// took three values across the whole shown list. Median owners stays on the row as context only.
 export async function rankSteamOpportunity(db: Querier): Promise<SteamGap[]> {
   const supply = await genreSupplyTrend(db, "steam");
   // Standing flags add a visible score term BEFORE the sort and the top-8 cut (#12b), so
@@ -914,7 +917,8 @@ export async function rankSteamOpportunity(db: Querier): Promise<SteamGap[]> {
     db.query(
       `SELECT ${canonSql("l.genre")} AS genre, ${canonSql("t.name")} AS tag,
               count(DISTINCT g.id)::int AS supply_n,
-              percentile_cont(0.5) WITHIN GROUP (ORDER BY l.owners_est)::float AS demand,
+              percentile_cont(0.5) WITHIN GROUP (ORDER BY coalesce(l.votes, 0))::float AS demand,
+              percentile_cont(0.5) WITHIN GROUP (ORDER BY l.owners_est)::float AS med_owners,
               percentile_cont(0.9) WITHIN GROUP (ORDER BY l.rating)::float AS quality,
               percentile_cont(0.5) WITHIN GROUP (ORDER BY l.price_cents)::float AS med_price
        FROM v_latest l JOIN games g ON g.id = l.game_id JOIN sources src ON src.id = g.source_id
@@ -943,7 +947,8 @@ export async function rankSteamOpportunity(db: Querier): Promise<SteamGap[]> {
     genre: r.genre,
     tag: r.tag,
     supplyN: num(r.supply_n),
-    medianOwners: Math.round(num(r.demand)),
+    medianVotes: Math.round(num(r.demand)),
+    medianOwners: Math.round(num(r.med_owners)),
     qualityCeil: +num(r.quality).toFixed(2),
     medianPriceCents: Math.round(num(r.med_price)),
     score: +(zDem(num(r.demand)) + zQual(num(r.quality)) - zSup(num(r.supply_n))).toFixed(2),

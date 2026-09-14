@@ -21,6 +21,7 @@ const gap = (genre: string, tag: string, score: number): SteamGap => ({
   genre,
   tag,
   supplyN: 4,
+  medianVotes: 500,
   medianOwners: 20000,
   qualityCeil: 4.2,
   medianPriceCents: 999,
