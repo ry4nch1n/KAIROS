@@ -51,6 +51,8 @@ import {
   tierBarOption,
 } from "../components/charts.ts";
 import { InsightSvg, tagClass } from "../components/icons.tsx";
+import { CopySeed } from "../components/CopySeed.tsx";
+import { browserGapSeed, steamGapSeed, today } from "../lib/pitchSeed.ts";
 
 const fmt = (n: number) => n.toLocaleString("en-US");
 const MIN_TREND_DAYS = 5;
@@ -330,9 +332,11 @@ function QuadrantCard({
 /* ───────────── views ───────────── */
 function OverviewView({
   ov,
+  source,
   onComparables,
 }: {
   ov: Overview;
+  source: string;
   onComparables?: (f: ComparablesFilter) => void;
 }) {
   return (
@@ -410,7 +414,12 @@ function OverviewView({
         </div>
         <div className="card">
           {head(I.gaps, "Top market gaps", "appetite × quality × supply")}
-          <GapList gaps={ov.gaps} lens={ov.steering} onComparables={onComparables} />
+          <GapList
+            gaps={ov.gaps}
+            lens={ov.steering}
+            source={source}
+            onComparables={onComparables}
+          />
         </div>
       </div>
       <div className="card">
@@ -534,27 +543,31 @@ export function matchesComparablesFilter(c: SteamComparable, f: ComparablesFilte
 const COMPARABLES_TIP =
   "Open the indie comparables for this market's genre — the realistic peer set that sets its ceiling. Comparables are Steam-only, so this also switches the platform.";
 
-// The cross-link a gap row earns. Its own wrapping strip rather than a bare button, because
-// the row is a flex line and a 375px screen has to stack this under the stats, not push it off
-// the side — and because the sibling "copy pitch seed" affordance lands here next (#69).
+// The actions a gap row earns (#69): the comparables jump and "copy pitch seed". Their own
+// wrapping strip rather than bare buttons, because the row is a flex line and a 375px screen has
+// to stack this under the stats, not push it off the side.
 function GapActions({
   filter,
+  seed,
   onComparables,
 }: {
   filter: ComparablesFilter;
+  seed: () => string;
   onComparables?: (f: ComparablesFilter) => void;
 }) {
-  if (!onComparables) return null;
   return (
     <div className="gap-actions">
-      <button
-        type="button"
-        className="project-btn"
-        title={COMPARABLES_TIP}
-        onClick={() => onComparables(filter)}
-      >
-        → comparables
-      </button>
+      {onComparables && (
+        <button
+          type="button"
+          className="project-btn"
+          title={COMPARABLES_TIP}
+          onClick={() => onComparables(filter)}
+        >
+          → comparables
+        </button>
+      )}
+      <CopySeed seed={seed} />
     </div>
   );
 }
@@ -562,10 +575,12 @@ function GapActions({
 function GapList({
   gaps,
   lens,
+  source,
   onComparables,
 }: {
   gaps: Overview["gaps"];
   lens?: SteeringLens;
+  source: string; // the platform the rows were read on — named in the copied seed
   onComparables?: (f: ComparablesFilter) => void;
 }) {
   const note = steeringNote(lens);
@@ -609,6 +624,7 @@ function GapList({
           </div>
           <GapActions
             filter={{ genre: g.genre, tag: g.tag, from: "browser" }}
+            seed={() => browserGapSeed(g, { source, captured: today() })}
             onComparables={onComparables}
           />
           {g.examples?.length ? (
@@ -1345,6 +1361,7 @@ function OppList({
           </div>
           <GapActions
             filter={{ genre: g.genre, tag: g.tag, from: "steam" }}
+            seed={() => steamGapSeed(g, { source: "Steam indie cohort", captured: today() })}
             onComparables={onComparables}
           />
           {g.examples?.length ? (
@@ -2304,6 +2321,8 @@ export function Radar({
   // which also discarded whichever panel and section the user was on.
   const [reloadNonce, setReloadNonce] = useState(0);
   const isSteam = platform === "steam";
+  const platformLabel =
+    PLATFORM_GROUPS.flatMap((g) => g.items).find((i) => i.id === platform)?.label ?? platform;
 
   useEffect(() => {
     let on = true;
@@ -2489,7 +2508,11 @@ export function Radar({
           ) : (
             <>
               {view === "overview" &&
-                (ov ? <OverviewView ov={ov} onComparables={jumpToComparables} /> : <Skel />)}
+                (ov ? (
+                  <OverviewView ov={ov} source={platformLabel} onComparables={jumpToComparables} />
+                ) : (
+                  <Skel />
+                ))}
               {view === "genres" && (extra ? <GenresView rows={extra} /> : <Skel />)}
               {view === "tags" && (ov ? <TagsView ov={ov} /> : <Skel />)}
               {view === "developers" &&
@@ -2505,6 +2528,7 @@ export function Radar({
                       <GapList
                         gaps={ov.gaps}
                         lens={ov.steering}
+                        source={platformLabel}
                         onComparables={jumpToComparables}
                       />
                     </div>

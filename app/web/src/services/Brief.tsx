@@ -14,6 +14,8 @@ import { api } from "../lib/api.ts";
 import { isSameWeek } from "../lib/week.ts";
 import { rowSummary } from "../lib/briefTracker.ts";
 import { cardImage, groupBrowserCards, topSignal } from "../lib/briefCards.ts";
+import { briefSeed } from "../lib/pitchSeed.ts";
+import { CopySeed } from "../components/CopySeed.tsx";
 
 function fmt(date: string): string {
   return new Date(date + "T00:00:00Z").toLocaleDateString("en-US", {
@@ -91,7 +93,15 @@ function platformOf(it: BriefNotable) {
   return { label: it.kind || "Browser", cls: "pf-web", icon: MARK.globe };
 }
 
-function RichCard({ item, kind }: { item: BriefNotable; kind: "notable" | "browser" }) {
+function RichCard({
+  item,
+  kind,
+  edition,
+}: {
+  item: BriefNotable;
+  kind: "notable" | "browser";
+  edition: BriefEdition;
+}) {
   const [err, setErr] = useState(false);
   const img = cardImage(item, kind);
   const badge = kind === "notable" ? item.category : item.kind;
@@ -132,13 +142,14 @@ function RichCard({ item, kind }: { item: BriefNotable; kind: "notable" | "brows
         {meta && <div className="bmeta">{meta}</div>}
         {item.blurb && <p className="bblurb">{item.blurb}</p>}
         {item.relevance && <p className="brel">{item.relevance}</p>}
-        {item.source && (
-          <div className="bcardfoot">
+        <div className="bcardfoot">
+          {item.source && (
             <a href={item.source} target="_blank" rel="noreferrer">
               source ↗
             </a>
-          </div>
-        )}
+          )}
+          <CopySeed seed={() => briefSeed(item, edition)} />
+        </div>
       </div>
     </article>
   );
@@ -383,7 +394,7 @@ export function Brief({ hidden, onGoto }: { hidden: boolean; onGoto?: (svc: Serv
                   </div>
                   <div className="bcard-grid">
                     {p.new_notable.map((n, i) => (
-                      <RichCard key={i} item={n} kind="notable" />
+                      <RichCard key={i} item={n} kind="notable" edition={ed!} />
                     ))}
                   </div>
                 </>
@@ -405,7 +416,7 @@ export function Brief({ hidden, onGoto }: { hidden: boolean; onGoto?: (svc: Serv
                       </div>
                       <div className="bcard-grid">
                         {g.items.map((n, i) => (
-                          <RichCard key={i} item={n} kind="browser" />
+                          <RichCard key={i} item={n} kind="browser" edition={ed!} />
                         ))}
                       </div>
                     </Fragment>
