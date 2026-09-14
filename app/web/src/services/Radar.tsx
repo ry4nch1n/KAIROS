@@ -259,8 +259,8 @@ export const voteRateTip = (votesPerDay: number, trajectory: Trajectory): string
   trajectory === "new"
     ? "Fewer than two snapshots of this title — no rate measured yet, which is not the same as zero."
     : votesPerDay > 0
-      ? `≈ ${(votesPerDay * 7).toFixed(votesPerDay * 7 < 10 ? 1 : 0)} votes/week over the tracked window`
-      : "Measured over the tracked window: no votes gained.";
+      ? `≈ ${(votesPerDay * 7).toFixed(votesPerDay * 7 < 10 ? 1 : 0)} votes/week — trend fitted across every snapshot in the tracked window`
+      : "Trend fitted across every snapshot in the tracked window: flat, no votes gained.";
 // Supply-side momentum (B2): new-entrant flow. "rising" = crowding (a warning, so it reads
 // hot/amber, opposite of demand where rising is good); "quiet" = open lane.
 const SUPPLY_LABEL: Record<string, string> = {
@@ -1005,7 +1005,7 @@ function GemsView({ ov, rows }: { ov: Overview; rows: HiddenGem[] | null }) {
                 </th>
                 <th className="r">
                   Votes/day
-                  <Tip text="Votes gained per day over the tracked window — separates a game being found late from one that stopped being found. These are low-vote titles by definition, so the rate is fractional: +0.40/day is ~3 votes a week, and a real signal. 'no data' means too few snapshots to measure, not zero." />
+                  <Tip text="Votes gained per day, as the trend fitted across every snapshot in the tracked window (so one recounted snapshot can't zero it) — separates a game being found late from one that stopped being found. These are low-vote titles by definition, so the rate is fractional: +0.40/day is ~3 votes a week, and a real signal. 'no data' means too few snapshots to measure, not zero." />
                 </th>
                 <th>
                   Trend

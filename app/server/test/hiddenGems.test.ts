@@ -142,6 +142,20 @@ async function seedDiscovery(db: Querier) {
     ],
     60,
   );
+  // #204: the portal revised its first count down (103 → 100), then the gem climbed back.
+  // Last − first nets the whole window to 0; every capture in between says it is gaining.
+  await add(
+    "Revised",
+    4.9,
+    [
+      [12, 103],
+      [9, 100],
+      [6, 101],
+      [3, 102],
+      [0, 103],
+    ],
+    60,
+  );
 }
 
 describe("H3 getHiddenGems annotates discovery age and vote momentum (#176)", () => {
@@ -197,5 +211,57 @@ describe("H4 the discovery rate survives the low-vote cohort it was built for (#
     expect(dipped.trajectory).not.toBe("rising");
     // High-traffic rows are unchanged in the reading that matters: still whole-number scale.
     expect(classifyTrajectory([100, 20000, 167000], 14).votesPerDay).toBeGreaterThan(1000);
+  });
+});
+
+describe("H5 the discovery rate is a least-squares slope, not two endpoints (#204)", () => {
+  it("a downward portal revision no longer nets a gaining window to 0", () => {
+    // Net delta 103 − 103 = 0 was the old reading; the fit over all five points is +0.2/day.
+    const r = classifyTrajectory([103, 100, 101, 102, 103], 4);
+    expect(r.votesPerDay).toBeCloseTo(0.2, 6);
+    expect(r.trajectory).toBe("rising");
+  });
+  it("the seeded revised gem reports a positive rate end to end", async () => {
+    const db = await freshMemoryDb();
+    await seedDiscovery(db);
+    const revised = (await getHiddenGems(db, "poki")).find((g) => g.title === "Revised");
+    expect(revised, "Revised must qualify as a gem").toBeTruthy();
+    // 0.2 votes per 3-day capture step = 1/15 per day.
+    expect(revised!.votesPerDay).toBeCloseTo(0.07, 6);
+    expect(revised!.trajectory).toBe("rising");
+  });
+  it("a flat series reads 0 and plateau", () => {
+    expect(classifyTrajectory([50, 50, 50, 50], 9)).toEqual({
+      votesPerDay: 0,
+      trajectory: "plateau",
+    });
+  });
+  it("fewer than two usable points is 'new' (no data), never a measured rate", () => {
+    expect(classifyTrajectory([500], 5)).toEqual({ votesPerDay: 0, trajectory: "new" });
+    expect(classifyTrajectory([Number.NaN, 500], 5).trajectory).toBe("new");
+    expect(classifyTrajectory([500, 510], 3, [2, 2]).trajectory).toBe("new"); // no time span
+  });
+  it("uses real capture instants when given, so an uneven cadence can't bend the slope", () => {
+    // t = 0, 1, 11 days: fit = 70 / 74 votes/day (evenly spaced would read 10 / 11).
+    expect(classifyTrajectory([100, 100, 110], 11, [0, 1, 11]).votesPerDay).toBeCloseTo(0.95, 6);
+  });
+  it("a rising chip never sits beside a flat or falling rate, across noisy series", () => {
+    let seed = 204;
+    const rnd = () => {
+      seed = (seed * 16807) % 2147483647; // Park–Miller: deterministic, exact in doubles
+      return seed / 2147483647;
+    };
+    for (let k = 0; k < 500; k++) {
+      const len = 2 + Math.floor(rnd() * 7);
+      const series: number[] = [];
+      let v = 100;
+      for (let i = 0; i < len; i++) {
+        v += Math.round((rnd() - 0.45) * 6);
+        series.push(v);
+      }
+      const r = classifyTrajectory(series, len * 2);
+      if (r.trajectory === "rising") expect(r.votesPerDay).toBeGreaterThan(0);
+      expect(r.votesPerDay).toBeGreaterThanOrEqual(0);
+    }
   });
 });
