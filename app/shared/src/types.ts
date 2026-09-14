@@ -430,6 +430,8 @@ export interface BriefEditionMeta {
   editionDate: string; // ISO date
   weekday: string; // "mon" | "thu"
   briefType: string;
+  // Distinct cited hosts (www-stripped) across the payload's source links (#181); derived from
+  // the payload when the publisher omits it. 0 = no sources, or a gap row.
   sourceCount: number;
   // Set on a DERIVED gap row (#180): a slot the inferred cadence expected and that never
   // published. A list of the editions that exist cannot show the edition that does not, so

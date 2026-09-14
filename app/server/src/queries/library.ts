@@ -134,6 +134,58 @@ export async function getBriefEditions(db: Querier, now?: Date): Promise<BriefEd
   );
 }
 
+// Source count (#181): the number of DISTINCT HOSTS cited by an edition — not the number of
+// links, so five Steam pages count once. Derived from the payload because the publisher never
+// sent it, which left every live edition reading 0 and the "N sources" chip permanently hidden.
+// Object fields contribute their `source`; free-text fields (plain-string Top Signals, the
+// reference shelf) contribute any URLs written inline. Missing or unparseable URLs are ignored.
+const URL_IN_TEXT = /https?:\/\/[^\s<>"')\]]+/g;
+export function briefSourceCount(payload: unknown): number {
+  const p = (payload ?? {}) as Record<string, any>;
+  const hosts = new Set<string>();
+  const addUrl = (u: unknown) => {
+    if (typeof u !== "string" || !u) return;
+    try {
+      const { protocol, hostname } = new URL(u);
+      if ((protocol === "http:" || protocol === "https:") && hostname)
+        hosts.add(hostname.toLowerCase().replace(/^www\./, ""));
+    } catch {
+      /* not a URL — ignore */
+    }
+  };
+  const addText = (t: unknown) => {
+    if (typeof t === "string") for (const m of t.match(URL_IN_TEXT) ?? []) addUrl(m);
+  };
+  const items = (x: unknown): any[] => (Array.isArray(x) ? x : []);
+  for (const it of [...items(p.market), ...items(p.browser), ...items(p.new_notable)])
+    addUrl(it?.source);
+  for (const it of items(p.tooling?.items)) addUrl(it?.source);
+  for (const s of items(p.top_signals)) typeof s === "string" ? addText(s) : addUrl(s?.source);
+  addText(p.reference_shelf);
+  return hosts.size;
+}
+
+// An explicit positive count is authoritative; a stored 0/null is "never computed", so derive.
+const resolveSourceCount = (stored: unknown, payload: unknown) =>
+  num(stored) > 0 ? num(stored) : briefSourceCount(payload);
+
+// Idempotent backfill for editions stored before #181 (run by db:migrate, which the nightly
+// crawl already executes first). Touches only rows still at null/0 whose payload yields hosts.
+export async function backfillBriefSourceCounts(db: Querier): Promise<number> {
+  const rows = await db.query(
+    `SELECT id, payload FROM brief_editions WHERE source_count IS NULL OR source_count = 0`,
+  );
+  let updated = 0;
+  for (const r of rows) {
+    const n = briefSourceCount(parsePayload(r.payload));
+    if (n > 0) {
+      await db.query(`UPDATE brief_editions SET source_count = $1 WHERE id = $2`, [n, r.id]);
+      updated++;
+    }
+  }
+  return updated;
+}
+
 export interface PublishInput {
   editionDate: string;
   weekday?: string;
@@ -163,7 +215,8 @@ export async function publishEdition(db: Querier, e: PublishInput): Promise<void
       JSON.stringify(e.payload),
       e.renderedHtml ?? null,
       e.localPath ?? null,
-      e.sourceCount ?? null,
+      // Explicit count overrides; absent → derived from the payload (#181).
+      e.sourceCount ?? briefSourceCount(e.payload),
     ],
   );
 }
@@ -231,7 +284,7 @@ export async function getBriefEdition(
         : new Date(r.edition_date).toISOString().slice(0, 10),
     weekday: r.weekday,
     briefType: r.brief_type,
-    sourceCount: num(r.source_count),
+    sourceCount: resolveSourceCount(r.source_count, payload),
     payload,
   };
 }
