@@ -435,7 +435,9 @@ async function voteMomentum(
       out.set(id, { votesPerDay: 0, trajectory: "new" });
       continue;
     }
-    out.set(id, classifyTrajectory(g.v, (g.t[g.t.length - 1] - g.t[0]) / 86400000));
+    // Real capture instants, so an uneven crawl cadence can't bend the fitted slope (#204).
+    const days = g.t.map((t) => (t - g.t[0]) / 86400000);
+    out.set(id, classifyTrajectory(g.v, days[days.length - 1], days));
   }
   return out;
 }
@@ -889,8 +891,8 @@ export async function getNewReleases(db: Querier, platform: Platform): Promise<N
   const momentum = (id: number): { votesPerDay: number; trajectory: Trajectory } => {
     const g = byId.get(id);
     if (!g || g.v.length < 2) return { votesPerDay: 0, trajectory: "new" };
-    const daySpan = (g.t[g.t.length - 1] - g.t[0]) / 86400000;
-    return classifyTrajectory(g.v, daySpan);
+    const days = g.t.map((t) => (t - g.t[0]) / 86400000);
+    return classifyTrajectory(g.v, days[days.length - 1], days);
   };
   return rows.map((r) => ({
     gameId: num(r.id),

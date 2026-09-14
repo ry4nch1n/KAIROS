@@ -87,22 +87,48 @@ function voteRate(raw: number): number {
  * a corpse gains ~0 votes/day now, a rocket gains thousands. Trajectory compares the
  * later half of the window to the earlier half so a title that spiked then stalled
  * reads "decaying", not "rising".
+ *
+ * The rate is the LEAST-SQUARES SLOPE over every point, not `(last − first) / span` (#204).
+ * Browser portals revise cumulative counts downward, and the two-endpoint read let one
+ * revision at either end net a whole window of gains out to exactly 0 — 28 of 30 live Hidden
+ * Gems. A fit weighs every capture, so one noisy endpoint moves the rate instead of erasing it.
+ * `times` (days, any origin, parallel to `series`) carries the real capture instants; without
+ * it the points are taken as evenly spaced across `daySpan`.
  */
 export function classifyTrajectory(
   series: number[],
   daySpan: number,
+  times?: number[],
 ): { votesPerDay: number; trajectory: Trajectory } {
-  const pts = series.filter((v) => Number.isFinite(v));
-  if (pts.length < 2 || daySpan <= 0) return { votesPerDay: 0, trajectory: "new" };
-  const votesPerDay = voteRate((pts[pts.length - 1] - pts[0]) / daySpan);
-  if (pts.length < 3) return { votesPerDay, trajectory: "plateau" };
-  const mid = Math.floor(pts.length / 2);
-  const early = (pts[mid] - pts[0]) / Math.max(1, mid);
-  const late = (pts[pts.length - 1] - pts[mid]) / Math.max(1, pts.length - 1 - mid);
+  const step = series.length > 1 ? daySpan / (series.length - 1) : 0;
+  const pts: { t: number; v: number }[] = [];
+  series.forEach((v, i) => {
+    const t = times ? times[i] : i * step;
+    if (Number.isFinite(v) && Number.isFinite(t)) pts.push({ t, v });
+  });
+  const n = pts.length;
+  if (n < 2 || daySpan <= 0 || pts[n - 1].t - pts[0].t <= 0)
+    return { votesPerDay: 0, trajectory: "new" };
+  const tm = pts.reduce((s, p) => s + p.t, 0) / n;
+  const vm = pts.reduce((s, p) => s + p.v, 0) / n;
+  let cov = 0;
+  let varT = 0;
+  for (const p of pts) {
+    cov += (p.t - tm) * (p.v - vm);
+    varT += (p.t - tm) ** 2;
+  }
+  const votesPerDay = voteRate(cov / varT);
+  if (n < 3) return { votesPerDay, trajectory: "plateau" };
+  const mid = Math.floor(n / 2);
+  const rate = (a: number, b: number) => {
+    const dt = pts[b].t - pts[a].t;
+    return dt > 0 ? (pts[b].v - pts[a].v) / dt : 0;
+  };
+  const early = rate(0, mid);
+  const late = rate(mid, n - 1);
   let trajectory: Trajectory = "plateau";
-  // "rising" needs the reported rate to agree with the half-over-half read (#192): a portal
-  // recount can drop cumulative votes mid-window, which left `late > early` sitting beside a
-  // net gain of zero — the chip and the number contradicting each other, by construction.
+  // "rising" needs the reported rate to agree with the half-over-half read (#192): the chip may
+  // never sit beside a flat or falling fitted rate, whatever the halves say.
   if (late > early * 1.25 && late > 0 && votesPerDay > 0) trajectory = "rising";
   else if (late < early * 0.5) trajectory = "decaying";
   return { votesPerDay, trajectory };

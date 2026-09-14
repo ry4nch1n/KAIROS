@@ -310,7 +310,9 @@ export interface HiddenGem {
   // the low-vote cohort by construction, so a genuinely climbing gem moves ~0.4 votes/day and
   // integer rounding reported it as 0 (#192). A `rising` row therefore always carries a
   // positive rate; a rate of 0 means measured-and-flat, and `trajectory: "new"` means no
-  // series yet — never confuse the two.
+  // series yet — never confuse the two. The rate is the least-squares slope over every
+  // non-null-vote capture (#204), so a downward portal revision at either end of the window
+  // shifts it rather than netting a gaining gem to 0.
   daysTracked: number;
   votesPerDay: number;
   trajectory: Trajectory;
