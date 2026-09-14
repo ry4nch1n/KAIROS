@@ -108,6 +108,80 @@ export async function browserVoteSeries(db: Querier, ids?: number[]): Promise<Vo
   }));
 }
 
+/**
+ * Capture-to-capture step profile per portal and title size (#204). A falling count has two very
+ * different shapes, and they call for different fixes:
+ *   · a ROLLING WINDOW — down steps are routine at every size, and each is small and steady, because
+ *     old votes age out continuously;
+ *   · a LIFETIME count with purges — down steps are rare, and each one is a large step change.
+ * Size buckets use the title's peak count, so a small title's noise can't hide a large one's shape.
+ */
+export interface VoteStepProfile {
+  source: string;
+  size: string; // peak-votes bucket
+  up: number;
+  down: number;
+  flat: number;
+  medianDownPct: number | null; // median relative size of a down step, as a positive percent
+  medianUpPct: number | null;
+  medianGapDays: number | null; // median days between consecutive captures
+}
+
+export async function browserVoteSteps(db: Querier): Promise<VoteStepProfile[]> {
+  const rows = await db.query(
+    `WITH s AS (
+       SELECT g.id AS id, src.name AS source, gs.captured_at AS t, max(gs.votes)::float AS v
+       FROM game_snapshots gs
+       JOIN games g ON g.id = gs.game_id
+       JOIN sources src ON src.id = g.source_id
+       WHERE gs.votes IS NOT NULL AND g.is_live AND src.name <> 'steam'
+       GROUP BY g.id, src.name, gs.captured_at
+     ), steps AS (
+       SELECT id, source, v,
+              lag(v) OVER w AS pv,
+              extract(epoch FROM (t - lag(t) OVER w))::float / 86400 AS dt,
+              max(v) OVER (PARTITION BY id) AS peak
+       FROM s WINDOW w AS (PARTITION BY id ORDER BY t)
+     )
+     SELECT source,
+            CASE WHEN peak < 1000 THEN '<1k' WHEN peak < 10000 THEN '1k-10k' ELSE '>=10k' END AS size,
+            count(*) FILTER (WHERE v > pv)::int AS up,
+            count(*) FILTER (WHERE v < pv)::int AS down,
+            count(*) FILTER (WHERE v = pv)::int AS flat,
+            percentile_cont(0.5) WITHIN GROUP (ORDER BY (pv - v) / pv * 100)
+              FILTER (WHERE v < pv AND pv > 0) AS med_down_pct,
+            percentile_cont(0.5) WITHIN GROUP (ORDER BY (v - pv) / pv * 100)
+              FILTER (WHERE v > pv AND pv > 0) AS med_up_pct,
+            percentile_cont(0.5) WITHIN GROUP (ORDER BY dt) AS med_gap
+     FROM steps
+     WHERE pv IS NOT NULL
+     GROUP BY source, size
+     ORDER BY source, min(peak)`,
+  );
+  const n = (x: unknown) => (x == null ? null : +Number(x).toFixed(2));
+  return rows.map((r) => ({
+    source: String(r.source),
+    size: String(r.size),
+    up: Number(r.up),
+    down: Number(r.down),
+    flat: Number(r.flat),
+    medianDownPct: n(r.med_down_pct),
+    medianUpPct: n(r.med_up_pct),
+    medianGapDays: n(r.med_gap),
+  }));
+}
+
+export function formatVoteSteps(p: VoteStepProfile): string {
+  const total = p.up + p.down + p.flat;
+  const pct = (k: number) => (total ? `${Math.round((k / total) * 100)}%` : "—");
+  const size = (x: number | null, sign: string) => (x == null ? "—" : `${sign}${x}%`);
+  return (
+    `${p.source} · peak ${p.size}: ${total} steps · up ${p.up} (${pct(p.up)}) · ` +
+    `down ${p.down} (${pct(p.down)}) · flat ${p.flat} · median step down ${size(p.medianDownPct, "−")} · ` +
+    `up ${size(p.medianUpPct, "+")} · median gap ${p.medianGapDays ?? "—"}d`
+  );
+}
+
 /** Per portal: the Hidden Gems rows, the whole live catalogue, and its popular baseline. */
 export async function voteFreshnessReport(db: Querier): Promise<FreshnessSummary[]> {
   const gemIds = (await getHiddenGems(db, "all")).map((g) => g.gameId);
