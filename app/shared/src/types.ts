@@ -133,7 +133,7 @@ export interface SteamComparable {
 // demand + quality push it up, supply pushes it down (already negated, so a crowded
 // market reads negative). Surfaced, not re-derived — the same intermediates the score sums.
 export interface ScoreComponents {
-  demand: number; // z(demand) — higher appetite/owners lifts the score
+  demand: number; // z(demand) — higher appetite (median votes/reviews) lifts the score
   quality: number; // z(quality ceiling: P90 rating)
   supply: number; // −z(supply: # games) — more competitors lowers the score
   // Steering lift (#12b): +weight per standing flag this market matches, ONLY on a matched row
@@ -176,7 +176,8 @@ export interface SteamGap {
   genre: string;
   tag: string;
   supplyN: number; // # games (supply)
-  medianOwners: number; // demand
+  medianVotes: number; // demand — median review count per game, the scored term (#218, as #89)
+  medianOwners: number; // context only — a SteamSpy bucket midpoint, too coarse to rank on
   qualityCeil: number; // P90 rating
   medianPriceCents: number; // monetization
   score: number;

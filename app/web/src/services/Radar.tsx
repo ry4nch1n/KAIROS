@@ -1301,9 +1301,9 @@ function OppList({
   return (
     <div className="gaplist">
       <p className="gap-legend">
-        opportunity = z(demand: median owners) + z(quality ceiling: P90 rating) − z(supply: games) ·
-        median price is context, not scored · pairs under 3 tracked games are too thin to rank and
-        are left out
+        opportunity = z(demand: median reviews) + z(quality ceiling: P90 rating) − z(supply: games)
+        · median owners and price are context, not scored · pairs under 3 tracked games are too thin
+        to rank and are left out
       </p>
       {note && <p className="gap-legend">{note}</p>}
       {gaps.map((g, i) => (
@@ -1327,6 +1327,9 @@ function OppList({
             <ScoreBreakdown c={g.components} />
           </div>
           <div className="gap-stats num">
+            <span>
+              <b>{fmt(g.medianVotes ?? 0)}</b> median reviews
+            </span>
             <span>
               <b>{fmtOwners(g.medianOwners)}</b> median owners
             </span>

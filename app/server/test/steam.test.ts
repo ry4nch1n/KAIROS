@@ -1425,15 +1425,16 @@ describe("D16c opportunity score formula is pinned (#12)", () => {
   // changes, this test fails and the Radar legend/tooltip must be updated with it.
   // Each cell holds THREE games, not two: below the shared market-supply floor (#211) a
   // genre × tag cell is not admitted to the ranking at all.
-  it("score = z(median owners) + z(P90 rating) − z(supply); price not scored", async () => {
+  it("score = z(median reviews) + z(P90 rating) − z(supply); price not scored", async () => {
     const db = await freshMemoryDb();
     await loadGames(
       db,
       "steam",
       STEAM_BASE_URL,
       [
-        // cell 1: Action × roguelike — median owners 150k, P90 rating 4.36
+        // cell 1: Action × roguelike — median reviews 2,000, P90 rating 4.36
         steamGame({
+          votes: 1_000,
           sourceGameId: "a1",
           genre: "Action",
           tags: ["roguelike"],
@@ -1442,6 +1443,7 @@ describe("D16c opportunity score formula is pinned (#12)", () => {
           priceCents: 100,
         }),
         steamGame({
+          votes: 3_000,
           sourceGameId: "a2",
           genre: "Action",
           tags: ["roguelike"],
@@ -1450,6 +1452,7 @@ describe("D16c opportunity score formula is pinned (#12)", () => {
           priceCents: 100,
         }),
         steamGame({
+          votes: 2_000,
           sourceGameId: "a3",
           genre: "Action",
           tags: ["roguelike"],
@@ -1457,8 +1460,9 @@ describe("D16c opportunity score formula is pinned (#12)", () => {
           rating: 4.2,
           priceCents: 100,
         }),
-        // cell 2: Puzzle × roguelike — median owners 30k, P90 rating 3.36, far pricier
+        // cell 2: Puzzle × roguelike — median reviews 300, P90 rating 3.36, far pricier
         steamGame({
+          votes: 200,
           sourceGameId: "p1",
           genre: "Puzzle",
           tags: ["roguelike"],
@@ -1467,6 +1471,7 @@ describe("D16c opportunity score formula is pinned (#12)", () => {
           priceCents: 9900,
         }),
         steamGame({
+          votes: 400,
           sourceGameId: "p2",
           genre: "Puzzle",
           tags: ["roguelike"],
@@ -1475,6 +1480,7 @@ describe("D16c opportunity score formula is pinned (#12)", () => {
           priceCents: 9900,
         }),
         steamGame({
+          votes: 300,
           sourceGameId: "p3",
           genre: "Puzzle",
           tags: ["roguelike"],
@@ -1501,6 +1507,49 @@ describe("D16c opportunity score formula is pinned (#12)", () => {
       const sum = g.components.demand + g.components.quality + g.components.supply;
       expect(Math.abs(sum - g.score)).toBeLessThanOrEqual(0.02); // 2dp rounding on each term
     }
+  });
+
+  // #218: owners_est is a SteamSpy bucket midpoint, so two markets on the same bucket tied on
+  // demand and the ranking could not separate them. Reviews are continuous — they must.
+  it("ranks demand on median reviews: equal owner buckets, different reviews → different scores", async () => {
+    const db = await freshMemoryDb();
+    const bucketGame = (id: string, genre: string, votes: number) =>
+      steamGame({
+        sourceGameId: id,
+        genre,
+        tags: ["4X"],
+        ownersEst: 15_000_000,
+        votes,
+        rating: 4.5,
+        priceCents: 999,
+      });
+    await loadGames(
+      db,
+      "steam",
+      STEAM_BASE_URL,
+      [
+        bucketGame("s1", "Strategy", 40_000),
+        bucketGame("s2", "Strategy", 50_000),
+        bucketGame("s3", "Strategy", 60_000),
+        bucketGame("c1", "Casual", 1_000),
+        bucketGame("c2", "Casual", 2_000),
+        bucketGame("c3", "Casual", 3_000),
+      ],
+      "2026-06-30T00:00:00.000Z",
+    );
+    const opp = await q.getSteamOpportunity(db);
+    const strat = opp.find((g) => g.genre === "Strategy")!;
+    const casual = opp.find((g) => g.genre === "Casual")!;
+    expect(strat.medianOwners).toBe(casual.medianOwners); // same bucket — context only
+    expect([strat.medianVotes, casual.medianVotes]).toEqual([50_000, 2_000]);
+    expect(strat.score).not.toBe(casual.score);
+    expect(strat.components.demand).toBeCloseTo(1, 5);
+    expect(casual.components.demand).toBeCloseTo(-1, 5);
+    expect(opp[0].genre).toBe("Strategy");
+    // The read cites what the ranking ranks on.
+    expect(q.composeSteamRead({ opportunity: opp, indie: [] })[0]).toContain(
+      "50,000 median reviews",
+    );
   });
 });
 
