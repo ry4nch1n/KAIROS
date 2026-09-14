@@ -368,7 +368,9 @@ describe("D-momentum classifyTrajectory — age-adjusted velocity (#10)", () => 
   it("getNewReleases attaches votesPerDay + a valid trajectory to every row", async () => {
     const rows = await q.getNewReleases(db, "all");
     for (const r of rows) {
-      expect(r.votesPerDay).toBeGreaterThanOrEqual(0);
+      // Per basis (#204): votes/day on cumulative rows, null (never 0) on window rows.
+      if (r.voteBasis === "window") expect(r.votesPerDay).toBeNull();
+      else expect(r.votesPerDay).toBeGreaterThanOrEqual(0);
       expect(["rising", "plateau", "decaying", "new"]).toContain(r.trajectory);
     }
   });

@@ -249,20 +249,31 @@ const GEM_TRAJ_LABEL: Record<string, string> = { ...TRAJ_LABEL, new: "· no seri
 // never collapsed: no series yet is NOT a measured zero, and a measured zero is NOT a fraction
 // rounded away. Server-side `votesPerDay` is floored at 0.01 under any real gain and "rising"
 // requires a positive rate, so this can never print "0" or "no data" beside a rising chip.
-export function voteRateText(votesPerDay: number, trajectory: Trajectory): string {
+// A `window`-basis row (CrazyGames, #204) carries no votes/day: its signed engagement change stands
+// in here until the per-basis rendering lands — a placeholder, never a fake 0.
+const engagementText = (pct: number | null) =>
+  pct == null ? "—" : `${pct > 0 ? "+" : ""}${pct.toFixed(1)}%/wk`;
+export function voteRateText(
+  votesPerDay: number | null,
+  trajectory: Trajectory,
+  engagementPctPerWeek: number | null = null,
+): string {
   if (trajectory === "new") return "no data";
+  if (votesPerDay == null) return engagementText(engagementPctPerWeek);
   if (!(votesPerDay > 0)) return "0";
   if (votesPerDay >= 100) return "+" + fmt(Math.round(votesPerDay));
   if (votesPerDay >= 10) return "+" + votesPerDay.toFixed(1);
   return "+" + votesPerDay.toFixed(2);
 }
 // A fraction per day is hard to feel; the same rate per week is the reading the cohort deserves.
-export const voteRateTip = (votesPerDay: number, trajectory: Trajectory): string =>
+export const voteRateTip = (votesPerDay: number | null, trajectory: Trajectory): string =>
   trajectory === "new"
     ? "Fewer than two snapshots of this title — no rate measured yet, which is not the same as zero."
-    : votesPerDay > 0
-      ? `≈ ${(votesPerDay * 7).toFixed(votesPerDay * 7 < 10 ? 1 : 0)} votes/week — trend fitted across every snapshot in the tracked window`
-      : "Trend fitted across every snapshot in the tracked window: flat, no votes gained.";
+    : votesPerDay == null
+      ? "This portal's vote count covers recent engagement, not a running total — shown as its change per week."
+      : votesPerDay > 0
+        ? `≈ ${(votesPerDay * 7).toFixed(votesPerDay * 7 < 10 ? 1 : 0)} votes/week — trend fitted across every snapshot in the tracked window`
+        : "Trend fitted across every snapshot in the tracked window: flat, no votes gained.";
 // Supply-side momentum (B2): new-entrant flow. "rising" = crowding (a warning, so it reads
 // hot/amber, opposite of demand where rising is good); "quiet" = open lane.
 const SUPPLY_LABEL: Record<string, string> = {
@@ -1040,7 +1051,7 @@ function GemsView({ ov, rows }: { ov: Overview; rows: HiddenGem[] | null }) {
                   <td className="r">{fmt(r.votes)}</td>
                   <td className="r">{r.daysTracked > 0 ? r.daysTracked + "d" : "<1d"}</td>
                   <td className="r" title={voteRateTip(r.votesPerDay, r.trajectory)}>
-                    {voteRateText(r.votesPerDay, r.trajectory)}
+                    {voteRateText(r.votesPerDay, r.trajectory, r.engagementPctPerWeek)}
                   </td>
                   <td>
                     <span className={"traj traj-" + r.trajectory}>
@@ -1096,7 +1107,7 @@ function NewReleasesView({ rows }: { rows: NewRelease[] }) {
               <td className="r">{r.rating ? r.rating.toFixed(2) : "—"}</td>
               <td className="r">{fmt(r.votes)}</td>
               <td className="r" title={voteRateTip(r.votesPerDay, r.trajectory)}>
-                {voteRateText(r.votesPerDay, r.trajectory)}
+                {voteRateText(r.votesPerDay, r.trajectory, r.engagementPctPerWeek)}
               </td>
               <td>
                 <span className={"traj traj-" + r.trajectory}>

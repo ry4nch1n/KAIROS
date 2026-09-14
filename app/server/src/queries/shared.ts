@@ -10,6 +10,7 @@ import type {
   SteeringMatch,
   SupplyTrend,
   Trajectory,
+  VoteBasis,
 } from "shared";
 import { loopFamilyFor, loopFamilyFromLabels } from "../data/loopFamilyMap.ts";
 
@@ -100,24 +101,11 @@ export function classifyTrajectory(
   daySpan: number,
   times?: number[],
 ): { votesPerDay: number; trajectory: Trajectory } {
-  const step = series.length > 1 ? daySpan / (series.length - 1) : 0;
-  const pts: { t: number; v: number }[] = [];
-  series.forEach((v, i) => {
-    const t = times ? times[i] : i * step;
-    if (Number.isFinite(v) && Number.isFinite(t)) pts.push({ t, v });
-  });
+  const fit = lsFit(series, daySpan, times);
+  if (!fit) return { votesPerDay: 0, trajectory: "new" };
+  const { pts } = fit;
   const n = pts.length;
-  if (n < 2 || daySpan <= 0 || pts[n - 1].t - pts[0].t <= 0)
-    return { votesPerDay: 0, trajectory: "new" };
-  const tm = pts.reduce((s, p) => s + p.t, 0) / n;
-  const vm = pts.reduce((s, p) => s + p.v, 0) / n;
-  let cov = 0;
-  let varT = 0;
-  for (const p of pts) {
-    cov += (p.t - tm) * (p.v - vm);
-    varT += (p.t - tm) ** 2;
-  }
-  const votesPerDay = voteRate(cov / varT);
+  const votesPerDay = voteRate(fit.slope);
   if (n < 3) return { votesPerDay, trajectory: "plateau" };
   const mid = Math.floor(n / 2);
   const rate = (a: number, b: number) => {
@@ -132,6 +120,86 @@ export function classifyTrajectory(
   if (late > early * 1.25 && late > 0 && votesPerDay > 0) trajectory = "rising";
   else if (late < early * 0.5) trajectory = "decaying";
   return { votesPerDay, trajectory };
+}
+
+/** Least-squares fit of a vote series: the usable points, signed slope (votes/day) and mean level.
+ *  null when fewer than two finite points or no time span — "no series", never a measured 0. */
+function lsFit(series: number[], daySpan: number, times?: number[]) {
+  const step = series.length > 1 ? daySpan / (series.length - 1) : 0;
+  const pts: { t: number; v: number }[] = [];
+  series.forEach((v, i) => {
+    const t = times ? times[i] : i * step;
+    if (Number.isFinite(v) && Number.isFinite(t)) pts.push({ t, v });
+  });
+  const n = pts.length;
+  if (n < 2 || daySpan <= 0 || pts[n - 1].t - pts[0].t <= 0) return null;
+  const tm = pts.reduce((s, p) => s + p.t, 0) / n;
+  const mean = pts.reduce((s, p) => s + p.v, 0) / n;
+  let cov = 0;
+  let varT = 0;
+  for (const p of pts) {
+    cov += (p.t - tm) * (p.v - mean);
+    varT += (p.t - tm) ** 2;
+  }
+  return { pts, slope: cov / varT, mean };
+}
+
+// ── Vote basis (#204) ──
+// Measured on production (check-data runs 34810542437 / 34811253184): CrazyGames' up+down count
+// FALLS on 44–62% of capture-to-capture steps at every title size, in small steps (median −0.5% to
+// −2.5%) — old votes ageing out of a rolling window. Poki recorded 18,183 steps and not one down.
+// So a CrazyGames delta is a change in engagement, not audience growth, and clamping it to 0 (as
+// `voteRate` does) read 22 of 30 falling gems as dead. One place decides the basis per portal.
+export const VOTE_BASIS: Readonly<Record<string, VoteBasis>> = {
+  poki: "cumulative",
+  crazygames: "window",
+};
+/** Unknown sources read `cumulative`: that is what every reader assumed before #204, and the only
+ *  other vote-like count in the system (Steam reviews) is a running total. A portal is `window`
+ *  only once measured to be — a guessed window would hide real audience growth behind a %. */
+export const voteBasisOf = (source: string): VoteBasis => VOTE_BASIS[source] ?? "cumulative";
+
+/** Deadband, in %/wk, inside which a window series reads `plateau`. ~0.7%/day sustained: above the
+ *  median single down-step of titles ≥1k votes (−0.46% / −0.75%, #236), so ordinary day-to-day
+ *  churn does not mint a chip, while a sustained move of ~20% of the window a month still does. */
+export const ENGAGEMENT_DEADBAND_PCT_WK = 5;
+
+/** Engagement change for a `window` series: signed LS slope ÷ mean level × 7 × 100, one decimal.
+ *  The trajectory is derived from that one number, so a `rising` chip never sits beside a
+ *  non-positive change (nor `decaying` beside a non-negative one). As on the cumulative path, a
+ *  chip needs three captures — one step is a single noisy pair, and the median CrazyGames step
+ *  (±0.5–3%) alone would cross the band — so a two-capture series reports its % but reads plateau. */
+export function classifyEngagement(
+  series: number[],
+  daySpan: number,
+  times?: number[],
+): { engagementPctPerWeek: number | null; trajectory: Trajectory } {
+  const fit = lsFit(series, daySpan, times);
+  if (!fit || !(fit.mean > 0)) return { engagementPctPerWeek: null, trajectory: "new" };
+  const pct = Math.round((fit.slope / fit.mean) * 7 * 100 * 10) / 10;
+  const engagementPctPerWeek = pct === 0 ? 0 : pct; // no "-0"
+  let trajectory: Trajectory = "plateau";
+  if (fit.pts.length >= 3 && pct >= ENGAGEMENT_DEADBAND_PCT_WK) trajectory = "rising";
+  else if (fit.pts.length >= 3 && pct <= -ENGAGEMENT_DEADBAND_PCT_WK) trajectory = "decaying";
+  return { engagementPctPerWeek, trajectory };
+}
+
+export interface VoteMomentum {
+  votesPerDay: number | null;
+  engagementPctPerWeek: number | null;
+  trajectory: Trajectory;
+}
+/** One title's momentum read in its portal's own unit. Cumulative is exactly `classifyTrajectory`
+ *  (votes/day, 0 on no series); window is `classifyEngagement` with `votesPerDay: null`. */
+export function voteMomentumOf(
+  basis: VoteBasis,
+  series: number[],
+  daySpan: number,
+  times?: number[],
+): VoteMomentum {
+  if (basis === "window")
+    return { votesPerDay: null, ...classifyEngagement(series, daySpan, times) };
+  return { ...classifyTrajectory(series, daySpan, times), engagementPctPerWeek: null };
 }
 
 // ── Supply velocity (B2 / R1.1 + R1.3) ──

@@ -192,7 +192,17 @@ export const CONTRACT = {
   //      bucket values, and demand z took three values. `SteamGap` gained `medianVotes` (the scored
   //      term); `medianOwners` stays as context. Additive shape + a semantics change to
   //      `components.demand`; read defensively.
-  version: 29,
+  // v30: browser votes gain a BASIS (#204). CrazyGames' up+down count is a rolling window of recent
+  //      engagement — measured on production it falls on 44–62% of daily steps at every title size,
+  //      while Poki's 18,183 steps never fell — so reading its delta as votes/day clamped 22 of 30
+  //      falling Hidden Gems to a measured 0. `HiddenGem` and `NewRelease` gain `source`,
+  //      `voteBasis` ("cumulative" | "window") and `engagementPctPerWeek` (signed LS slope ÷ mean
+  //      level × 7 × 100, one decimal; null on cumulative rows and when unmeasurable), and
+  //      `votesPerDay` becomes `number | null` — null on every window row, never 0 standing in for
+  //      "not this unit". Poki rows are byte-for-byte unchanged apart from the three new fields. A
+  //      window row's trajectory follows its engagement change (±5%/wk deadband, three captures).
+  //      Breaking for a reader that formats `votesPerDay` unconditionally.
+  version: 30,
   pitch: {
     // v2: added visual-card fields — setting, artStyle, codeName, headerUrl, shotUrl.
     // v3: rating rework — scoreFields d1Fit/steamCeiling/buildCost → browserFit/steamFit/buildEase.
