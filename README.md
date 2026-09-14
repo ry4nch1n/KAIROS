@@ -13,9 +13,11 @@ A solo-operable command center with four services behind one shell:
 
 | Doc | What |
 |---|---|
-| [DESIGN.md](DESIGN.md) | Architecture, DB schema, API, ETL, AI pipeline, roadmap, tradeoffs |
-| [OPERATIONS.md](OPERATIONS.md) | How it runs & is maintained (crawl cron, hosting, DB) |
-| [TEST_PLAN.md](TEST_PLAN.md) | Verification criteria + test inventory |
+| [DESIGN.md](DESIGN.md) | Architecture, design reasoning and tradeoffs, as built |
+| [OPERATIONS.md](OPERATIONS.md) | How it runs & is maintained (hosting, workflows, secrets, crawl) |
+| [TEST_PLAN.md](TEST_PLAN.md) | What "working" means: gate layers, data-quality gate, definition of done |
+| [docs/reference/](docs/reference/) | Generated reference: schema, API routes, contract, architecture diagram |
+| [docs/decisions/](docs/decisions/) | Dated decision records |
 | [mockup/overview.html](mockup/overview.html) | Approved static design reference (light mode) |
 
 ## Stack (as built)
