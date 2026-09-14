@@ -17,6 +17,9 @@ import type {
   Overview,
   Platform,
   GenreRow,
+  GenrePortalMomentum,
+  GenreMomentum,
+  RisingGenre,
   DeveloperRow,
   NewRelease,
   HiddenGem,
@@ -48,6 +51,7 @@ import {
   landscapeOption,
   quadrantOption,
   velocityBarOption,
+  barsByPortal,
   tierBarOption,
 } from "../components/charts.ts";
 import { InsightSvg, tagClass } from "../components/icons.tsx";
@@ -332,6 +336,57 @@ function TrendCell({ r, labels }: { r: MomentumRow; labels: Record<string, strin
     </td>
   );
 }
+// ── Genre momentum per portal (#204 S3) ──
+// A genre's rate in its portal's unit. Running-total portals keep the pre-#204 cell exactly (signed
+// whole votes/day); recent-window portals read the signed %/wk of recent engagement.
+export const ENGAGEMENT_DEADBAND_PCT_WK = 5;
+export function genreRateText(m: GenrePortalMomentum): string {
+  if (m.voteBasis === "window")
+    return m.engagementPctPerWeek == null ? "no data" : signedPct(m.engagementPctPerWeek);
+  const v = m.votesPerDay ?? 0;
+  return (v > 0 ? "+" : "") + fmt(v);
+}
+export function genreRateCls(m: GenrePortalMomentum): string {
+  if (m.voteBasis !== "window") return deltaCls(m.votesPerDay ?? 0);
+  const p = m.engagementPctPerWeek;
+  if (p == null) return "delta-fl";
+  return p >= ENGAGEMENT_DEADBAND_PCT_WK
+    ? "delta-up"
+    : p <= -ENGAGEMENT_DEADBAND_PCT_WK
+      ? "delta-dn"
+      : "delta-fl";
+}
+/** The KPI's per-portal line: its unit always spelled out, the arrow following the sign. */
+export function risingDelta(r: RisingGenre): { text: string; cls: "up" | "down" | "flat" } {
+  if (r.voteBasis !== "window") return { text: `▲ +${r.votesPerDay ?? 0} votes/day`, cls: "up" };
+  const p = r.engagementPctPerWeek;
+  if (p == null) return { text: "no engagement read yet", cls: "flat" };
+  if (p === 0) return { text: "flat recent engagement", cls: "flat" };
+  return { text: `${p > 0 ? "▲" : "▼"} ${signedPct(p)} engagement`, cls: p > 0 ? "up" : "down" };
+}
+const unitOf = (source: string, basis: string) =>
+  `${portalTag(source)[1]}: ${basis === "window" ? "signed % change per week in recent engagement" : "votes gained per day"}`;
+const GENRE_MOMENTUM_TIP =
+  "How the genre's median vote count is moving, in its portal's own unit. Where the count is a running total (Poki), it is votes gained per day across the crawl window. Where it covers a recent window rather than all time (CrazyGames), it is the signed % change per week in that recent engagement. The two units are never compared directly.";
+const GENRE_TREND_TIP =
+  "Rising / plateau / decaying, from the genre's median-vote series. Running-total portals compare later-half pace with the earlier half; recent-window portals need engagement to move by more than a small weekly margin. A trend needs three captures — 'early read' means fewer.";
+/** Title + subtitle for the genre bars, from the portals actually present. */
+function barsHead(groups: { source: string; voteBasis: string }[]): [string, string] {
+  if (groups.length > 1)
+    return [
+      "Genre momentum by portal",
+      "each portal ranked in its own unit — votes/day on running totals, %/wk on recent engagement; never compared directly",
+    ];
+  return groups[0]?.voteBasis === "window"
+    ? ["Genre engagement change", "signed %/wk of each genre's median recent engagement"]
+    : ["Genre vote-velocity", "votes/day by genre — gainers vs flat/decliners"];
+}
+const momentumSub = (m: GenreMomentum, split: boolean) =>
+  (split ? "one portal at a time — their counts measure different things · " : "") +
+  (m.voteBasis === "window"
+    ? "median votes by genre — a recent-window count, so the level is current engagement"
+    : "median votes by genre — a running total, so a steeper line is faster audience growth");
+
 // Supply-side momentum (B2): new-entrant flow. "rising" = crowding (a warning, so it reads
 // hot/amber, opposite of demand where rising is good); "quiet" = open lane.
 const SUPPLY_LABEL: Record<string, string> = {
@@ -399,6 +454,68 @@ function QuadrantCard({
 }
 
 /* ───────────── views ───────────── */
+// Rising genre KPI (#204 S3): one line on a single portal; on All Browser one line per portal, each
+// naming its portal and unit — the portals' movers are never ranked against each other.
+function RisingKpi({ ov }: { ov: Overview }) {
+  const rows = ov.kpi.risingByPortal ?? [];
+  const split = ov.platform === "all";
+  return (
+    <div className={"kpi" + (split ? " kpi-portals" : "")}>
+      <div className="label">
+        {I.trends}Rising genre{split ? " · per portal" : ""}
+      </div>
+      {!rows.length && (
+        <>
+          <div className="val val-word num">{ov.kpi.risingGenre ?? "—"}</div>
+          <span className="delta flat num">no mover yet</span>
+        </>
+      )}
+      {rows.map((r) => {
+        const d = risingDelta(r);
+        const [tag, name] = portalTag(r.source);
+        return (
+          <div className="kpi-portal" key={r.source} title={unitOf(r.source, r.voteBasis)}>
+            <div className="val val-word num">
+              {split && (
+                <abbr className="portal-tag" title={name}>
+                  {tag}
+                </abbr>
+              )}
+              {r.genre}
+            </div>
+            <span className={"delta num " + d.cls}>{d.text}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// Genre bars (#204 S3): one chart per portal, each on its own axis and unit.
+function GenreBarsCard({ bars }: { bars: Overview["velocityBars"] }) {
+  const groups = barsByPortal(bars);
+  const [title, sub] = barsHead(groups);
+  return (
+    <div className="card">
+      {head(I.trends, title, sub)}
+      {groups.map((g) => (
+        <div key={g.source} className="portal-chart">
+          {groups.length > 1 && (
+            <div className="portal-chart-head">
+              <abbr className="portal-tag" title={portalTag(g.source)[1]}>
+                {portalTag(g.source)[0]}
+              </abbr>
+              {portalTag(g.source)[1]} ·{" "}
+              {g.voteBasis === "window" ? "%/wk engagement" : "votes/day"}
+            </div>
+          )}
+          <EChart option={velocityBarOption(g.bars)} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function OverviewView({
   ov,
   source,
@@ -424,11 +541,7 @@ function OverviewView({
             P90 {ov.kpi.avgRatingP90.toFixed(2)} · point-in-time
           </span>
         </div>
-        <div className="kpi">
-          <div className="label">{I.trends}Rising genre</div>
-          <div className="val val-word num">{ov.kpi.risingGenre}</div>
-          <span className="delta up num">▲ +{ov.kpi.risingVotesPerDay} votes/day</span>
-        </div>
+        <RisingKpi ov={ov} />
         <div className="kpi accent">
           <div className="label">{I.gaps}Open market gaps</div>
           <div className="val num">{ov.kpi.openGaps}</div>
@@ -441,10 +554,7 @@ function OverviewView({
         <EChart option={landscapeOption(ov.landscape)} style={{ minHeight: 360 }} />
       </div>
       <div className="grid g-2">
-        <div className="card">
-          {head(I.trends, "Genre vote-velocity", "votes/day by genre — gainers vs flat/decliners")}
-          <EChart option={velocityBarOption(ov.velocityBars)} />
-        </div>
+        <GenreBarsCard bars={ov.velocityBars} />
         <div className="card">
           {head(I.gems, "AI Insights", "auto-generated")}
           <div className="insights">
@@ -846,8 +956,15 @@ function LoopFamilyMarketCard({ platform }: { platform: Platform }) {
   );
 }
 
-function GenresView({ rows }: { rows: GenreRow[] }) {
+function GenresView({ rows, platform }: { rows: GenreRow[]; platform: Platform }) {
   const max = Math.max(1, ...rows.map((r) => r.games));
+  const split = platform === "all";
+  const tag = (source: string) =>
+    split && (
+      <abbr className="portal-tag" title={portalTag(source)[1]}>
+        {portalTag(source)[0]}
+      </abbr>
+    );
   return (
     <div className="card">
       {head(I.genres, "Genre Explorer", `${rows.length} genres`)}
@@ -860,10 +977,13 @@ function GenresView({ rows }: { rows: GenreRow[] }) {
             <th className="r">Median votes</th>
             <th className="r">P90 votes (top-10% bar)</th>
             <th className="r">P90 rating</th>
-            <th className="r">Votes/day</th>
+            <th className="r">
+              Momentum
+              <Tip text={GENRE_MOMENTUM_TIP} />
+            </th>
             <th>
               Demand trend
-              <Tip text="Later-half momentum vs earlier-half of the genre's median-vote series: rising / plateau / decaying" />
+              <Tip text={GENRE_TREND_TIP} />
             </th>
             <th>
               Supply
@@ -885,14 +1005,37 @@ function GenresView({ rows }: { rows: GenreRow[] }) {
               <td className="r">{fmt(r.medianVotes)}</td>
               <td className="r">{fmt(r.p90Votes)}</td>
               <td className="r">{r.p90Rating.toFixed(2)}</td>
-              <td className={"r " + deltaCls(r.votesPerDay)}>
-                {r.votesPerDay > 0 ? "+" : ""}
-                {fmt(r.votesPerDay)}
+              <td className="r momentum">
+                {r.momentum.length ? (
+                  r.momentum.map((m) => (
+                    <span
+                      key={m.source}
+                      className={"portal-line " + genreRateCls(m)}
+                      title={unitOf(m.source, m.voteBasis)}
+                    >
+                      {tag(m.source)}
+                      {genreRateText(m)}
+                    </span>
+                  ))
+                ) : (
+                  <span className="delta-fl">no data</span>
+                )}
               </td>
               <td>
-                <span className={"traj traj-" + r.trajectory}>
-                  {TRAJ_LABEL[r.trajectory] || r.trajectory}
-                </span>
+                {r.momentum.map((m) => {
+                  const chip = trendChip(m.trajectory, m.captures);
+                  return (
+                    <span key={m.source} className="portal-line">
+                      {tag(m.source)}
+                      <span
+                        className={"traj traj-" + chip}
+                        title={chip === "early" ? EARLY_TIP : undefined}
+                      >
+                        {chip === "early" ? "early read" : TRAJ_LABEL[chip] || chip}
+                      </span>
+                    </span>
+                  );
+                })}
               </td>
               <td title={r.recentEntrants + " new in the trailing window"}>
                 <span className={"supply supply-" + r.supplyTrend}>
@@ -1024,12 +1167,39 @@ function DevelopersView({ rows, platform }: { rows: DeveloperRow[]; platform: Pl
 }
 
 function TrendsView({ ov }: { ov: Overview }) {
+  // #204 S3: levels on different vote bases never share an axis — on All Browser one portal is
+  // plotted at a time, each with its own y label.
+  const [pick, setPick] = useState<string | null>(null);
+  const portals = ov.momentum ?? [];
+  const m = portals.find((p) => p.source === pick) ?? portals[0];
+  const days = m?.dates.length ?? 0;
   return (
     <>
       <div className="card">
-        {head(I.trends, "Genre momentum", "median votes/day by genre over the crawl window")}
-        {ov.momentum.dates.length >= MIN_TREND_DAYS ? (
-          <EChart option={momentumOption(ov.momentum)} style={{ minHeight: 340 }} />
+        {head(
+          I.trends,
+          "Genre momentum",
+          m ? momentumSub(m, portals.length > 1) : "median votes by genre over the crawl window",
+        )}
+        {portals.length > 1 && (
+          <div className="portal-seg">
+            <span className="seg" role="group" aria-label="Portal">
+              {portals.map((p) => (
+                <button
+                  key={p.source}
+                  className={"seg-btn" + (p === m ? " active" : "")}
+                  type="button"
+                  aria-pressed={p === m}
+                  onClick={() => setPick(p.source)}
+                >
+                  {portalTag(p.source)[1]}
+                </button>
+              ))}
+            </span>
+          </div>
+        )}
+        {m && days >= MIN_TREND_DAYS ? (
+          <EChart option={momentumOption(m)} style={{ minHeight: 340 }} />
         ) : (
           <div
             className="empty-inline"
@@ -1042,10 +1212,10 @@ function TrendsView({ ov }: { ov: Overview }) {
           >
             Genre momentum builds as the daily crawl accrues —{" "}
             <b>
-              {ov.momentum.dates.length} crawl day{ov.momentum.dates.length === 1 ? "" : "s"}
+              {days} crawl day{days === 1 ? "" : "s"}
             </b>{" "}
-            so far. Multi-day vote trajectories become meaningful after about a week; for now see{" "}
-            <b>Genre vote-velocity</b> on the Overview for what's gaining today.
+            so far. Multi-day vote trajectories become meaningful after about a week; for now see
+            the genre momentum bars on the Overview for what's moving today.
           </div>
         )}
       </div>
@@ -2578,7 +2748,8 @@ export function Radar({
                 ) : (
                   <Skel />
                 ))}
-              {view === "genres" && (extra ? <GenresView rows={extra} /> : <Skel />)}
+              {view === "genres" &&
+                (extra ? <GenresView rows={extra} platform={platform} /> : <Skel />)}
               {view === "tags" && (ov ? <TagsView ov={ov} /> : <Skel />)}
               {view === "developers" &&
                 (extra ? <DevelopersView rows={extra} platform={platform} /> : <Skel />)}

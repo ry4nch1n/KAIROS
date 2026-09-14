@@ -158,6 +158,9 @@ export const VOTE_BASIS: Readonly<Record<string, VoteBasis>> = {
  *  other vote-like count in the system (Steam reviews) is a running total. A portal is `window`
  *  only once measured to be — a guessed window would hide real audience growth behind a %. */
 export const voteBasisOf = (source: string): VoteBasis => VOTE_BASIS[source] ?? "cumulative";
+/** Display name of a portal for server-composed prose — reads that must say which portal a number is from. */
+const PORTAL_NAME: Readonly<Record<string, string>> = { poki: "Poki", crazygames: "CrazyGames" };
+export const portalName = (source: string): string => PORTAL_NAME[source] ?? source;
 
 /** Deadband, in %/wk, inside which a window series reads `plateau`. ~0.7%/day sustained: above the
  *  median single down-step of titles ≥1k votes (−0.46% / −0.75%, #236), so ordinary day-to-day

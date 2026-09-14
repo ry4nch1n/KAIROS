@@ -206,7 +206,17 @@ export const CONTRACT = {
   //      the momentum was fitted on (#204 S2). A trajectory needs three; a two-capture row reports a
   //      measured rate or %/wk beside a default `plateau` that is not a verdict, so readers render
   //      it as an early read rather than a trend. Additive.
-  version: 31,
+  // v32: genre-level momentum follows each portal's vote basis (#204 S3). The genre median-votes
+  //      series is built per portal; nothing is pooled across bases. `GenreRow` gains `momentum`
+  //      (`GenrePortalMomentum[]`: source, voteBasis, votesPerDay | null, engagementPctPerWeek |
+  //      null, trajectory, captures) and its `votesPerDay` / `trajectory` become nullable — null on
+  //      `all`, `votesPerDay` null on a window portal. `GenreVelocityBar` gains source, voteBasis,
+  //      engagementPctPerWeek (votesPerDay nullable; `all` = per-portal groups). `Overview.momentum`
+  //      becomes `GenreMomentum[]`, one per portal, each with source + voteBasis. `OverviewKPI`
+  //      gains `risingByPortal` (`RisingGenre[]`); `risingGenre` / `risingVotesPerDay` become
+  //      nullable (null on `all`; the rate null on a window portal). Poki values are unchanged.
+  //      Breaking for readers of `momentum.dates` or unconditional `votesPerDay` formatting.
+  version: 32,
   pitch: {
     // v2: added visual-card fields — setting, artStyle, codeName, headerUrl, shotUrl.
     // v3: rating rework — scoreFields d1Fit/steamCeiling/buildCost → browserFit/steamFit/buildEase.

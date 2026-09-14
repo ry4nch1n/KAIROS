@@ -8,6 +8,7 @@ import {
   momentumOption,
   treemapOption,
   tierBarOption,
+  barsByPortal,
   PALETTE,
 } from "./charts.ts";
 import type {
@@ -84,12 +85,46 @@ describe("scatterOption", () => {
 // ---------------------------------------------------------------------------
 // 2. velocityBarOption — color coding for positive vs negative velocity
 // ---------------------------------------------------------------------------
+const pk = (genre: string, votesPerDay: number): GenreVelocityBar => ({
+  genre,
+  source: "poki",
+  voteBasis: "cumulative",
+  votesPerDay,
+  engagementPctPerWeek: null,
+});
+const cg = (genre: string, engagementPctPerWeek: number): GenreVelocityBar => ({
+  genre,
+  source: "crazygames",
+  voteBasis: "window",
+  votesPerDay: null,
+  engagementPctPerWeek,
+});
+
+describe("velocityBarOption per vote basis (#204 S3)", () => {
+  it("a window group plots signed %/wk with its own axis unit", () => {
+    const opt = velocityBarOption([cg("Word", 60.9), cg("Racing", -37.8)]) as any;
+    expect(opt.xAxis.name).toBe("%/wk");
+    expect(opt.series[0].data.map((d: any) => d.value)).toEqual([-37.8, 60.9]);
+    expect(opt.series[0].label.formatter({ value: -37.8 })).toBe("−37.8%");
+    expect(opt.tooltip.formatter({ name: "Word", value: 60.9 })).toContain("recent engagement");
+    expect(opt.tooltip.formatter({ name: "Word", value: 60.9 })).not.toContain("votes/day");
+  });
+  it("never mixes units on one axis: bars on another basis are dropped", () => {
+    const opt = velocityBarOption([pk("Racing", 375), cg("Word", 60.9)]) as any;
+    expect(opt.xAxis.name).toBe("votes/day");
+    expect(opt.yAxis.data).toEqual(["Racing"]);
+  });
+  it("barsByPortal splits an All Browser list into ordered per-portal groups", () => {
+    const groups = barsByPortal([cg("Word", 60.9), cg("Racing", -37.8), pk("Racing", 375)]);
+    expect(groups.map((g) => [g.source, g.voteBasis, g.bars.length])).toEqual([
+      ["crazygames", "window", 2],
+      ["poki", "cumulative", 1],
+    ]);
+  });
+});
+
 describe("velocityBarOption", () => {
-  const bars: GenreVelocityBar[] = [
-    { genre: "Action", votesPerDay: 120 },
-    { genre: "Puzzle", votesPerDay: -30 },
-    { genre: "Racing", votesPerDay: 5 },
-  ];
+  const bars: GenreVelocityBar[] = [pk("Action", 120), pk("Puzzle", -30), pk("Racing", 5)];
   const opt = velocityBarOption(bars) as any;
 
   it("yAxis is category, xAxis is value (horizontal bars)", () => {
@@ -198,6 +233,8 @@ describe("heatmapOption", () => {
 describe("momentumOption", () => {
   const dates = ["06-01", "06-08", "06-15", "06-22", "06-29"];
   const momentum: GenreMomentum = {
+    source: "poki",
+    voteBasis: "cumulative",
     dates,
     series: [
       { genre: "Action", values: [100, 120, 115, 130, 140] },
@@ -205,6 +242,12 @@ describe("momentumOption", () => {
     ],
   };
   const opt = momentumOption(momentum) as any;
+
+  it("the y axis names which kind of count it plots (#204 S3)", () => {
+    expect(opt.yAxis.name).toBe("median votes (running total)");
+    const win = momentumOption({ ...momentum, source: "crazygames", voteBasis: "window" }) as any;
+    expect(win.yAxis.name).toBe("median votes (recent window)");
+  });
 
   it("xAxis.data equals the input dates", () => {
     expect(opt.xAxis.data).toEqual(dates);

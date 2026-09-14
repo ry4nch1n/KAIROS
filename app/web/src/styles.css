@@ -2627,6 +2627,33 @@ textarea {
   cursor: help;
   margin-right: var(--sp-1);
 }
+/* #204 S3: per-portal genre momentum — one line per portal inside a cell, KPI or chart group */
+.portal-line {
+  display: block;
+  white-space: nowrap;
+}
+.portal-line + .portal-line {
+  margin-top: 2px;
+}
+.kpi-portal + .kpi-portal {
+  margin-top: var(--sp-2);
+}
+.kpi-portals .val.val-word {
+  font-size: var(--fs-4);
+  margin: var(--sp-1) 0 0;
+  overflow-wrap: anywhere;
+}
+.portal-chart + .portal-chart {
+  margin-top: var(--sp-3);
+}
+.portal-chart-head {
+  font-size: var(--fs-2);
+  color: var(--text-2);
+  margin-bottom: var(--sp-1);
+}
+.portal-seg {
+  margin-bottom: var(--sp-2);
+}
 
 /* Team-size "est." chips on Steam comparables (issue #9) */
 .est-chip {
