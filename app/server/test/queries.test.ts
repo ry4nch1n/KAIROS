@@ -2,6 +2,8 @@ import { describe, it, expect, beforeAll } from "vitest";
 import { freshMemoryDb, applySchema, type Querier } from "../src/db/db.ts";
 import { seed } from "../src/db/seed.ts";
 import * as q from "../src/queries/index.ts";
+import { MIN_MARKET_SUPPLY } from "../src/queries/shared.ts";
+import { loadGames } from "../src/crawler/load.ts";
 import { loopFamilyFor, MAPPED_FAMILIES } from "../src/data/loopFamilyMap.ts";
 // Contract runtime values by RELATIVE path — never the bare "shared" specifier (which breaks the
 // Netlify bundle); matches how queries/index.ts imports CONTRACT.
@@ -108,11 +110,67 @@ describe("A7 market gaps (interpretable)", () => {
     for (let i = 1; i < gaps.length; i++)
       expect(gaps[i - 1].score).toBeGreaterThanOrEqual(gaps[i].score);
     for (const c of gaps) {
-      expect(c.supplyN).toBeGreaterThanOrEqual(2);
       expect(c.appetite).toBeGreaterThanOrEqual(0);
       expect(c.qualityCeil).toBeGreaterThan(0);
       expect(c.qualityCeil).toBeLessThanOrEqual(5);
     }
+  });
+
+  // #215 — the browser mirror of #211. The gap score negates supply, so a two-game cell earned the
+  // biggest supply term exactly where its median-votes demand was least trustworthy; on the seed,
+  // 4 of 6 shown rows (rank 1 included) sat at the old floor of 2. One shared floor, both surfaces.
+  it("admits no ranked row below the shared market-supply floor (#215)", async () => {
+    for (const p of ["all", "crazygames", "poki"] as const) {
+      const ranked = await q.rankMarketGaps(db, p);
+      expect(ranked.length).toBeGreaterThan(0);
+      for (const g of ranked) expect(g.supplyN).toBeGreaterThanOrEqual(MIN_MARKET_SUPPLY);
+    }
+    expect(MIN_MARKET_SUPPLY).toBe(3);
+  });
+
+  it("ranks nothing rather than artifacts when every cell sits under the floor (#215)", async () => {
+    const thin = await freshMemoryDb();
+    const CG = "https://www.crazygames.com";
+    const game = (id: string, tag: string, votes: number) => ({
+      url: `${CG}/game/${id}`,
+      title: `Game ${id}`,
+      thumbnailUrl: null,
+      developer: "Dev",
+      description: null,
+      engine: null,
+      orientation: null,
+      mobile: false,
+      genre: "Casual",
+      tags: [tag],
+      rating: 4.5,
+      votes,
+      featured: false,
+      releaseDate: null,
+      plays: votes * 10,
+      ownersEst: null,
+      priceCents: null,
+      discountPct: null,
+      ccu: null,
+      medianPlaytimeMin: null,
+      metacritic: null,
+      scaleTier: null,
+      sourceGameId: id,
+    });
+    // Every cell is a pair — none is a market — and the pair with enormous demand would have
+    // ranked first under the old floor.
+    await loadGames(
+      thin,
+      "crazygames",
+      CG,
+      [
+        game("a1", "merge", 9_000_000),
+        game("a2", "merge", 9_000_000),
+        game("b1", "physics", 1_000),
+        game("b2", "physics", 2_000),
+      ],
+      "2026-06-30T00:00:00.000Z",
+    );
+    expect(await q.getMarketGaps(thin, "crazygames")).toEqual([]);
   });
 });
 

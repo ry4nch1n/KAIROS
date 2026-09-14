@@ -35,6 +35,8 @@ import {
   genreSupplyTrend,
   steerRanking,
   steeringLens,
+  MIN_MARKET_SUPPLY,
+  MIN_RANKABLE_CELLS,
 } from "./shared.ts";
 import { getBriefSteering } from "./library.ts";
 
@@ -501,13 +503,15 @@ export async function rankMarketGaps(db: Querier, platform: Platform): Promise<M
        JOIN tags t ON t.id = gt.tag_id
        WHERE g.is_live AND l.genre IS NOT NULL ${pf(platform)}
        GROUP BY ${canonSql("l.genre")}, ${canonSql("t.name")}
-       HAVING count(DISTINCT g.id) >= 2`,
+       HAVING count(DISTINCT g.id) >= ${MIN_MARKET_SUPPLY}`,
     ),
     gapExamples(db, platform),
   ]);
   // Drop platform-curation tags up front so they don't seed junk gaps OR skew the z-baseline.
   const clean = rows.filter((r) => !isCurationTag(r.tag));
-  if (clean.length < 2) return [];
+  // Too few markets to stand a z-score up — an empty list with an honest reason beats a ranking
+  // of sample artifacts (#215, mirroring #211).
+  if (clean.length < MIN_RANKABLE_CELLS) return [];
   const z = (vals: number[]) => {
     const m = vals.reduce((a, b) => a + b, 0) / vals.length;
     const sd = Math.sqrt(vals.reduce((a, b) => a + (b - m) ** 2, 0) / vals.length) || 1;

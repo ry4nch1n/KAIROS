@@ -325,12 +325,14 @@ describe("browser market gaps are steered by the standing flags (#142)", () => {
   const seed = async () => {
     const db = await freshMemoryDb();
     const games: RawGame[] = [];
+    // Three games per cell, not two: below the shared market-supply floor a genre × tag cell is
+    // not a market and never enters the browser ranking at all (#215).
     for (let i = 0; i < 9; i++)
-      for (const n of [1, 2])
+      for (const n of [1, 2, 3])
         games.push(bg(`f${i}-${n}`, "Casual", `Filler ${i}`, 9000 - i * 500, 4.6));
     // Weak enough to sit last on the market data, close enough that a lift can still reach it —
     // the score band admits a comparable market, not a hopeless one (#200).
-    for (const n of [1, 2]) games.push(bg(`d${n}`, "Puzzle", "Deckbuilding", 4500, 4.6));
+    for (const n of [1, 2, 3]) games.push(bg(`d${n}`, "Puzzle", "Deckbuilding", 4500, 4.6));
     await loadGames(db, "crazygames", CG, games, "2026-06-30T00:00:00.000Z");
     return db;
   };

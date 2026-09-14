@@ -33,6 +33,8 @@ import {
   genreSupplyTrend,
   steerRanking,
   steeringLens,
+  MIN_MARKET_SUPPLY,
+  MIN_RANKABLE_CELLS,
   type SupplyInfo,
 } from "./shared.ts";
 import { getBriefSteering } from "./library.ts";
@@ -307,12 +309,7 @@ export async function getSteamGenreEconomics(
 // across rows deliberately do NOT sum to the catalog — each row is "the market of games
 // carrying this tag". Demand is median REVIEWS, not median owners (#89): owners_est is a
 // SteamSpy bucket midpoint whose lowest bucket collapses to 10,000 and flattens the axis.
-// ONE sample-size floor for every Steam market read (#211). Below this a "market" is noise, not
-// a market: the aggregate is a median over one or two numbers, so it moves entirely with whichever
-// title the crawl happened to catch. Named for the belief, not for the first caller that held it —
-// tag economics, the tag lookup, and the genre × tag opportunity ranking must all agree on where
-// "a market" starts, or the same cell is a market on one panel and noise on the next.
-const MIN_MARKET_SUPPLY = 3;
+// The supply floor is the shared MIN_MARKET_SUPPLY (shared.ts) — one belief across both surfaces.
 const TAG_ECON_LIMIT = 30;
 // Lookup guardrails (#113). The ranked list is a top-30 BY TOTAL revenue, so generic
 // high-volume tags (Action, Singleplayer, 2D) own it and a niche-but-real market is
@@ -890,13 +887,6 @@ async function steamGapExamples(db: Querier): Promise<Map<string, string[]>> {
 /** How many opportunity rows the Radar shows. The cut is a display decision, not an analysis
  *  one — the ranking below it still exists, and the steering lens reads it (#167). */
 export const OPPORTUNITY_TOP_N = 8;
-
-/** Fewest genre × tag cells the opportunity ranking will score. A z-score needs a spread to be
- *  read against; below two cells the standard deviation is undefined and every score would be an
- *  artifact of the sample rather than a statement about the market. Distinct from the per-cell
- *  supply floor (`MIN_MARKET_SUPPLY`) — that governs which cells are markets, this governs
- *  whether there is enough of a population left to rank at all (#211). */
-const MIN_RANKABLE_CELLS = 2;
 
 // Steam opportunity, FULL ranked candidate set — every genre×tag that cleared the supply floor,
 // steered and sorted but not cut. `getSteamOpportunity` is this list's top slice; the steering
