@@ -170,6 +170,30 @@ describe("D6c isMajorBacked", () => {
     expect(isMajorBacked(["tobyfox"], [])).toBe(false);
     expect(isMajorBacked(["Some Studio"], ["Devolver Digital"])).toBe(false);
   });
+  // #219: Steam shows the short label ("2K") where the list held the long form ("2K Games").
+  it("matches Steam's short publisher labels as whole tokens", () => {
+    // Civilization V/VI appdetails.
+    expect(isMajorBacked(["Firaxis Games", "Aspyr (Mac)"], ["2K", "Aspyr (Mac)"])).toBe(true);
+    expect(isMajorBacked([], ["2K"])).toBe(true);
+    expect(isMajorBacked([], ["2K Games"])).toBe(true);
+    expect(isMajorBacked([], ["2K Play"])).toBe(true);
+    expect(isMajorBacked(["Firaxis Games"], [])).toBe(true);
+    expect(isMajorBacked([], ["Level Infinite"])).toBe(true);
+    expect(isMajorBacked([], ["Take-Two Interactive"])).toBe(true);
+  });
+  it("still matches long-form labels", () => {
+    expect(isMajorBacked([], ["Sony Interactive Entertainment"])).toBe(true);
+    expect(isMajorBacked([], ["BANDAI NAMCO Entertainment"])).toBe(true);
+    expect(isMajorBacked([], ["Ubisoft Entertainment"])).toBe(true);
+    expect(isMajorBacked([], ["Warner Bros. Interactive Entertainment"])).toBe(true);
+    expect(isMajorBacked([], ["SEGA"])).toBe(true);
+    expect(isMajorBacked(["id Software"], ["Bethesda Softworks"])).toBe(true);
+  });
+  it("never matches an entry buried inside another word", () => {
+    expect(isMajorBacked([], ["Studio2Knights"])).toBe(false);
+    expect(isMajorBacked(["Kid Software"], [])).toBe(false);
+    expect(isMajorBacked(["Osegawa Games"], [])).toBe(false);
+  });
 });
 
 describe("D4 classifyScaleTier", () => {

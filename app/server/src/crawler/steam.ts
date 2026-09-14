@@ -42,9 +42,11 @@ const TIERS: ScaleTier[] = ["hobby", "small_indie", "est_indie", "aaa"];
 
 // Mega-publishers and their first-party/wholly-owned studio labels. A title backed by any of
 // these is AAA regardless of Steam review/owner counts — a console port (e.g. a Sony first-party
-// game) can have modest Steam numbers yet is not a realistic indie comparable. Match is a
-// normalized substring; deliberately EXCLUDES indie-friendly publishers (Devolver, Annapurna,
-// Raw Fury, Team17, Coffee Stain, tinyBuild…) whose games ARE valid indie comps. Tune as needed.
+// game) can have modest Steam numbers yet is not a realistic indie comparable. Match is on WHOLE
+// TOKENS (see `tokenize`), so an entry should be the SHORTEST label Steam actually shows — "2k"
+// matches "2K", "2K Games" and "2K Play" but not "Studio2Knights". Deliberately EXCLUDES
+// indie-friendly publishers (Devolver, Annapurna, Raw Fury, Team17, Coffee Stain, tinyBuild…)
+// whose games ARE valid indie comps. Tune as needed.
 const MAJOR_BACKERS = [
   "valve",
   "playstation",
@@ -76,10 +78,10 @@ const MAJOR_BACKERS = [
   "ubisoft",
   "activision",
   "blizzard",
-  "take-two",
   "take two",
   "rockstar games",
-  "2k games",
+  "2k",
+  "firaxis",
   "square enix",
   "bandai namco",
   "capcom",
@@ -89,6 +91,7 @@ const MAJOR_BACKERS = [
   "wb games",
   "epic games",
   "tencent",
+  "level infinite",
   "netease",
   "krafton",
   "nexon",
@@ -98,10 +101,18 @@ const MAJOR_BACKERS = [
   "cognosphere",
   "cd projekt",
 ];
+/** Lowercase, collapse every non-alphanumeric run to one space, pad both ends with a space. */
+const tokenize = (s: string): string =>
+  ` ${s
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()} `;
+// Padded token forms, so `includes` only hits whole-token runs ("take-two" ≡ "take two").
+const MAJOR_BACKER_TOKENS = MAJOR_BACKERS.map(tokenize);
 /** True if any developer or publisher is a known mega-publisher / first-party label. */
 export function isMajorBacked(developers: string[] = [], publishers: string[] = []): boolean {
-  const names = [...developers, ...publishers].map((n) => n.toLowerCase());
-  return names.some((n) => MAJOR_BACKERS.some((m) => n.includes(m)));
+  const names = [...developers, ...publishers].map(tokenize);
+  return names.some((n) => MAJOR_BACKER_TOKENS.some((m) => n.includes(m)));
 }
 
 /**
