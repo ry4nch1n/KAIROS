@@ -427,6 +427,22 @@ export function steerRow<T extends Steerable>(
   return row;
 }
 
+/** ONE sample-size floor for every market read, on BOTH surfaces (#211, #215). Below this a
+ *  "market" is noise, not a market: the aggregate is a median over one or two numbers, so it moves
+ *  entirely with whichever title the crawl happened to catch. Both genre × tag rankings negate
+ *  supply, so without it the thinnest admissible cell earns the largest term exactly where its
+ *  demand estimate is least trustworthy. Named for the belief, not for a caller — Steam tag
+ *  economics, the tag lookup, the Steam opportunity ranking and the browser gap ranking must all
+ *  agree on where "a market" starts, or the same cell is a market on one panel and noise on the next. */
+export const MIN_MARKET_SUPPLY = 3;
+
+/** Fewest genre × tag cells a z-scored ranking will score. A z-score needs a spread to be read
+ *  against; below two cells the standard deviation is undefined and every score would be an
+ *  artifact of the sample rather than a statement about the market. Distinct from the per-cell
+ *  supply floor (`MIN_MARKET_SUPPLY`) — that governs which cells are markets, this governs
+ *  whether there is enough of a population left to rank at all (#211). */
+export const MIN_RANKABLE_CELLS = 2;
+
 /** Steer a WHOLE ranking: sort on the market data, scale the weight to that ranking's own visible
  *  band, lift only the candidates inside the band, re-sort. Replaces the per-row `.map(steerRow)`
  *  both surfaces used — which could not see the spread it now scales against (#200). */
