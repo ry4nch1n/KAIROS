@@ -61,6 +61,7 @@ const row = (p: Partial<VoteSeries>): VoteSeries => ({
   distinct: 1,
   spanDays: 10,
   peakVotes: 100,
+  netChange: 0,
   ...p,
 });
 
@@ -75,6 +76,16 @@ describe("summarizeVoteSeries (#204)", () => {
     expect(s).toMatchObject({ games: 4, thin: 1, unchangedRecent: 1, frozen: 1, moving: 1 });
     expect(formatFreshness(s)).toContain("frozen ≥7d 1 (25%)");
   });
+  it("splits moving series by net direction — a falling count is not a zero one", () => {
+    const s = summarizeVoteSeries("k", [
+      row({ distinct: 3, netChange: 12 }),
+      row({ distinct: 2, netChange: -23 }),
+      row({ distinct: 2, netChange: -1 }),
+      row({ distinct: 3, netChange: 0 }),
+    ]);
+    expect(s).toMatchObject({ moving: 4, rising: 1, falling: 2 });
+    expect(formatFreshness(s)).toContain("up 1 · down 2 · back to start 1");
+  });
   it("an empty cohort reports zeros, not NaN", () => {
     const s = summarizeVoteSeries("k", []);
     expect(s).toMatchObject({ games: 0, medianCaptures: 0, medianSpanDays: 0 });
@@ -86,15 +97,15 @@ describe("browserVoteSeries — real SQL (#204)", () => {
   it("counts capture instants, distinct values and span; ignores null votes and Steam", async () => {
     await seed([
       { source: "poki", votes: [100, 100, 100], days: [0, 5, 10] }, // frozen
-      { source: "poki", votes: [100, null, 104], days: [0, 1, 2] }, // moving, null skipped
+      { source: "poki", votes: [104, null, 100], days: [0, 1, 2] }, // falling, null skipped
       { source: "poki", votes: [50], days: [0] }, // thin
       { source: "steam", votes: [9, 9], days: [0, 30] }, // not a browser portal
     ]);
     const rows = (await browserVoteSeries(db)).sort((a, b) => a.id - b.id);
-    expect(rows.map((r) => [r.captures, r.distinct, Math.round(r.spanDays)])).toEqual([
-      [3, 1, 10],
-      [2, 2, 2],
-      [1, 1, 0],
+    expect(rows.map((r) => [r.captures, r.distinct, Math.round(r.spanDays), r.netChange])).toEqual([
+      [3, 1, 10, 0],
+      [2, 2, 2, -4],
+      [1, 1, 0, 0],
     ]);
     expect((await browserVoteSeries(db, [rows[0].id])).map((r) => r.id)).toEqual([rows[0].id]);
   });

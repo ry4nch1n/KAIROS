@@ -1,16 +1,17 @@
-// Vote-count freshness on the browser portals (#204, part 2). REPORT ONLY — never a gate failure.
+// Vote-count freshness and direction on the browser portals (#204). REPORT ONLY — never a gate failure.
 //
-// #204's estimator fix (a least-squares slope over every capture) moved 1 of 30 Hidden Gems rows,
-// because 22 of them have captures whose vote count never changes, and a fitted slope over a
-// constant series is exactly 0. That leaves two readings the rate itself cannot tell apart:
-//   · the games genuinely stopped accreting votes (a real answer about the market), or
-//   · the capture is stale — a cached page, or a count the portal stopped updating.
-// The discriminator is the POPULAR cohort on the same portal. Heavily-played titles must gain
-// votes between captures; if their counts freeze at the same rate as the gems', the crawl is
-// reading a stale number, not a quiet market. So every summary here is read against that baseline.
+// Hidden Gems' votes/day reads 0 on most rows. A zero rate has several causes, and the rate alone
+// can't tell them apart:
+//   · frozen    — the capture keeps reading the same count (stale page, or a count that stopped);
+//   · falling   — the count goes DOWN between captures. The rate clamps negative slopes to 0, so a
+//                 portal whose count is not a running total reads exactly like a dead title;
+//   · thin      — fewer than two captures, so no rate is possible.
+// Each is read against the POPULAR cohort on the same portal. Heavily-played titles must gain votes
+// if the count is cumulative: if they fall as often as the gems, the count is not a running total and
+// "votes per day" is not an accretion rate on that portal.
 //
-// Report-only because nothing about it is known yet: a threshold picked before the first reading
-// would be a guess. Promote a row to an assertion once the numbers have been seen.
+// Report-only because a threshold picked before the first readings would be a guess. Promote a row
+// to an assertion once the numbers have been seen.
 import type { Querier } from "../db/db.ts";
 import { getHiddenGems } from "../queries/index.ts";
 
@@ -26,6 +27,7 @@ export interface VoteSeries {
   distinct: number; // distinct vote values across those captures
   spanDays: number; // first → last capture
   peakVotes: number;
+  netChange: number; // last capture's count − first capture's count
 }
 
 export interface FreshnessSummary {
@@ -35,6 +37,8 @@ export interface FreshnessSummary {
   unchangedRecent: number; // unchanged, but over less than FROZEN_MIN_SPAN_DAYS
   frozen: number; // unchanged across >= FROZEN_MIN_SPAN_DAYS
   moving: number; // the count changed at least once
+  rising: number; // moving, and ended above where it started
+  falling: number; // moving, and ended below where it started
   medianCaptures: number;
   medianSpanDays: number;
 }
@@ -49,13 +53,16 @@ const median = (xs: number[]): number => {
 export function summarizeVoteSeries(key: string, rows: VoteSeries[]): FreshnessSummary {
   const multi = rows.filter((r) => r.captures >= 2);
   const unchanged = multi.filter((r) => r.distinct === 1);
+  const moving = multi.filter((r) => r.distinct > 1);
   return {
     key,
     games: rows.length,
     thin: rows.length - multi.length,
     unchangedRecent: unchanged.filter((r) => r.spanDays < FROZEN_MIN_SPAN_DAYS).length,
     frozen: unchanged.filter((r) => r.spanDays >= FROZEN_MIN_SPAN_DAYS).length,
-    moving: multi.length - unchanged.length,
+    moving: moving.length,
+    rising: moving.filter((r) => r.netChange > 0).length,
+    falling: moving.filter((r) => r.netChange < 0).length,
     medianCaptures: median(rows.map((r) => r.captures)),
     medianSpanDays: +median(rows.map((r) => r.spanDays)).toFixed(1),
   };
@@ -64,7 +71,8 @@ export function summarizeVoteSeries(key: string, rows: VoteSeries[]): FreshnessS
 export function formatFreshness(s: FreshnessSummary): string {
   const pct = (n: number) => (s.games ? `${Math.round((n / s.games) * 100)}%` : "—");
   return (
-    `${s.key}: ${s.games} games · moving ${s.moving} (${pct(s.moving)}) · ` +
+    `${s.key}: ${s.games} games · moving ${s.moving} (${pct(s.moving)}; ` +
+    `up ${s.rising} · down ${s.falling} · back to start ${s.moving - s.rising - s.falling}) · ` +
     `frozen ≥${FROZEN_MIN_SPAN_DAYS}d ${s.frozen} (${pct(s.frozen)}) · ` +
     `unchanged <${FROZEN_MIN_SPAN_DAYS}d ${s.unchangedRecent} · <2 captures ${s.thin} · ` +
     `median ${s.medianCaptures} captures over ${s.medianSpanDays}d`
@@ -78,7 +86,9 @@ export async function browserVoteSeries(db: Querier, ids?: number[]): Promise<Vo
             count(DISTINCT gs.captured_at)::int AS captures,
             count(DISTINCT gs.votes)::int AS distinct_votes,
             extract(epoch FROM (max(gs.captured_at) - min(gs.captured_at)))::float / 86400 AS span_days,
-            max(gs.votes)::float AS peak_votes
+            max(gs.votes)::float AS peak_votes,
+            ((array_agg(gs.votes ORDER BY gs.captured_at DESC))[1]
+              - (array_agg(gs.votes ORDER BY gs.captured_at ASC))[1])::float AS net_change
      FROM game_snapshots gs
      JOIN games g ON g.id = gs.game_id
      JOIN sources s ON s.id = g.source_id
@@ -94,6 +104,7 @@ export async function browserVoteSeries(db: Querier, ids?: number[]): Promise<Vo
     distinct: Number(r.distinct_votes),
     spanDays: Number(r.span_days ?? 0),
     peakVotes: Number(r.peak_votes ?? 0),
+    netChange: Number(r.net_change ?? 0),
   }));
 }
 
