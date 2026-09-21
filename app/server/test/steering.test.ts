@@ -8,6 +8,9 @@ import {
   steerRow,
   steeringLens,
   steeringScale,
+  robustSd,
+  STEERING_BAND_MAX_SD,
+  STEERING_BAND_MIN_SD,
   STEERING_WEIGHT,
 } from "../src/queries/shared.ts";
 import { freshMemoryDb } from "../src/db/db.ts";
@@ -536,5 +539,82 @@ describe("the steering lift scales to the ranking it is applied to (#200)", () =
     // A row below the cut scores at most `cutoff`, and cutoff + spread = the unsteered top score.
     expect(deck.score).toBeLessThanOrEqual(BROWSER.scores[0]);
     expect(ranked[0].label).toBe("Casual × Filler 0");
+  });
+});
+
+// #231 — the opposite failure from #200. `top − cutoff` is two order statistics, so one +16σ
+// CrazyGames leader set a 14-point lift and five `Card × <tag>` slices took five of six seats,
+// while bounded percentiles on `all` squeezed the band to 0.63 and nothing moved. The ladder below
+// is a seeded normal ranking (SD 1.5) with the live shape grafted on: one 18.52 leader, and seven
+// Card slices near the middle that the two card flags reach through the GENRE alone.
+describe("the steering scale is robust at both ends, one seat per genre (#231)", () => {
+  const CARD = ["Blackjack or playing card mechanics", "Living playing card/toy soldiers setting"];
+  const normals = (n: number, sd: number) => {
+    let a = 231;
+    const rnd = () => {
+      a = (a * 1664525 + 1013904223) % 4294967296;
+      return (a + 0.5) / 4294967296;
+    };
+    return Array.from({ length: n }, () => {
+      const r = Math.sqrt(-2 * Math.log(rnd())) * Math.cos(2 * Math.PI * rnd());
+      return +(sd * r).toFixed(2);
+    });
+  };
+  const CARD_TAGS = ["Can't stop playing", "Skill", "Hero", "1 Player", "Mouse", "Roguelike", "2D"];
+  const ladder = (leader: number, sd = 1.5) => [
+    gap("Io", "Leaderboards", leader),
+    ...normals(200, sd).map((v, i) => gap("Casual", `Filler ${i}`, v)),
+    ...CARD_TAGS.map((t, i) => gap("Card", t, +(0.5 - i * 0.15).toFixed(2))),
+  ];
+  const scores = (rows: SteamGap[]) => rows.map((r) => r.score).sort((a, b) => b - a);
+
+  it("one +16σ leader cannot scale the lift past a fixed multiple of the ranking's SD", () => {
+    const outlier = steeringScale(scores(ladder(18.52)), 6);
+    const sd = robustSd(scores(ladder(18.52)));
+    expect(outlier.maxLift).toBeLessThanOrEqual(+(STEERING_BAND_MAX_SD * sd).toFixed(2));
+    expect(outlier.maxLift).toBeLessThan(6); // was the whole 14-point band before #231
+    // The raw band is what #200 would have used; the clamp, not the outlier, now sets the lift.
+    const raw = scores(ladder(18.52))[0] - scores(ladder(18.52))[5];
+    expect(raw).toBeGreaterThan(14);
+    expect(outlier.maxLift).toBeCloseTo(STEERING_BAND_MAX_SD * sd, 1);
+  });
+
+  it("a genre-level match occupies at most one shown seat, and never crowns a leader", () => {
+    const ranked = steerRanking(ladder(18.52), CARD, 6);
+    const shown = ranked.slice(0, 6);
+    expect(shown.filter((g) => g.genre === "Card").length).toBeLessThanOrEqual(1);
+    expect(ranked[0].label).toBe("Io × Leaderboards");
+    // Every Card slice still RECORDS the match — the lens stays honest — but only one is lifted.
+    const card = ranked.filter((g) => g.genre === "Card");
+    expect(card.every((g) => g.steering?.flags.length === 2)).toBe(true);
+    expect(card.filter((g) => (g.steering?.delta ?? 0) > 0)).toHaveLength(1);
+    expect(card.find((g) => (g.steering?.delta ?? 0) > 0)!.tag).toBe("Can't stop playing"); // best
+  });
+
+  it("a slice that matches on its own TAG still counts on its own", () => {
+    const rows = [...ladder(18.52), gap("Card", "Deckbuilding", 0.2)];
+    const flags = [...CARD, "Luck/deck builder synergy games"];
+    const deck = steerRanking(rows, flags, 6).find((g) => g.tag === "Deckbuilding")!;
+    const { weight } = steeringScale(scores(rows), 6);
+    expect(deck.steering!.flags).toHaveLength(3);
+    expect(deck.steering!.delta).toBeCloseTo(weight, 2); // its tag flag, not the genre's two
+  });
+
+  it("a squeezed band is floored at one robust SD, so steering can still reach the list", () => {
+    // The `all` shape: the visible band spans 0.63 points of a ranking whose SD is ~1.
+    const head = [3.1, 2.98, 2.85, 2.7, 2.6, 2.47];
+    const rows = [
+      ...head.map((v, i) => gap("Casual", `Head ${i}`, v)),
+      ...normals(200, 1).map((v, i) => gap("Casual", `Filler ${i}`, Math.min(v, 2.4))),
+      gap("Puzzle", "Deckbuilding", 2.1),
+    ];
+    const { weight, maxLift } = steeringScale(scores(rows), 6);
+    const sd = robustSd(scores(rows));
+    expect(maxLift).toBeCloseTo(STEERING_BAND_MIN_SD * sd, 1); // not the raw 0.63
+    expect(weight).toBeGreaterThan(0.31);
+    expect(2.1 + (head[0] - head[5]) / 2).toBeLessThan(head[5]); // the raw-band lift fell short…
+    const ranked = steerRanking(rows, ["Luck/deck builder synergy games"], 6);
+    expect(ranked.slice(0, 6).some((g) => g.label === "Puzzle × Deckbuilding")).toBe(true);
+    expect(ranked[0].label).toBe("Casual × Head 0"); // the floor widens reach, never the crown
   });
 });
