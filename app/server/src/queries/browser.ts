@@ -26,6 +26,7 @@ import type {
   SettingFacet,
   VoteBasis,
   LevelUnit,
+  RatingUnit,
 } from "shared";
 import { CONTRACT } from "../../../shared/src/contract.ts";
 import { coTagHits, DEFAULTED_GENRES, loopFamilyFor } from "../data/loopFamilyMap.ts";
@@ -50,6 +51,30 @@ import {
   MIN_RANKABLE_CELLS,
 } from "./shared.ts";
 import { getBriefSteering } from "./library.ts";
+
+// ── Rating LEVELS across portals (#243) ──
+// The portals share a 0–5 scale, not a rating culture. Live /api/genres, 2026-09-21: across the 12
+// genres with ≥20 titles on both, CrazyGames' average rating ran +0.05 to +0.43 above Poki's (mean
+// +0.16, SD 0.10) — the offset varies by genre, so no single per-portal shift removes it. On `all`
+// every rating AGGREGATE (P90/P75/mean) therefore runs on each title's rating percentile within its
+// own portal, the rule #241 set for vote levels; a single portal keeps the raw rating.
+export const ratingUnitOf = (platform: Platform): RatingUnit =>
+  platform === "all" ? "ratingPercentile" : "rating";
+/** The rating a browser aggregate runs on. Joins on `l.game_id`; needs `l` (v_latest) in scope. */
+export function ratingLevel(platform: Platform): { join: string; level: string } {
+  if (platform !== "all") return { join: "", level: "l.rating" };
+  return {
+    join: `LEFT JOIN (
+       SELECT l.game_id, 100 * percent_rank() OVER (PARTITION BY src.name ORDER BY l.rating) AS pct
+       FROM v_latest l JOIN games g ON g.id = l.game_id JOIN sources src ON src.id = g.source_id
+       WHERE g.is_live AND l.rating IS NOT NULL ${pf("all")}
+     ) rl ON rl.game_id = l.game_id`,
+    level: "rl.pct",
+  };
+}
+/** A rating aggregate rounded for its unit: two decimals raw, a whole percentile on `all`. */
+const ratingOut = (v: unknown, unit: RatingUnit) =>
+  unit === "ratingPercentile" ? Math.round(num(v)) : +num(v).toFixed(2);
 
 const fmtDate = (d: any) => new Date(d).toISOString().slice(5, 10); // "MM-DD"
 
@@ -664,17 +689,21 @@ export async function rankMarketGaps(db: Querier, platform: Platform): Promise<M
   // on `all` (#204 S4), so a portal's structurally smaller counts no longer read as low demand.
   const lv = voteLevel(platform);
   const appetiteUnit = levelUnitOf(platform);
+  // Quality ceiling likewise: P90 of within-portal rating percentiles on `all` (#243).
+  const rl = ratingLevel(platform);
+  const ratingUnit = ratingUnitOf(platform);
   const [rows, gex] = await Promise.all([
     db.query(
       `SELECT ${canonSql("l.genre")} AS genre, ${canonSql("t.name")} AS tag,
               count(DISTINCT g.id)::int AS supply_n,
               percentile_cont(0.5) WITHIN GROUP (ORDER BY ${lv.level})::float AS appetite,
-              percentile_cont(0.9) WITHIN GROUP (ORDER BY l.rating)::float AS quality_ceil,
+              percentile_cont(0.9) WITHIN GROUP (ORDER BY ${rl.level})::float AS quality_ceil,
               string_agg(DISTINCT g.id::text, ',' ORDER BY g.id::text) AS ids
        FROM v_latest l
        JOIN games g ON g.id = l.game_id
        JOIN sources src ON src.id = g.source_id
        ${lv.join}
+       ${rl.join}
        JOIN game_tags gt ON gt.game_id = g.id
        JOIN tags t ON t.id = gt.tag_id
        WHERE g.is_live AND l.genre IS NOT NULL ${pf(platform)}
@@ -710,7 +739,8 @@ export async function rankMarketGaps(db: Querier, platform: Platform): Promise<M
     supplyN: num(r.supply_n),
     appetite: Math.round(num(r.appetite)),
     appetiteUnit,
-    qualityCeil: +num(r.quality_ceil).toFixed(2),
+    qualityCeil: ratingOut(r.quality_ceil, ratingUnit),
+    ratingUnit,
     score: +(zApp(num(r.appetite)) + zQual(num(r.quality_ceil)) - zSup(num(r.supply_n))).toFixed(2),
     // Same intermediates the score above sums — surfaced, not re-derived (#87). Signs match:
     // demand/quality lift, supply is negated. Rounded independently; sum ≈ score ±0.02.
@@ -1011,13 +1041,16 @@ export async function getGenres(db: Querier, platform: Platform): Promise<GenreR
   // the raw fields go null rather than carry a median pooled across two vote bases.
   const lv = voteLevel(platform);
   const pctUnit = levelUnitOf(platform) === "votePercentile";
+  const rl = ratingLevel(platform); // rating columns: within-portal percentile on `all` (#243)
+  const ratingUnit = ratingUnitOf(platform);
   const rows = await db.query(
-    `SELECT ${canonSql("l.genre")} AS genre, count(*)::int AS games, avg(l.rating)::float AS avg_rating,
+    `SELECT ${canonSql("l.genre")} AS genre, count(*)::int AS games, avg(${rl.level})::float AS avg_rating,
             percentile_cont(0.5) WITHIN GROUP (ORDER BY ${lv.level})::float AS med_votes,
             percentile_cont(0.9) WITHIN GROUP (ORDER BY ${lv.level})::float AS p90_votes,
-            percentile_cont(0.9) WITHIN GROUP (ORDER BY l.rating)::float AS p90_rating
+            percentile_cont(0.9) WITHIN GROUP (ORDER BY ${rl.level})::float AS p90_rating
      FROM v_latest l JOIN games g ON g.id = l.game_id JOIN sources src ON src.id = g.source_id
      ${lv.join}
+     ${rl.join}
      WHERE g.is_live AND l.genre IS NOT NULL ${pf(platform)}
      GROUP BY ${canonSql("l.genre")} ORDER BY games DESC`,
   );
@@ -1037,12 +1070,13 @@ export async function getGenres(db: Querier, platform: Platform): Promise<GenreR
     return {
       genre: r.genre,
       games: num(r.games),
-      avgRating: +num(r.avg_rating).toFixed(2),
+      avgRating: ratingOut(r.avg_rating, ratingUnit),
+      ratingUnit,
       medianVotes: pctUnit ? null : Math.round(num(r.med_votes)),
       p90Votes: pctUnit ? null : Math.round(num(r.p90_votes)),
       medianVotePct: pctUnit ? Math.round(num(r.med_votes)) : null,
       p90VotePct: pctUnit ? Math.round(num(r.p90_votes)) : null,
-      p90Rating: +num(r.p90_rating).toFixed(2),
+      p90Rating: ratingOut(r.p90_rating, ratingUnit),
       votesPerDay: solo ? solo.votesPerDay : null,
       trajectory: solo ? solo.trajectory : null,
       momentum,
@@ -1198,11 +1232,15 @@ export async function getInsights(
   const landscape = deps?.landscape ?? (await getGenreLandscape(db, platform));
   if (landscape.length) {
     const best = landscape.reduce((b, c) => (c.p75Rating > b.p75Rating ? c : b), landscape[0]);
+    // On All Browser the P75 is of within-portal rating percentiles (#243), so it is named as one.
+    const pct = best.ratingUnit === "ratingPercentile";
     out.push({
       kind: "up",
       tag: "TOP QUALITY",
-      meta: `P75 rating ${best.p75Rating.toFixed(2)}`,
-      text: `<b>${best.genre}</b> has the highest P75 rating across all genres.`,
+      meta: pct
+        ? `P75 rating percentile P${best.p75Rating}`
+        : `P75 rating ${best.p75Rating.toFixed(2)}`,
+      text: `<b>${best.genre}</b> has the highest P75 rating${pct ? " (ranked within each portal)" : ""} across all genres.`,
       implication: `players reward polish in ${best.genre} — the quality bar to clear is high`,
     });
   }
@@ -1419,13 +1457,16 @@ export async function getGenreLandscape(
   // titles (Σ within-portal percentile ÷ 100), since a raw sum is dominated by the larger counts.
   const lv = voteLevel(platform);
   const pctUnit = levelUnitOf(platform) === "votePercentile";
+  const rl = ratingLevel(platform); // P75 / mean rating: within-portal percentile on `all` (#243)
+  const ratingUnit = ratingUnitOf(platform);
   const [rows, ex] = await Promise.all([
     db.query(
       `SELECT ${canonSql("l.genre")} AS genre, count(*)::int AS supply,
-              percentile_cont(0.75) WITHIN GROUP (ORDER BY l.rating)::float AS p75,
-              avg(l.rating)::float AS avgr, coalesce(sum(${lv.level}),0)::float AS tv
+              percentile_cont(0.75) WITHIN GROUP (ORDER BY ${rl.level})::float AS p75,
+              avg(${rl.level})::float AS avgr, coalesce(sum(${lv.level}),0)::float AS tv
        FROM v_latest l JOIN games g ON g.id = l.game_id JOIN sources src ON src.id = g.source_id
        ${lv.join}
+       ${rl.join}
        WHERE g.is_live AND l.genre IS NOT NULL AND l.rating IS NOT NULL ${pf(platform)}
        GROUP BY ${canonSql("l.genre")} HAVING count(*) >= 4 ORDER BY supply DESC`,
     ),
@@ -1434,8 +1475,9 @@ export async function getGenreLandscape(
   return rows.map((r) => ({
     genre: r.genre,
     supply: num(r.supply),
-    p75Rating: +num(r.p75).toFixed(2),
-    avgRating: +num(r.avgr).toFixed(2),
+    p75Rating: ratingOut(r.p75, ratingUnit),
+    avgRating: ratingOut(r.avgr, ratingUnit),
+    ratingUnit,
     totalVotes: pctUnit ? null : Math.round(num(r.tv)),
     voteWeight: pctUnit ? +(num(r.tv) / 100).toFixed(1) : null,
     examples: ex.get(r.genre) ?? [],
