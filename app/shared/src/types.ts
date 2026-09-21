@@ -335,6 +335,12 @@ export interface ScatterPoint {
 // never pooled or ranked against each other.
 export type LevelUnit = "votes" | "votePercentile";
 
+// How a browser RATING aggregate is reported (#243). `rating`: the raw 0–5 score (one portal).
+// `ratingPercentile`: each title's rating percentile within its OWN portal's live catalogue, 0–100,
+// then aggregated (P90, P75, mean) — on `all`, because the portals share a scale, not a rating
+// culture. Absent reads as `rating`.
+export type RatingUnit = "rating" | "ratingPercentile";
+
 // What a browser portal's vote count measures (#204). Poki's `votes` is `cumulative` — a running
 // total that only rises, so its delta is audience growth (votes/day). CrazyGames' is a `window` of
 // recent engagement — it drops a little most days at every title size — so its level is already
@@ -382,7 +388,8 @@ export interface MarketGap {
   supplyN: number;
   appetite: number; // median level per title, in `appetiteUnit`
   appetiteUnit: LevelUnit; // "votes" on one portal; "votePercentile" (0–100, within portal) on `all`
-  qualityCeil: number;
+  qualityCeil: number; // P90 rating per title, in `ratingUnit`
+  ratingUnit?: RatingUnit; // "rating" on one portal; "ratingPercentile" (0–100, within portal) on `all`
   score: number;
   components: ScoreComponents; // the score's breakdown (#87) — sums to `score`
   examples: string[];
@@ -419,8 +426,9 @@ export interface Insight {
 export interface GenreLandscapePoint {
   genre: string;
   supply: number;
-  p75Rating: number;
+  p75Rating: number; // both ratings in `ratingUnit` (#243)
   avgRating: number;
+  ratingUnit?: RatingUnit;
   totalVotes: number | null; // raw sum on one portal; null on `all`, where raw counts never pool
   // `all` only (#204 S4): vote-weighted titles — Σ within-portal vote percentile ÷ 100. null on one portal.
   voteWeight: number | null;
@@ -612,7 +620,8 @@ export type SupplyTrend = "rising" | "steady" | "cooling" | "quiet" | "unobserve
 export interface GenreRow {
   genre: string;
   games: number;
-  avgRating: number;
+  avgRating: number; // avgRating and p90Rating are in `ratingUnit` (#243)
+  ratingUnit?: RatingUnit;
   // Raw vote levels on one portal; null on `all`, where raw counts on different bases never pool
   // (#204 S4) — read `medianVotePct` / `p90VotePct` there (within-portal percentile, 0–100; null on
   // one portal).

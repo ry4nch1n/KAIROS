@@ -56,6 +56,7 @@ import {
   fmtVotePct,
   levelName,
   VOTE_PCT_TIP,
+  RATING_PCT_TIP,
 } from "../components/charts.ts";
 import { InsightSvg, tagClass } from "../components/icons.tsx";
 import { CopySeed } from "../components/CopySeed.tsx";
@@ -804,13 +805,15 @@ function GapList({
   const note = steeringNote(lens);
   // All Browser (#204 S4): appetite is a within-portal vote percentile, never pooled raw votes.
   const pct = gaps.some((g) => g.appetiteUnit === "votePercentile");
+  const rPct = gaps.some((g) => g.ratingUnit === "ratingPercentile"); // #243
   return (
     <div className="gaplist">
       <p className="gap-legend">
         opportunity = z(appetite:{" "}
         {pct ? "median vote percentile, within portal" : "median votes/title"}) + z(quality ceiling:
-        P90 rating) − z(supply: games)
+        P90 rating{rPct ? " percentile, within portal" : ""}) − z(supply: games)
         {pct && <Tip text={VOTE_PCT_TIP} />}
+        {rPct && <Tip text={RATING_PCT_TIP} />}
       </p>
       {note && <p className="gap-legend">{note}</p>}
       {gaps.map((g, i) => (
@@ -849,7 +852,15 @@ function GapList({
               <b>{g.supplyN}</b> games
             </span>
             <span>
-              top rating <b>{g.qualityCeil.toFixed(2)}</b>
+              {g.ratingUnit === "ratingPercentile" ? (
+                <>
+                  top rating pct <b>{fmtVotePct(g.qualityCeil)}</b>
+                </>
+              ) : (
+                <>
+                  top rating <b>{g.qualityCeil.toFixed(2)}</b>
+                </>
+              )}
             </span>
           </div>
           <GapActions
@@ -1025,6 +1036,10 @@ function LoopFamilyMarketCard({ platform }: { platform: Platform }) {
   );
 }
 
+/** A genre rating column in its row's unit: "4.36" on one portal, "P62" on All Browser (#243). */
+const ratingCell = (r: GenreRow, v: number) =>
+  r.ratingUnit === "ratingPercentile" ? fmtVotePct(v) : v.toFixed(2);
+
 function GenresView({ rows, platform }: { rows: GenreRow[]; platform: Platform }) {
   const max = Math.max(1, ...rows.map((r) => r.games));
   const split = platform === "all";
@@ -1042,7 +1057,10 @@ function GenresView({ rows, platform }: { rows: GenreRow[]; platform: Platform }
           <tr>
             <th>Genre</th>
             <th className="r">Games</th>
-            <th className="r">Avg rating</th>
+            <th className="r">
+              {split ? "Avg rating pct" : "Avg rating"}
+              {split && <Tip text={RATING_PCT_TIP} />}
+            </th>
             {split ? (
               <>
                 <th className="r">
@@ -1057,7 +1075,7 @@ function GenresView({ rows, platform }: { rows: GenreRow[]; platform: Platform }
                 <th className="r">P90 votes (top-10% bar)</th>
               </>
             )}
-            <th className="r">P90 rating</th>
+            <th className="r">{split ? "P90 rating pct" : "P90 rating"}</th>
             <th className="r">
               Momentum
               <Tip text={GENRE_MOMENTUM_TIP} />
@@ -1082,10 +1100,10 @@ function GenresView({ rows, platform }: { rows: GenreRow[]; platform: Platform }
                 </span>
               </td>
               <td className="r">{r.games}</td>
-              <td className="r">{r.avgRating.toFixed(2)}</td>
+              <td className="r">{ratingCell(r, r.avgRating)}</td>
               <td className="r">{levelCell(r.medianVotes, r.medianVotePct)}</td>
               <td className="r">{levelCell(r.p90Votes, r.p90VotePct)}</td>
-              <td className="r">{r.p90Rating.toFixed(2)}</td>
+              <td className="r">{ratingCell(r, r.p90Rating)}</td>
               <td className="r momentum">
                 {r.momentum.length ? (
                   r.momentum.map((m) => (

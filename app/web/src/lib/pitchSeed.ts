@@ -16,7 +16,10 @@ function gapSeed(g: Gap, ctx: SeedContext, appetite: string | null, price?: stri
     `Source: ${ctx.source} · captured ${ctx.captured}`,
     appetite,
     `Supply: ${g.supplyN} games${g.supplyRising ? " · supply rising" : ""}`,
-    `Quality ceiling: ${g.qualityCeil.toFixed(2)} (P90 rating)`,
+    // On All Browser the ceiling is a within-portal rating percentile (#243), never a pooled 0–5 score.
+    "ratingUnit" in g && g.ratingUnit === "ratingPercentile"
+      ? `Quality ceiling: P${Math.round(g.qualityCeil)} (P90 rating percentile, within its portal)`
+      : `Quality ceiling: ${g.qualityCeil.toFixed(2)} (P90 rating)`,
     price,
     `Opportunity score: ${g.score.toFixed(1)}`,
     g.examples?.length ? `Examples: ${g.examples.join(" · ")}` : null,

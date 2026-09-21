@@ -149,6 +149,8 @@ export const levelName = (unit: LevelUnit | undefined, raw: string) =>
   unit === "votePercentile" ? "median vote percentile" : raw;
 export const VOTE_PCT_TIP =
   "All Browser: each title's votes are ranked within its own portal (P0 = that portal's least-voted title, P100 = its most-voted), because one portal's count is a running total and the other's covers only recent engagement. Medians and sums are taken over those percentiles, never over raw counts pooled across portals.";
+export const RATING_PCT_TIP =
+  "All Browser: each title's rating is ranked within its own portal (P0 = that portal's lowest-rated title, P100 = its highest), because the portals rate on the same 0–5 scale but not the same way. Genre and market ratings are taken over those percentiles, never over raw ratings pooled across portals.";
 
 export function scatterOption(points: ScatterPoint[]): EChartsOption {
   // On All Browser (#204 S4) x is each title's vote percentile within its own portal: raw counts on
@@ -288,13 +290,17 @@ export function heatmapOption(h: FeatureHeatmap): EChartsOption {
 const landscapeWeight = (p: GenreLandscapePoint) => p.totalVotes ?? p.voteWeight ?? 0;
 export function landscapeOption(pts: GenreLandscapePoint[]): EChartsOption {
   const pct = pts.some((p) => p.totalVotes == null && p.voteWeight != null);
+  // On All Browser the rating axis is a within-portal rating percentile, 0–100 (#243).
+  const rPct = pts.some((p) => p.ratingUnit === "ratingPercentile");
+  const rName = rPct ? "P75 rating percentile" : "P75 rating";
   const maxV = Math.max(1e-9, ...pts.map(landscapeWeight));
   const supplies = pts.map((p) => p.supply);
   const ratings = pts.map((p) => p.p75Rating);
   const xMin = Math.max(1, Math.floor(Math.min(...supplies) * 0.6));
   const xMax = Math.ceil(Math.max(...supplies) * 1.2);
-  const yMin = Math.max(0, +(Math.min(...ratings) - 0.2).toFixed(1));
-  const yMax = Math.min(5, +(Math.max(...ratings) + 0.2).toFixed(1));
+  const pad = rPct ? 5 : 0.2;
+  const yMin = Math.max(0, +(Math.min(...ratings) - pad).toFixed(1));
+  const yMax = Math.min(rPct ? 100 : 5, +(Math.max(...ratings) + pad).toFixed(1));
   const data = pts.map((p) => ({
     value: [p.supply, p.p75Rating, landscapeWeight(p), p.genre, (p.examples ?? []).join(", ")],
     symbolSize: 12 + 34 * Math.sqrt(landscapeWeight(p) / maxV),
@@ -303,7 +309,7 @@ export function landscapeOption(pts: GenreLandscapePoint[]): EChartsOption {
     tooltip: {
       ...tip,
       formatter: (p: any) =>
-        `<b>${p.value[3]}</b><br>${p.value[0]} games · P75 rating ${p.value[1]}<br>${Number(p.value[2]).toLocaleString()} ${pct ? "vote-weighted titles (within-portal percentile)" : "total votes"}${p.value[4] ? `<br><span style="opacity:.7">e.g. ${p.value[4]}</span>` : ""}`,
+        `<b>${p.value[3]}</b><br>${p.value[0]} games · ${rName} ${p.value[1]}<br>${Number(p.value[2]).toLocaleString()} ${pct ? "vote-weighted titles (within-portal percentile)" : "total votes"}${p.value[4] ? `<br><span style="opacity:.7">e.g. ${p.value[4]}</span>` : ""}`,
     },
     grid: { left: 64, right: 40, top: 20, bottom: 48 },
     xAxis: {
@@ -322,7 +328,7 @@ export function landscapeOption(pts: GenreLandscapePoint[]): EChartsOption {
       type: "value",
       min: yMin,
       max: yMax,
-      name: "quality ceiling (P75 rating)",
+      name: `quality ceiling (${rPct ? "P75 rating pct, within portal" : "P75 rating"})`,
       nameLocation: "middle",
       nameGap: 44,
       nameRotate: 90,

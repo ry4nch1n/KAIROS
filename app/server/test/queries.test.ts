@@ -117,8 +117,10 @@ describe("A7 market gaps (interpretable)", () => {
       expect(gaps[i - 1].score).toBeGreaterThanOrEqual(gaps[i].score);
     for (const c of gaps) {
       expect(c.appetite).toBeGreaterThanOrEqual(0);
+      // On `all` the ceiling is a within-portal rating percentile, 0–100 (#243).
+      expect(c.ratingUnit).toBe("ratingPercentile");
       expect(c.qualityCeil).toBeGreaterThan(0);
-      expect(c.qualityCeil).toBeLessThanOrEqual(5);
+      expect(c.qualityCeil).toBeLessThanOrEqual(100);
     }
   });
 
@@ -325,7 +327,7 @@ describe("A_landscape quality-saturation", () => {
     for (const p of pts) {
       expect(p.supply).toBeGreaterThan(0);
       expect(p.p75Rating).toBeGreaterThan(0);
-      expect(p.p75Rating).toBeLessThanOrEqual(5);
+      expect(p.p75Rating).toBeLessThanOrEqual(100); // within-portal rating percentile on `all` (#243)
       // `all` weighs by within-portal percentile, never a raw sum across vote bases (#204 S4).
       expect(p.totalVotes).toBeNull();
       expect(p.voteWeight!).toBeGreaterThanOrEqual(0);
@@ -900,5 +902,121 @@ describe("#108 getLoopFamilyMarket", () => {
     for (const r of m.rows) expect(r.routeLean === "browser" && !r.steamGenres.length).toBe(false);
     // The single-surface read makes no cross-platform claim.
     expect((await q.getLoopFamilyMarket(db, "steam")).rows.every((r) => !r.routeLean)).toBe(true);
+  });
+});
+
+// #243 — rating AGGREGATES on `all` use within-portal rating percentiles. Both portals carry the
+// same within-portal rating shape, but CrazyGames' ratings sit a flat +0.4 higher (its rating
+// culture, not better games). On `all` a CrazyGames-only cell must not out-score a Poki-only one on
+// quality; a single portal must still read raw 0–5 ratings.
+const T0 = Date.UTC(2026, 8, 20, 12);
+const OFFSET: Record<string, number> = { poki: 0, crazygames: 0.4 };
+// Poki carries Puzzle, CrazyGames carries Racing — each genre×tag cell is one portal's titles only.
+const GENRE: Record<string, string> = { poki: "Puzzle", crazygames: "Racing" };
+
+async function seedRatings(db: Querier) {
+  const one = async (sql: string, p: unknown[]) => (await db.query(sql, p))[0];
+  const ts = new Date(T0).toISOString();
+  for (const name of ["poki", "crazygames"]) {
+    const sid = (
+      await one(`INSERT INTO sources(name, base_url) VALUES ($1,$2) RETURNING id`, [
+        name,
+        `https://${name}.com`,
+      ])
+    ).id;
+    const cid = (
+      await one(
+        `INSERT INTO crawls(source_id, started_at, finished_at, status, games_seen) VALUES ($1,$2,$2,'ok',0) RETURNING id`,
+        [sid, ts],
+      )
+    ).id;
+    // Two tags → two cells per portal (Merge: the 4 best-rated, Casual: all 8).
+    for (let i = 0; i < 8; i++) {
+      const gid = (
+        await one(
+          `INSERT INTO games(source_id, source_game_id, url, title, first_seen_at) VALUES ($1,$2,$3,$4,$5) RETURNING id`,
+          [sid, `${name}-${i}`, `https://x.com/${name}-${i}`, `${name}-${i}`, ts],
+        )
+      ).id;
+      await db.query(
+        `INSERT INTO game_snapshots(game_id, crawl_id, captured_at, rating, votes, genre) VALUES ($1,$2,$3,$4,$5,$6)`,
+        [gid, cid, ts, 3.8 + i * 0.1 + OFFSET[name], 100 * (i + 1), GENRE[name]],
+      );
+      for (const tag of i >= 4 ? ["Merge", "Casual"] : ["Casual"]) {
+        const tid = (
+          await one(
+            `INSERT INTO tags(name) VALUES ($1) ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name RETURNING id`,
+            [tag],
+          )
+        ).id;
+        await db.query(`INSERT INTO game_tags(game_id, tag_id) VALUES ($1,$2)`, [gid, tid]);
+      }
+    }
+  }
+}
+
+describe("#243 rating percentiles on `all`", () => {
+  let rdb: Querier;
+  beforeAll(async () => {
+    rdb = await freshMemoryDb();
+    await seedRatings(rdb);
+  }, 60000);
+
+  describe("R1 the rating-percentile building block", () => {
+    it("one portal keeps the raw rating; `all` joins the within-portal percentile", () => {
+      expect(q.ratingLevel("poki")).toEqual({ join: "", level: "l.rating" });
+      expect(q.ratingLevel("all").level).toBe("rl.pct");
+      expect(q.ratingLevel("all").join).toContain("PARTITION BY src.name ORDER BY l.rating");
+      expect([q.ratingUnitOf("all"), q.ratingUnitOf("poki"), q.ratingUnitOf("crazygames")]).toEqual(
+        ["ratingPercentile", "rating", "rating"],
+      );
+    });
+  });
+
+  describe("R2 aggregates on `all` carry no portal offset", () => {
+    it("a CrazyGames-only cell gets no quality lift from the portal's higher ratings", async () => {
+      const gaps = await q.getMarketGaps(rdb, "all");
+      const by = (label: string) => gaps.find((g) => g.label === label)!;
+      const pk = by("Puzzle × Merge");
+      const cg = by("Racing × Merge");
+      expect(pk && cg).toBeTruthy();
+      expect(cg.ratingUnit).toBe("ratingPercentile");
+      expect(cg.qualityCeil).toBe(pk.qualityCeil);
+      expect(cg.components.quality).toBe(pk.components.quality);
+      expect(cg.qualityCeil).toBeGreaterThan(50); // a percentile, not a 0–5 score
+    });
+    it("genre and landscape ratings are percentiles, equal across the two portals", async () => {
+      const g = await q.getGenres(rdb, "all");
+      const [pk, cg] = ["Puzzle", "Racing"].map((n) => g.find((r) => r.genre === n)!);
+      expect([pk.ratingUnit, pk.avgRating, pk.p90Rating]).toEqual([
+        "ratingPercentile",
+        cg.avgRating,
+        cg.p90Rating,
+      ]);
+      const l = await q.getGenreLandscape(rdb, "all");
+      const [lp, lc] = ["Puzzle", "Racing"].map((n) => l.find((r) => r.genre === n)!);
+      expect(lp.p75Rating).toBe(lc.p75Rating);
+      expect(lp.ratingUnit).toBe("ratingPercentile");
+    });
+    it("TOP QUALITY names the within-portal unit on `all`", async () => {
+      const top = (await q.getInsights(rdb, "all")).find((i) => i.tag === "TOP QUALITY")!;
+      expect(top.meta).toMatch(/^P75 rating percentile P\d+$/);
+      expect(top.text).toContain("ranked within each portal");
+    });
+  });
+
+  describe("R3 a single portal is unchanged", () => {
+    it("reads raw 0–5 ratings, two decimals", async () => {
+      const [gap] = (await q.getMarketGaps(rdb, "crazygames")).filter(
+        (x) => x.label === "Racing × Merge",
+      );
+      expect(gap.ratingUnit).toBe("rating");
+      // P90 of 4.6..4.9 (+0.4 offset on 4.2..4.5) = 4.87
+      expect(gap.qualityCeil).toBe(4.87);
+      const [row] = await q.getGenres(rdb, "poki");
+      expect([row.ratingUnit, row.avgRating, row.p90Rating]).toEqual(["rating", 4.15, 4.43]);
+      const top = (await q.getInsights(rdb, "poki")).find((i) => i.tag === "TOP QUALITY")!;
+      expect(top.meta).toBe("P75 rating 4.33");
+    });
   });
 });

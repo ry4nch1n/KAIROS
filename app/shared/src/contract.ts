@@ -235,7 +235,12 @@ export const CONTRACT = {
   //      than 10 crawled titles. The crawl is a survivor sample, so that zero is an absence of
   //      observation, not a quiet market. `supplyRising` stays false. Browser and store-genre
   //      supply are unchanged. Additive to the enum; readers should treat unknown values as neutral.
-  version: 35,
+  // v36: rating AGGREGATES on `all` use within-portal rating percentiles (#243), as v33 did for vote
+  //      levels. On `all`, gap `qualityCeil` (and the score's quality z-term), `GenreRow.avgRating` /
+  //      `p90Rating` and landscape `p75Rating` / `avgRating` are taken over each title's rating
+  //      percentile (0–100) within its own portal. `ratingUnit` ("rating" | "ratingPercentile") on
+  //      `MarketGap`, `GenreRow` and `GenreLandscapePoint` names it. A single portal is unchanged.
+  version: 36,
   pitch: {
     // v2: added visual-card fields — setting, artStyle, codeName, headerUrl, shotUrl.
     // v3: rating rework — scoreFields d1Fit/steamCeiling/buildCost → browserFit/steamFit/buildEase.
