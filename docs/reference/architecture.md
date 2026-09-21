@@ -6,7 +6,7 @@
 # Architecture reference
 
 Crawlers append snapshots; analytics queries read them; one API serves both entry points; the
-SPA renders four panels. 10 tables, 1 view, 20 routes.
+SPA renders four panels. 11 tables, 1 view, 20 routes.
 
 ```mermaid
 flowchart LR

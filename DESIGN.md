@@ -241,7 +241,10 @@ How the surfaces answer them:
 - **Names are canonical before aggregation.** Genre and tag names collapse a trailing "Game(s)" in SQL,
   before any median is taken, since medians can't be merged afterwards.
 - **Supply has a velocity, not just a count.** New entrants in adjacent trailing windows, anchored to
-  the data's newest date rather than the wall clock, flag a genre whose supply is rising.
+  the data's newest date rather than the wall clock, flag a genre whose supply is rising. For a Steam
+  tag the standing flags match, the count comes from the store's own release listing (the census),
+  because the crawl only ever sees a tag's survivors; elsewhere a zero over a tiny crawled catalogue
+  reads "not measured", never "quiet".
 - **Demand and supply share one quadrant** per platform, coloured by supply momentum.
 - **Steam economics carry context, not just totals.** A genre row carries a cited wishlist-to-sale
   signal where one exists, and median playtime reads as a content-expectation proxy, not a quality

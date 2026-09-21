@@ -8,6 +8,7 @@ import type {
   ScaleTierRow,
   SteamGenreEconomics,
   SteamTagEconomics,
+  SupplyCensus,
   SteamTagLookup,
   SteamCohort,
   SteamComparable,
@@ -32,6 +33,7 @@ import {
   classifySupply,
   genreSupplyTrend,
   classifySampledSupply,
+  classifyCensusSupply,
   steerRanking,
   steeringLens,
   MIN_MARKET_SUPPLY,
@@ -377,9 +379,10 @@ export async function getSteamTagEconomics(
   // sub-genre row reads identically to a store-genre row. Both are single set-based queries
   // scoped by the SAME cohort + name filters as the rows above, so the lookup path stays cheap
   // (only the matched tags are computed) and the ranked path computes over the indie cohort.
-  const [supply, demand] = await Promise.all([
+  const [supply, demand, census] = await Promise.all([
     tagSupplyTrend(db, tierFilter, matchFilter, params),
     tagDemandTrajectory(db, tierFilter, matchFilter, params),
+    latestTagCensus(db),
   ]);
   return rows
     .filter((r) => !isCurationTag(r.tag))
@@ -387,8 +390,12 @@ export async function getSteamTagEconomics(
     .map((r) => {
       const medRev = Math.round(num(r.med_rev_cents) / 100);
       const sup = supply.get(r.tag);
-      // #245: a zero count over a survivor-sampled tag is unmeasured, not quiet.
-      const supplyTrend = classifySampledSupply(sup?.recent ?? 0, sup?.prior ?? 0, num(r.games));
+      // #245: the store's own listing wins where a recent census exists; otherwise a zero count
+      // over a survivor-sampled tag is unmeasured, not quiet.
+      const c = census.get(String(r.tag).toLowerCase()) ?? null;
+      const supplyTrend = c
+        ? classifyCensusSupply(c)
+        : classifySampledSupply(sup?.recent ?? 0, sup?.prior ?? 0, num(r.games));
       return {
         genre: r.tag, // same row shape as the store-genre table, keyed on the tag
         games: num(r.games),
@@ -407,10 +414,47 @@ export async function getSteamTagEconomics(
         // deepens — the identical treatment the store-genre lens uses for thin history.
         supplyTrend,
         supplyRising: supplyTrend === "rising",
+        supplySource: c ? "census" : "crawl",
+        census: c,
         demandTrajectory: demand.get(r.tag) ?? "new",
         ...econBandFields(medRev, r.med_rev_bl_cents),
       };
     });
+}
+
+// Newest census reading per tag name (#245), keyed on the lower-cased CANONICAL name (the same
+// canonSql the tag rows group by, so the store's "Card Game" meets the crawl's "Card"). Only rows from the last 7 days
+// count: a census that stopped running must fall back to the crawl read, not freeze a stale one.
+// Anchored to the newest census date (not the wall clock) so fixtures stay deterministic. A
+// missing table (DB not yet migrated) behaves as "no census".
+const CENSUS_MAX_AGE_DAYS = 7;
+async function latestTagCensus(db: Querier): Promise<Map<string, SupplyCensus>> {
+  const m = new Map<string, SupplyCensus>();
+  try {
+    const rows = await db.query(
+      `WITH anchor AS (SELECT max(captured_on) AS mx FROM tag_census)
+       SELECT DISTINCT ON (lower(${canonSql("tag_name")})) lower(${canonSql("tag_name")}) AS k,
+              to_char(captured_on, 'YYYY-MM-DD') AS captured_on, recent, prior, covered_days,
+              truncated, total_count, median_price_cents
+       FROM tag_census
+       WHERE captured_on > (SELECT mx FROM anchor) - ${CENSUS_MAX_AGE_DAYS}
+       ORDER BY lower(${canonSql("tag_name")}), captured_on DESC`,
+    );
+    for (const r of rows) {
+      m.set(r.k, {
+        capturedOn: r.captured_on,
+        recent: num(r.recent),
+        prior: num(r.prior),
+        coveredDays: num(r.covered_days),
+        truncated: r.truncated === true || r.truncated === "t",
+        totalCount: num(r.total_count),
+        medianPriceCents: r.median_price_cents == null ? null : num(r.median_price_cents),
+      });
+    }
+  } catch {
+    // tag_census not migrated yet → no census
+  }
+  return m;
 }
 
 // Per-tag new-entrant counts over the trailing window vs. the prior window (#114) — the same

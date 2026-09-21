@@ -103,6 +103,30 @@ CREATE TABLE IF NOT EXISTS game_tags (
   PRIMARY KEY (game_id, tag_id)
 );
 
+-- Steam release census (#245): append-only, one row per store tag per day, read from the store's
+-- own "newest first" search listing — NOT from the crawled sample. `tag_id` is the STORE tag id
+-- (not tags.id); `tag_name` joins to the canonical tag name. recent/prior are the same 30-day
+-- windows as the crawl-sample supply read; `truncated` = the one fetched page ran out before
+-- covering both windows (`covered_days` says how far it reached), so the counts are a lower bound.
+-- `total_count` is captured for a future day-over-day series and is not read yet.
+CREATE TABLE IF NOT EXISTS tag_census (
+  id                 BIGSERIAL PRIMARY KEY,
+  tag_id             INT NOT NULL,
+  tag_name           TEXT NOT NULL,
+  captured_on        DATE NOT NULL,
+  captured_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  total_count        INT NOT NULL,
+  recent             INT NOT NULL,
+  prior              INT NOT NULL,
+  covered_days       INT NOT NULL,
+  truncated          BOOLEAN NOT NULL,
+  median_price_cents INT,
+  price_n            INT NOT NULL DEFAULT 0,
+  parsed             INT NOT NULL DEFAULT 0,
+  UNIQUE (tag_id, captured_on)
+);
+CREATE INDEX IF NOT EXISTS idx_tag_census_name ON tag_census (lower(tag_name), captured_on DESC);
+
 -- latest snapshot per game
 CREATE OR REPLACE VIEW v_latest AS
 SELECT DISTINCT ON (game_id) *

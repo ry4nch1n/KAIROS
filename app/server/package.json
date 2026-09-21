@@ -10,6 +10,7 @@
     "crawl:crazygames": "tsx src/crawler/run.ts crazygames",
     "crawl:poki": "tsx src/crawler/run.ts poki",
     "crawl:steam": "tsx src/crawler/run.ts steam",
+    "crawl:census": "tsx src/crawler/run.ts census",
     "backfill:tiers": "tsx scripts/backfill-major-tiers.ts",
     "check:steam": "tsx scripts/check-steam-data.ts",
     "test": "vitest run"

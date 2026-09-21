@@ -46,7 +46,7 @@ says what each one is for.
 | `ci.yml` | Every PR to `main`, plus manual | **The required merge gate:** lint → test → build. Branch protection blocks merging until it is green |
 | `auto-merge.yml` | Non-draft PRs | Enables GitHub auto-merge, so a PR merges itself once CI passes. Nothing is merged by hand |
 | `deploy.yml` | Scheduled (see its cron), plus manual | Ships `main` to Netlify **only if it changed** since the last deploy, and moves the **`live` tag** onto what is in production. No `NETLIFY_AUTH_TOKEN` secret, no deploy |
-| `crawl.yml` | Daily, plus manual | Migrate schema → crawl CrazyGames → Poki → Steam → data-quality gate. A failure opens or updates one issue in the backlog |
+| `crawl.yml` | Daily, plus manual | Migrate schema → crawl CrazyGames → Poki → Steam → data-quality gate → Steam release census. A failure opens or updates one issue in the backlog |
 | `migrate.yml` | Manual | Applies additive schema changes (and idempotent data backfills) to Neon |
 | `backfill-tiers.yml` | Manual | Re-classifies stored Steam rows after a scale-tier rule change |
 | `check-data.yml` | Manual | Runs the data-quality gate against Neon without crawling |
@@ -77,6 +77,10 @@ No secret lives in code.
   throttles hardest.
 - **SteamSpy's bulk `all` endpoint is never used**; it is limited to one request a minute. Only
   per-app lookups and the trending and indie-tag lists are read.
+- **The release census reads the store's search listing, not app pages.** One tag list request,
+  then one 100-row "newest first" search page per tag the standing flags match (at most 15), into
+  `tag_census`. It parses store HTML, so it fails loudly: the step goes red only when every tag
+  fails, and supply falls back to the crawl sample once a tag's newest census row is over 7 days old.
 - **`CRAWL_LIMIT` per source is set in `crawl.yml`.** It is a politeness setting, not a cost one
   (see [DESIGN.md §4](DESIGN.md#4-crawl--load-idempotent-per-crawl-day)).
 

@@ -75,6 +75,10 @@ export interface SteamTagEconomics extends SteamGenreEconomics {
   // sub-genre reads "is this market opening or closing?" identically to a store genre.
   supplyTrend: SupplyTrend; // new-entrant flow (release_date): "rising" = crowding / door closing
   supplyRising: boolean; // convenience flag mirroring the store-genre annotations
+  // Which count produced `supplyTrend` (#245): "census" = the store's own newest-first listing
+  // for this tag (a steered tag with a recent census row); "crawl" = the crawled sample.
+  supplySource: "census" | "crawl";
+  census: SupplyCensus | null; // the census reading behind a "census" supply, else null
   // Median-reviews momentum across snapshot windows. "new" = history too thin to read yet
   // (the honest state; demand trajectory deepens as game_snapshots accrues), never a fake trend.
   demandTrajectory: Trajectory;
@@ -85,6 +89,19 @@ export interface SteamTagEconomics extends SteamGenreEconomics {
 // are matches that clear the supply floor; `thin` names matches that exist but are too small
 // to read as a market — an explicit "2 titles, below the floor" beats an empty result, which
 // is indistinguishable from a broken query.
+// Steam release census reading for one tag (#245) — counted from the store's search listing, not
+// from crawled titles. `truncated` = the one fetched page ran out before covering both 30-day
+// windows, so `recent`/`prior` are LOWER BOUNDS over `coveredDays`.
+export interface SupplyCensus {
+  capturedOn: string; // YYYY-MM-DD
+  recent: number; // releases in the last 30 days
+  prior: number; // releases in the 30 days before that
+  coveredDays: number; // how far back the reading reaches (60 when complete)
+  truncated: boolean;
+  totalCount: number; // every game carrying the tag on the store
+  medianPriceCents: number | null; // median listed price of the releases read
+}
+
 export interface SteamTagLookup {
   query: string; // normalized terms actually searched (echoed back, may be "")
   minSupply: number; // the supply floor applied — same one the ranked lens uses
