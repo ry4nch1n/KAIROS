@@ -2,6 +2,7 @@
 // Uses a fixed base date + seeded PRNG so results are stable across runs.
 import { appDb, applySchema, type Querier } from "./db.ts";
 import { ensureLibraryPrototypes } from "./library-seed.ts";
+import { voteBasisOf } from "../queries/shared.ts";
 import { fileURLToPath } from "node:url";
 
 const WEEKS = 12;
@@ -123,6 +124,39 @@ function clamp(x: number, lo: number, hi: number) {
   return Math.max(lo, Math.min(hi, x));
 }
 
+/**
+ * One title's weekly vote counts, shaped by its portal's declared vote basis (#244).
+ *   · `cumulative` (Poki): a running total that only rises — half the latest count at the first week.
+ *   · `window` (CrazyGames): a recent-engagement count that ages out. Each capture moves by the
+ *     title's slow drift plus noise (a small daily-scale mix of drops and gains, median drop ~1%),
+ *     so some titles read falling, some rising, and the step profile agrees with VOTE_BASIS.
+ * Pure and deterministic given `rand`; `drift` is the per-capture log-change trend.
+ */
+export function seedVoteSeries(
+  basis: "cumulative" | "window",
+  baseVotes: number,
+  weeks: number,
+  from: number,
+  drift: number,
+  rand: () => number,
+): number[] {
+  const out: number[] = [];
+  let level = baseVotes;
+  for (let i = from; i < weeks; i++) {
+    if (basis === "cumulative") {
+      out.push(Math.round(baseVotes * (0.5 + 0.5 * (i / (weeks - 1)))));
+      continue;
+    }
+    if (i > from) {
+      // Sum of three uniforms ≈ normal noise, sd ~1.5% (median drop ~1%): many steps fall unless drift dominates.
+      const noise = (rand() + rand() + rand() - 1.5) * 0.03;
+      level *= Math.exp(drift + noise);
+    }
+    out.push(Math.max(1, Math.round(level)));
+  }
+  return out;
+}
+
 async function one(db: Querier, sql: string, params: unknown[]): Promise<Record<string, any>> {
   const r = await db.query(sql, params);
   return r[0];
@@ -180,7 +214,10 @@ export async function seed(db: Querier): Promise<void> {
       const cfg = src.genres[genre];
       // hidden-gem injection: ~ first 4 games per source -> high rating, low votes, never featured
       const isGem = idx <= 4;
-      const debut = !isGem && rng() < 0.18 ? 6 + Math.floor(rng() * 6) : 0; // some games debut mid-window
+      const basis = voteBasisOf(src.name);
+      let debut = !isGem && rng() < 0.18 ? 6 + Math.floor(rng() * 6) : 0; // some games debut mid-window
+      // One window-basis gem debuts late (2 captures) so the gem list exercises its "early read" state.
+      if (isGem && basis === "window" && idx === 4) debut = WEEKS - 2;
       const baseVotes = isGem ? Math.floor(200 + rng() * 2500) : Math.floor(10 ** (2 + rng() * 4)); // 100 .. ~1,000,000
       const baseRating = isGem ? 4.5 + rng() * 0.45 : 3.4 + rng() * 1.5;
       const slug = `${genre.toLowerCase().replace(/[^a-z]/g, "")}-${src.name}-${idx}`;
@@ -218,11 +255,20 @@ export async function seed(db: Querier): Promise<void> {
         );
       }
 
+      // Vote series from its own RNG stream, so the main stream (ratings, features, plays) is
+      // unchanged by the basis. Window drift leans with the genre's feature slope; gems alternate
+      // rising/falling so both momentum states appear on the gem list.
+      const vrng = mulberry32(20260626 + sourceId * 1000 + idx);
+      const drift = isGem
+        ? (idx % 2 ? 1 : -1) * (0.01 + vrng() * 0.02)
+        : cfg.slope + (vrng() * 2 - 1) * 0.02;
+      const series = seedVoteSeries(basis, baseVotes, WEEKS, debut, drift, vrng);
+
       // weekly snapshots (append-only)
       for (let i = debut; i < WEEKS; i++) {
         const featProb = isGem ? 0 : clamp(cfg.base + cfg.slope * i, 0, 0.95);
         const featured = rng() < featProb;
-        const votes = Math.round(baseVotes * (0.5 + 0.5 * (i / (WEEKS - 1))));
+        const votes = series[i - debut];
         const rating = +clamp(baseRating + (rng() - 0.5) * 0.1, 2.5, 5).toFixed(2);
         await db.query(
           `INSERT INTO game_snapshots(game_id, crawl_id, captured_at, rating, votes, plays, homepage_position, featured, trending, genre)
