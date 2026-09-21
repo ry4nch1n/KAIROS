@@ -227,7 +227,10 @@ export const CONTRACT = {
   //      (null on `all`) beside `medianVotePct` / `p90VotePct` / `voteWeight`. Hidden Gems on `all`
   //      take rating and vote percentiles within portal and interleave each portal's own ranking;
   //      New Releases on `all` alternates portals. Breaking for readers of those fields on `all`.
-  version: 33,
+  // v34: browser gap ranking keeps one row per distinct market (#230). Tags equal to their genre
+  //      no longer form cells (Steam's rule), and (genre, tag) cells with IDENTICAL game sets fold
+  //      into one row before scoring; `MarketGap.aliasTags` (additive) lists the folded tags.
+  version: 34,
   pitch: {
     // v2: added visual-card fields — setting, artStyle, codeName, headerUrl, shotUrl.
     // v3: rating rework — scoreFields d1Fit/steamCeiling/buildCost → browserFit/steamFit/buildEase.

@@ -190,17 +190,21 @@ describe("P3 appetite on `all` is a within-portal percentile; one portal keeps r
     const byLabel = async (p: "all" | "poki" | "crazygames") =>
       new Map((await getMarketGaps(db, p)).map((g) => [g.label, g]));
     const poki = await byLabel("poki");
-    expect(poki.get("Puzzle × Merge")).toMatchObject({ appetite: 18000, appetiteUnit: "votes" });
-    expect(poki.get("Racing × Drift")).toMatchObject({ appetite: 20000, appetiteUnit: "votes" });
-    expect((await byLabel("crazygames")).get("Puzzle × Merge")?.appetite).toBe(180);
+    // Every Puzzle title carries both Merge and Casual: one game set, one row under the broader
+    // tag, the genre tag folded in as an alias (#230).
+    expect(poki.get("Puzzle × Casual")?.aliasTags).toEqual(["Merge"]);
+    expect(poki.has("Puzzle × Merge")).toBe(false);
+    expect(poki.get("Puzzle × Casual")).toMatchObject({ appetite: 18000, appetiteUnit: "votes" });
+    expect(poki.get("Racing × Casual")).toMatchObject({ appetite: 20000, appetiteUnit: "votes" });
+    expect((await byLabel("crazygames")).get("Puzzle × Casual")?.appetite).toBe(180);
     const all = await byLabel("all");
     // Median of {2i/15}·100 over both portals: (6/15 + 8/15)/2 → 46.7 → 47; Racing 8/15 → 53.
-    expect(all.get("Puzzle × Merge")).toMatchObject({
+    expect(all.get("Puzzle × Casual")).toMatchObject({
       appetite: 47,
       appetiteUnit: "votePercentile",
       supplyN: 16,
     });
-    expect(all.get("Racing × Drift")?.appetite).toBe(53);
+    expect(all.get("Racing × Casual")?.appetite).toBe(53);
     for (const g of all.values()) expect(g.appetite).toBeLessThanOrEqual(100);
   });
   it("quadrant appetite and weight", async () => {
@@ -269,7 +273,7 @@ describe("P4 read, insights and examples speak the unit", () => {
   });
   it("examples on `all` come from both portals, not only the larger counts", async () => {
     const ov = await getOverview(db, "all");
-    const ex = ov.gaps.find((g) => g.label === "Puzzle × Merge")?.examples ?? [];
+    const ex = ov.gaps.find((g) => g.label === "Puzzle × Casual")?.examples ?? [];
     // Both portals' top Puzzle titles sit at P93; by raw count all three would be Poki's.
     expect(ex.some((t) => t.startsWith("crazygames-"))).toBe(true);
     expect(ex.some((t) => t.startsWith("poki-"))).toBe(true);

@@ -611,6 +611,42 @@ export async function getHiddenGems(
   });
 }
 
+/** One (genre, tag) cell per distinct market (#230). Two tags that sit on exactly the same games
+ *  (a franchise tag inside its theme tag: `Henry Stickmin` ⊂ `Stickman`) are one market reached
+ *  twice, so cells with IDENTICAL game-id sets within a genre fold into one row. The kept label is
+ *  the tag with the larger catalogue-wide count — the broader, more legible market name — ties
+ *  broken alphabetically; the others ride along as `aliasTags`. Overlapping-but-unequal sets are
+ *  real, distinct markets and are never merged. */
+export function collapseIdenticalCells<T extends { genre: string; tag: string; ids: string }>(
+  rows: T[],
+  tagCount: Map<string, number>,
+): (T & { aliasTags: string[] })[] {
+  const groups = new Map<string, T[]>();
+  for (const r of rows) {
+    const k = `${r.genre}|${r.ids}`;
+    groups.set(k, [...(groups.get(k) ?? []), r]);
+  }
+  return [...groups.values()].map((g) => {
+    const [keep, ...rest] = [...g].sort(
+      (a, b) =>
+        (tagCount.get(b.tag) ?? 0) - (tagCount.get(a.tag) ?? 0) ||
+        (a.tag < b.tag ? -1 : a.tag > b.tag ? 1 : 0),
+    );
+    return { ...keep, aliasTags: rest.map((r) => r.tag).sort() };
+  });
+}
+
+/** Catalogue-wide distinct-game count per canonical tag on this platform — the collapse's label rule. */
+async function tagCatalogueCounts(db: Querier, platform: Platform): Promise<Map<string, number>> {
+  const rows = await db.query(
+    `SELECT ${canonSql("t.name")} AS tag, count(DISTINCT g.id)::int AS cnt
+     FROM tags t JOIN game_tags gt ON gt.tag_id = t.id
+     JOIN games g ON g.id = gt.game_id JOIN sources src ON src.id = g.source_id
+     WHERE g.is_live ${pf(platform)} GROUP BY ${canonSql("t.name")}`,
+  );
+  return new Map(rows.map((r) => [String(r.tag), num(r.cnt)]));
+}
+
 /** How many gap rows the browser Radar shows. The cut is a display decision, not an analysis
  *  one — the ranking below it still exists, and the steering lens reads it (#167/#142). */
 export const GAPS_TOP_N = 6;
@@ -633,7 +669,8 @@ export async function rankMarketGaps(db: Querier, platform: Platform): Promise<M
       `SELECT ${canonSql("l.genre")} AS genre, ${canonSql("t.name")} AS tag,
               count(DISTINCT g.id)::int AS supply_n,
               percentile_cont(0.5) WITHIN GROUP (ORDER BY ${lv.level})::float AS appetite,
-              percentile_cont(0.9) WITHIN GROUP (ORDER BY l.rating)::float AS quality_ceil
+              percentile_cont(0.9) WITHIN GROUP (ORDER BY l.rating)::float AS quality_ceil,
+              string_agg(DISTINCT g.id::text, ',' ORDER BY g.id::text) AS ids
        FROM v_latest l
        JOIN games g ON g.id = l.game_id
        JOIN sources src ON src.id = g.source_id
@@ -641,13 +678,19 @@ export async function rankMarketGaps(db: Querier, platform: Platform): Promise<M
        JOIN game_tags gt ON gt.game_id = g.id
        JOIN tags t ON t.id = gt.tag_id
        WHERE g.is_live AND l.genre IS NOT NULL ${pf(platform)}
+         AND lower(${canonSql("t.name")}) <> lower(${canonSql("l.genre")})
        GROUP BY ${canonSql("l.genre")}, ${canonSql("t.name")}
        HAVING count(DISTINCT g.id) >= ${MIN_MARKET_SUPPLY}`,
     ),
     gapExamples(db, platform),
   ]);
-  // Drop platform-curation tags up front so they don't seed junk gaps OR skew the z-baseline.
-  const clean = rows.filter((r) => !isCurationTag(r.tag));
+  // Drop platform-curation tags up front so they don't seed junk gaps OR skew the z-baseline, then
+  // fold identical game sets into one market (#230) — also before the z-scores, so a cell reached
+  // through two tags can't count twice in the mean and SD.
+  const clean = collapseIdenticalCells(
+    rows.filter((r) => !isCurationTag(r.tag)),
+    await tagCatalogueCounts(db, platform),
+  );
   // Too few markets to stand a z-score up — an empty list with an honest reason beats a ranking
   // of sample artifacts (#215, mirroring #211).
   if (clean.length < MIN_RANKABLE_CELLS) return [];
@@ -663,6 +706,7 @@ export async function rankMarketGaps(db: Querier, platform: Platform): Promise<M
     label: `${r.genre} × ${r.tag}`,
     genre: r.genre,
     tag: r.tag,
+    aliasTags: r.aliasTags,
     supplyN: num(r.supply_n),
     appetite: Math.round(num(r.appetite)),
     appetiteUnit,
