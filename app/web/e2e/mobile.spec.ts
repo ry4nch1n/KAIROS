@@ -205,6 +205,76 @@ test.describe("mobile — layout fits at 375px", () => {
     await assertFits(page, panel("radar"), "radar/all/Trends (second portal)");
   });
 
+  // #240: the local seed has no standing flags, so no steered chip ever renders here — yet on live a
+  // chip that printed every matched flag (each a full sentence) scrolled the page by ~299px. Inject
+  // steering into the real seeded payloads (route interception) so the check sees steered gap rows:
+  // one row with a single long flag (must truncate) and one with several (must count, not join).
+  const LONG_FLAGS = [
+    "Blackjack or playing card mechanics used as the core combat resolution system",
+    "Living playing card/toy soldiers setting with a storybook art direction",
+  ];
+  function steerRows<T extends { steering?: unknown }>(rows: T[]): T[] {
+    return rows.map((r, i) =>
+      i === 0
+        ? { ...r, steering: { flags: LONG_FLAGS, delta: 1 } }
+        : i === 1
+          ? { ...r, steering: { flags: [LONG_FLAGS[0]], delta: 0.5 } }
+          : r,
+    );
+  }
+
+  // The Steam seed ranks no market gaps, so give the Steam list two real-shaped rows to steer.
+  const STEAM_GAPS = ["Roguelike Deckbuilder × Card Battler", "Strategy × Turn-Based Tactics"].map(
+    (label) => ({
+      label,
+      genre: label.split(" × ")[0],
+      tag: label.split(" × ")[1],
+      supplyN: 42,
+      medianVotes: 1234,
+      medianOwners: 150000,
+      qualityCeil: 0.93,
+      medianPriceCents: 1499,
+      score: 13.6,
+      components: { demand: 1.2, quality: 0.8, supply: -0.4, steering: 1 },
+      examples: ["Balatro", "Slay the Spire", "Inscryption"],
+      supplyRising: true,
+    }),
+  );
+
+  test("steered gap rows fit (CrazyGames Overview + Steam Market Gaps)", async ({ page }) => {
+    await page.route("**/api/overview?platform=*", async (route) => {
+      const res = await route.fetch();
+      const body = await res.json();
+      await route.fulfill({ response: res, json: { ...body, gaps: steerRows(body.gaps ?? []) } });
+    });
+    await page.route("**/api/steam", async (route) => {
+      const res = await route.fetch();
+      const body = await res.json();
+      await route.fulfill({
+        response: res,
+        json: {
+          ...body,
+          opportunity: steerRows(body.opportunity?.length ? body.opportunity : STEAM_GAPS),
+        },
+      });
+    });
+    await page.goto("/");
+
+    await page.getByRole("tab", { name: "CrazyGames", exact: true }).click();
+    const chips = page.locator(`${panel("radar")} .steer-flag`);
+    await expect(chips.first()).toBeVisible({ timeout: 15_000 });
+    await expect(chips.first()).toHaveText("steered · 2 flags");
+    await settle(page);
+    await assertFits(page, panel("radar"), "radar/crazygames/Overview (steered gaps)");
+
+    await page.getByRole("tab", { name: "Steam", exact: true }).click();
+    await page.locator(`${panel("radar")} .nav-toggle`).click();
+    await page.locator(`${panel("radar")} .nav-item`, { hasText: "Market Gaps" }).click();
+    await expect(chips.first()).toBeVisible({ timeout: 15_000 });
+    await settle(page);
+    await assertFits(page, panel("radar"), "radar/steam/Market Gaps (steered gaps)");
+  });
+
   test("a wide Radar data table scrolls in-container, not the page", async ({ page }) => {
     await page.goto("/");
     // On mobile the sub-nav lives in a drawer — open it, jump to a table-heavy view.
