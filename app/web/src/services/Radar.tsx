@@ -720,15 +720,21 @@ export function steeringNote(lens?: SteeringLens): string | null {
     : head;
 }
 
+/** The steered chip's visible label (#240). Standing flags are full sentences, so the chip
+ *  names one flag (truncated by CSS) or just counts them; the full list lives in the tooltip. */
+export function steerLabel(s: SteeringMatch): string {
+  return s.flags.length === 1 ? `steered · ${s.flags[0]}` : `steered · ${s.flags.length} flags`;
+}
+
 /** The "this row was steered" chip — names the flags that moved it. */
 function SteerChip({ s }: { s?: SteeringMatch }) {
   if (!s) return null;
   return (
     <span
-      className="supply-flag"
+      className="supply-flag steer-flag"
       title={`Lifted +${s.delta.toFixed(2)} by standing flags: ${s.flags.join(", ")} — market data alone would rank it lower.`}
     >
-      steered · {s.flags.join(", ")}
+      {steerLabel(s)}
     </span>
   );
 }

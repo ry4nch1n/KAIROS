@@ -2,7 +2,7 @@
 // one must say nothing at all. steeringNote is that sentence.
 import { describe, expect, it } from "vitest";
 import type { SteeringLens } from "shared";
-import { steeringNote } from "./Radar.tsx";
+import { steerLabel, steeringNote } from "./Radar.tsx";
 
 // A matched-but-unlisted market (#167) — only its label and rank reach the sentence.
 const unl = (label: string, rank: number) => ({
@@ -71,5 +71,19 @@ describe("steeringNote", () => {
     )!;
     expect(s).toContain("3 markets lifted");
     expect(s).toContain("Also matched below the list: Action × Roguelike (rank 11)");
+  });
+});
+
+// #240: standing flags are full sentences, so the steered chip never prints the joined list.
+describe("steerLabel", () => {
+  it("names a single flag (CSS truncates it)", () => {
+    expect(steerLabel({ flags: ["cozy"], delta: 0.5 })).toBe("steered · cozy");
+  });
+  it("counts several flags instead of joining them", () => {
+    const flags = [
+      "Blackjack or playing card mechanics",
+      "Living playing card/toy soldiers setting",
+    ];
+    expect(steerLabel({ flags, delta: 1 })).toBe("steered · 2 flags");
   });
 });

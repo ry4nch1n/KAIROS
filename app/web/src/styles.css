@@ -861,6 +861,9 @@ textarea {
   width: 22px;
 }
 .gap .name {
+  /* min-width:0 lets the name column shrink below a long chip's width (#240). */
+  min-width: 0;
+  max-width: 100%;
   font-weight: 600;
   font-size: var(--fs-3);
 }
@@ -929,6 +932,16 @@ textarea {
   border-radius: var(--r-sm);
   padding: var(--sp-0) var(--sp-2);
   white-space: nowrap;
+}
+/* The steered chip (#240) carries a flag — a full sentence — so unlike "supply rising" it must
+   shrink: one line, clipped with an ellipsis at its row's width, never pushing the page wide. */
+.supply-flag.steer-flag {
+  display: inline-block;
+  max-width: calc(100% - var(--sp-2));
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
 }
 .score-term b {
   font-weight: 700;
