@@ -134,6 +134,44 @@ describe("A7 market gaps (interpretable)", () => {
     expect(MIN_MARKET_SUPPLY).toBe(3);
   });
 
+  // #230 — one row per distinct market. The seed carries Horror × horror / Cooking × cooking, which
+  // held 2 of the 6 shown seats before the Steam-parity genre filter.
+  it("never ranks a tag that restates its genre (#230)", async () => {
+    for (const p of ["all", "crazygames", "poki"] as const)
+      for (const g of await q.rankMarketGaps(db, p)) {
+        expect(g.tag.toLowerCase()).not.toBe(g.genre.toLowerCase());
+        expect(Array.isArray(g.aliasTags)).toBe(true);
+      }
+  });
+
+  it("folds identical game sets into one row, keeping the broader tag (#230)", () => {
+    const cell = (tag: string, ids: string) => ({ genre: "Puzzle", tag, ids });
+    const counts = new Map([
+      ["Stickman", 40],
+      ["Henry Stickmin", 6],
+      ["Logic", 90],
+    ]);
+    const out = q.collapseIdenticalCells(
+      [cell("Henry Stickmin", "1,2,3"), cell("Stickman", "1,2,3"), cell("Logic", "1,2,3,4")],
+      counts,
+    );
+    // Identical sets → one row with the alias; overlapping-but-unequal stays its own market.
+    expect(out.map((r) => [r.tag, r.aliasTags])).toEqual([
+      ["Stickman", ["Henry Stickmin"]],
+      ["Logic", []],
+    ]);
+    // Same set in a different genre is a different market.
+    expect(
+      q.collapseIdenticalCells(
+        [cell("A", "1,2,3"), { ...cell("B", "1,2,3"), genre: "Action" }],
+        counts,
+      ),
+    ).toHaveLength(2);
+    // Tie on catalogue count → alphabetical, independent of input order.
+    const tie = q.collapseIdenticalCells([cell("Zed", "7,8,9"), cell("Ant", "7,8,9")], new Map());
+    expect(tie.map((r) => [r.tag, r.aliasTags])).toEqual([["Ant", ["Zed"]]]);
+  });
+
   it("ranks nothing rather than artifacts when every cell sits under the floor (#215)", async () => {
     const thin = await freshMemoryDb();
     const CG = "https://www.crazygames.com";

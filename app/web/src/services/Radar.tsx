@@ -853,6 +853,11 @@ function GapList({
           {g.examples?.length ? (
             <div className="gap-examples num">e.g. {g.examples.join(" · ")}</div>
           ) : null}
+          {g.aliasTags?.length ? (
+            <div className="gap-examples" title="Tags on exactly the same games — one market">
+              also tagged {g.aliasTags.join(" · ")}
+            </div>
+          ) : null}
         </div>
       ))}
     </div>

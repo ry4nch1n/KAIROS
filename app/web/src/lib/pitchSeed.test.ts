@@ -7,6 +7,7 @@ const browserGap: MarketGap = {
   label: "Puzzle × Merge",
   genre: "Puzzle",
   tag: "Merge",
+  aliasTags: [],
   supplyN: 14,
   appetite: 12345.4,
   appetiteUnit: "votes",

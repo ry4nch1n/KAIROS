@@ -378,6 +378,7 @@ export interface MarketGap {
   label: string;
   genre: string;
   tag: string;
+  aliasTags: string[]; // other tags on the IDENTICAL game set, folded into this row (#230); usually []
   supplyN: number;
   appetite: number; // median level per title, in `appetiteUnit`
   appetiteUnit: LevelUnit; // "votes" on one portal; "votePercentile" (0–100, within portal) on `all`
