@@ -326,16 +326,48 @@ export const STEERING_MAX_LIFT_K = 1;
 // RECORD their match at `delta: 0`, so `applied`/`steered`/`unlisted` stay the honest evidence
 // that the lens ran.
 
+// ── A robust band (#231) ──
+// `top − cutoff` is two order statistics, so ONE row sets it. Measured live 2026-09-14: on
+// CrazyGames a three-game +16σ demand artifact sat at the top, the band read 14 points, and a
+// mid-table genre took every shown seat below the leader; on `all`, bounded vote percentiles
+// (#204) squeezed the same band to 0.63 and no lift ever reached the list. Opposite failures of
+// one rule. So the band is CLAMPED to the ranking's own robust spread — a MAD-based SD, which one
+// outlier cannot move — between these two multiples. Still relative, so one setting means the
+// same thing on every surface (#200); inside the clamp nothing changes.
+/** Narrowest band, in robust SDs: a lift can always reorder markets within one SD of the cut. */
+export const STEERING_BAND_MIN_SD = 1;
+/** Widest band, in robust SDs: one outlier leader cannot widen the lift past this. */
+export const STEERING_BAND_MAX_SD = 3;
+
 export interface SteeringScale {
   weight: number; // score per matching flag, for this ranking
   maxLift: number; // ceiling on one row's total lift
   floor: number; // lowest unsteered score a lift can still reach the cut from
 }
 
+const median = (xs: number[]) => {
+  const s = [...xs].sort((a, b) => a - b);
+  const m = s.length >> 1;
+  return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+};
+/** Spread one outlier cannot move: 1.4826 × MAD (≈ SD for normal data), falling back to the plain
+ *  SD when over half the ranking ties. 0 only for a fully flat ranking. */
+export function robustSd(xs: number[]): number {
+  if (xs.length < 2) return 0;
+  const m = median(xs);
+  const mad = 1.4826 * median(xs.map((x) => Math.abs(x - m)));
+  if (mad > 0) return mad;
+  const mean = xs.reduce((a, b) => a + b, 0) / xs.length;
+  return Math.sqrt(xs.reduce((a, x) => a + (x - mean) ** 2, 0) / xs.length);
+}
+
 /** The scale for ONE ranking, from its own UNSTEERED scores (descending) and its displayed cut. */
 export function steeringScale(baseDesc: number[], shownCount: number): SteeringScale {
   const cut = Math.min(Math.max(shownCount, 2), baseDesc.length);
-  const spread = cut >= 2 ? baseDesc[0] - baseDesc[cut - 1] : 0;
+  const raw = cut >= 2 ? baseDesc[0] - baseDesc[cut - 1] : 0;
+  const sd = robustSd(baseDesc);
+  const spread =
+    sd > 0 ? Math.min(Math.max(raw, STEERING_BAND_MIN_SD * sd), STEERING_BAND_MAX_SD * sd) : raw;
   const cutoff = baseDesc[cut - 1] ?? Number.NEGATIVE_INFINITY;
   const maxLift = spread > 0 ? +(STEERING_MAX_LIFT_K * spread).toFixed(2) : STEERING_WEIGHT * 2;
   return {
@@ -544,18 +576,30 @@ export function steerRow<T extends Steerable>(
   flags: string[],
   scale?: SteeringScale,
   eligible = true,
+  opts: { count?: number; ceiling?: number } = {},
 ): T {
   const matched = matchSteering(activeFlags(flags), row);
   if (!matched.length) return row; // no claim, never force-fit
   // Outside the candidate band the match is still RECORDED, at delta 0 — the lens must keep
   // reporting it, and reporting it as a lift that did not happen is the honest reading (#200).
   const weight = scale?.weight ?? STEERING_WEIGHT;
-  const cap = scale?.maxLift ?? Number.POSITIVE_INFINITY;
-  const delta = eligible ? +Math.min(weight * matched.length, cap).toFixed(2) : 0;
+  const cap = Math.min(
+    scale?.maxLift ?? Number.POSITIVE_INFINITY,
+    (opts.ceiling ?? Number.POSITIVE_INFINITY) - row.score,
+  );
+  const count = Math.min(opts.count ?? matched.length, matched.length);
+  const delta = eligible ? +Math.max(0, Math.min(weight * count, cap)).toFixed(2) : 0;
   row.score = +(row.score + delta).toFixed(2);
   row.components = { ...row.components, steering: delta };
   row.steering = { flags: matched, delta };
   return row;
+}
+
+/** Flags that reach this market through its GENRE alone — matched by the genre label and not by
+ *  the tag label (#231). Every tag slice of a genre shares these, so they must not lift them all. */
+export function genreOnlyFlags(flags: string[], m: { genre: string; tag: string }): string[] {
+  const byTag = new Set(matchSteering(flags, { genre: "", tag: m.tag }));
+  return matchSteering(flags, { genre: m.genre, tag: "" }).filter((f) => !byTag.has(f));
 }
 
 /** ONE sample-size floor for every market read, on BOTH surfaces (#211, #215). Below this a
@@ -588,8 +632,25 @@ export function steerRanking<T extends Steerable>(
     base.map((r) => r.score),
     shownCount,
   );
-  base.forEach((r) => {
-    steerRow(r, flags, scale, r.score >= scale.floor);
+  // Never crown a new leader (#200). The band clamp (#231) can make `cutoff + maxLift` exceed the
+  // top score, so the invariant is stated directly: no lifted row passes the unsteered leader.
+  const ceiling = +(base[0].score - 0.01).toFixed(2);
+  // One seat per genre from steering (#231): a genre-level interest lifts that genre's BEST
+  // eligible slice only, or it re-deals one genre under every tag it has ≥3 games in. A flag the
+  // slice matches on its own tag still counts for that slice.
+  const genreSeated = new Set<string>();
+  const active = activeFlags(flags);
+  base.forEach((r, i) => {
+    const eligible = r.score >= scale.floor;
+    const genreOnly = genreOnlyFlags(active, r);
+    let count: number | undefined;
+    if (genreOnly.length) {
+      const g = r.genre.toLowerCase();
+      if (!eligible || genreSeated.has(g))
+        count = matchSteering(active, r).length - genreOnly.length;
+      else genreSeated.add(g);
+    }
+    steerRow(r, flags, scale, eligible, { count, ceiling: i === 0 ? undefined : ceiling });
   });
   return base.sort((a, b) => b.score - a.score);
 }
