@@ -240,7 +240,13 @@ export const CONTRACT = {
   //      `p90Rating` and landscape `p75Rating` / `avgRating` are taken over each title's rating
   //      percentile (0–100) within its own portal. `ratingUnit` ("rating" | "ratingPercentile") on
   //      `MarketGap`, `GenreRow` and `GenreLandscapePoint` names it. A single portal is unchanged.
-  version: 36,
+  // v37: Steam release census (#245 slice 2). `SteamTagEconomics` gains `supplySource`
+  //      ("census" | "crawl") and `census` (`SupplyCensus` | null). For a tag the standing flags
+  //      match, `supplyTrend` is read from the store's own newest-first listing when a census row
+  //      from the last 7 days exists, so "unobserved" becomes a real reading. A census page that
+  //      ran out within a week of one month reads "rising" (~100 releases in a month: crowding);
+  //      one that reached further into the prior window compares daily rates. Additive.
+  version: 37,
   pitch: {
     // v2: added visual-card fields — setting, artStyle, codeName, headerUrl, shotUrl.
     // v3: rating rework — scoreFields d1Fit/steamCeiling/buildCost → browserFit/steamFit/buildEase.

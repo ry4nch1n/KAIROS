@@ -5,7 +5,7 @@
 
 # Database schema reference
 
-10 tables, 1 view (`v_latest`).
+11 tables, 1 view (`v_latest`).
 The same schema runs on PGlite locally and Neon in production. **Migrations are additive only** —
 the implement loop's guard rejects any `DROP`, `RENAME`, or type narrowing.
 
@@ -84,6 +84,21 @@ erDiagram
   game_tags {
     bigint game_id
     int tag_id
+  }
+  tag_census {
+    bigserial id
+    int tag_id
+    text tag_name
+    date captured_on
+    timestamptz captured_at
+    int total_count
+    int recent
+    int prior
+    int covered_days
+    boolean truncated
+    int median_price_cents
+    int price_n
+    int parsed
   }
   brief_editions {
     bigserial id
@@ -222,6 +237,24 @@ erDiagram
 |--------|------|------------|
 | `game_id` | `BIGINT REFERENCES GAMES(ID)` | → `games` |
 | `tag_id` | `INT REFERENCES TAGS(ID)` | → `tags` |
+
+### `tag_census`
+
+| Column | Type | References |
+|--------|------|------------|
+| `id` | `BIGSERIAL PRIMARY KEY` |  |
+| `tag_id` | `INT NOT NULL` |  |
+| `tag_name` | `TEXT NOT NULL` |  |
+| `captured_on` | `DATE NOT NULL` |  |
+| `captured_at` | `TIMESTAMPTZ NOT NULL DEFAULT NOW()` |  |
+| `total_count` | `INT NOT NULL` |  |
+| `recent` | `INT NOT NULL` |  |
+| `prior` | `INT NOT NULL` |  |
+| `covered_days` | `INT NOT NULL` |  |
+| `truncated` | `BOOLEAN NOT NULL` |  |
+| `median_price_cents` | `INT` |  |
+| `price_n` | `INT NOT NULL DEFAULT 0` |  |
+| `parsed` | `INT NOT NULL DEFAULT 0` |  |
 
 ### `brief_editions`
 

@@ -66,6 +66,16 @@ jobs:
         run: npm run check:steam
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      # Steam release census (#245): one store-search page per tag the standing flags match (≤15),
+      # so a niche tag's supply is read from the store's own listing, not the crawl's survivor
+      # sample. Independent of the game crawls, so it runs even when one of them failed; it fails
+      # only when EVERY tag fails (the store refused us, or its search markup moved).
+      - id: census
+        name: Steam release census for steered tags (append-only)
+        if: ${{ !cancelled() }}
+        run: npm run crawl:census
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
 
       # ── Failure reporter (#30) ─────────────────────────────────────────────
       # A silent crawl failure can go unnoticed for days: the only prior signal was
@@ -86,6 +96,7 @@ jobs:
           F_POKI: ${{ steps.poki.outcome }}
           F_STEAM: ${{ steps.steam.outcome }}
           F_GATE: ${{ steps.gate.outcome }}
+          F_CENSUS: ${{ steps.census.outcome }}
         run: |
           today=$(date -u +%Y-%m-%d)
           # Note: no `cmd && assignment` here. Actions runs bash with -e, and an AND-list
@@ -97,7 +108,8 @@ jobs:
             echo "**Failed step(s):**"
             any=no
             for pair in "migrate=${F_MIGRATE}" "crawl:crazygames=${F_CRAZY}" \
-                        "crawl:poki=${F_POKI}" "crawl:steam=${F_STEAM}" "check:steam=${F_GATE}"; do
+                        "crawl:poki=${F_POKI}" "crawl:steam=${F_STEAM}" "check:steam=${F_GATE}" \
+                        "crawl:census=${F_CENSUS}"; do
               name=${pair%%=*}
               outcome=${pair##*=}
               if [ "$outcome" = "failure" ]; then

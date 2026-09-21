@@ -1,7 +1,8 @@
-// Live crawl CLI:  tsx src/crawler/run.ts <crazygames|poki|steam>   (CRAWL_LIMIT env to cap)
+// Live crawl CLI:  tsx src/crawler/run.ts <crazygames|poki|steam|census>   (CRAWL_LIMIT env to cap)
 import { crazygames } from "./crazygames.ts";
 import { poki } from "./poki.ts";
 import { steamCrawl } from "./steam.ts";
+import { runCensus } from "./census.ts";
 import { crawlRotation, loadGames } from "./load.ts";
 import { politeFetch, sleep, type SourceAdapter, type RawGame } from "./base.ts";
 import { appDb, applySchema, usingNeon } from "../db/db.ts";
@@ -14,6 +15,14 @@ const limit = Number(process.env.CRAWL_LIMIT || 30);
 const db = await appDb();
 if (!usingNeon()) await applySchema(db);
 const date = new Date().toISOString().slice(0, 10); // date-only => one crawl per day (idempotent)
+
+if (which === "census") {
+  // Steam release census (#245): not a game load — one store-search page per steered tag, into
+  // tag_census. Every tag failing means the store refused us or its markup moved: fail loudly.
+  const r = await runCensus(db, (m) => console.log(m), undefined, date);
+  console.log(`✔ [census] stored ${r.stored}/${r.tags} tag(s)`);
+  process.exit(r.tags > 0 && r.stored === 0 ? 1 : 0);
+}
 
 let raw: RawGame[] = [];
 let sourceName: string;

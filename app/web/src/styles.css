@@ -3120,6 +3120,16 @@ a.est-chip:hover {
   font-style: italic;
   white-space: normal;
 }
+/* Census reading under a supply chip (#245): the count behind it, from the store's own listing.
+   Small and wrapping so it never widens the economics table's supply column on a phone. */
+.supply-census {
+  margin-top: var(--sp-1);
+  font-size: var(--fs-2);
+  line-height: 1.35;
+  color: var(--text-3);
+  white-space: normal;
+  min-width: 0;
+}
 .supply-flag {
   margin-left: var(--sp-2);
   font-family: "Fira Code";

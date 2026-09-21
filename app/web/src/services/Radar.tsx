@@ -38,9 +38,11 @@ import type {
   SteamTagLookup,
   ScoreComponents,
   SupplyTrend,
+  SupplyCensus,
   Trajectory,
 } from "shared";
 import { api } from "../lib/api.ts";
+import { censusNote, censusTitle } from "../lib/supplyCensus.ts";
 import type { RevenueSeed } from "../lib/steamRevenue.ts";
 import { EChart } from "../components/EChart.tsx";
 import {
@@ -1541,6 +1543,7 @@ function EconTable({
   rows: (SteamGenreEconomics & {
     medianVotes?: number;
     supplyTrend?: SupplyTrend;
+    census?: SupplyCensus | null;
     demandTrajectory?: Trajectory;
   })[];
   keyLabel?: string;
@@ -1622,6 +1625,11 @@ function EconTable({
                   <span className={"supply supply-" + (r.supplyTrend ?? "quiet")}>
                     {SUPPLY_LABEL[r.supplyTrend ?? "quiet"] || r.supplyTrend}
                   </span>
+                  {r.census ? (
+                    <div className="supply-census" title={censusTitle(r.census)}>
+                      {censusNote(r.census)}
+                    </div>
+                  ) : null}
                 </td>
               </>
             ) : null}

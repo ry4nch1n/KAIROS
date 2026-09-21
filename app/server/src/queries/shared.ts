@@ -270,6 +270,30 @@ export function classifySampledSupply(
   return classifySupply(recent, prior);
 }
 
+// Census supply (#245 slice 2): counted from the store's own newest-first listing, one page per
+// tag. A complete page (both 30-day windows covered) reads exactly like the crawl-sample count.
+// A page that ran out INSIDE the recent window means ≥100 releases in under a month — crowded by
+// any reading, so "rising" (the approved lower-bound rule; the exact count is never paged for).
+// A page that ran out inside the PRIOR window has an exact recent count and a partial prior one,
+// so the prior window is compared at its observed daily rate rather than read as a small count —
+// but only once the page reaches at least CENSUS_MIN_PRIOR_DAYS into it. Scaling a 2-day tail up
+// to 30 days is noise (measured 2026-09-21: Card Battler's 14 releases in 2 days would have read
+// as 210/month and "cooling"); a page that ran out that close to one month is the same situation
+// as one that ran out inside it — ~100 releases in a month — and reads as crowding.
+export const CENSUS_MIN_PRIOR_DAYS = 7;
+export function classifyCensusSupply(c: {
+  recent: number;
+  prior: number;
+  coveredDays: number;
+  truncated: boolean;
+}): SupplyTrend {
+  const w = 30;
+  if (!c.truncated) return classifySupply(c.recent, c.prior);
+  const priorDays = c.coveredDays - w;
+  if (priorDays < CENSUS_MIN_PRIOR_DAYS) return "rising";
+  return classifySupply(c.recent, Math.round((c.prior * w) / priorDays));
+}
+
 export interface SupplyInfo {
   recent: number;
   prior: number;
@@ -425,6 +449,11 @@ const STOP = new Set([
   // so a "Single-player" flag still reaches a "Singleplayer" market.
   "player",
   "players",
+  // "Video" is the filler half of "video games", the same noise as "game": a flag like "…AI use
+  // in video games" claimed the store tags Video Production and 360 Video (#245). Nothing a
+  // standing flag is interested in is named for video itself.
+  "video",
+  "videos",
   // #195's four entries — "playing", "building", "running", "going" — are GONE (#212). They were
   // one token each of a family the head-noun rule below now covers structurally: `Can't stop
   // playing` narrows `playing` with `stop`, exactly as `City Builder` narrows `builder` with
