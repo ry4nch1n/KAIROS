@@ -603,7 +603,11 @@ export interface BriefSteering {
 // have rising demand AND rising supply (a race) or rising demand with quiet supply (the
 // white space you want). Computed by comparing two adjacent trailing windows anchored to
 // the data's newest date, so it's clock-independent.
-export type SupplyTrend = "rising" | "steady" | "cooling" | "quiet";
+// "unobserved" (#245, Steam sub-genre lens only) = zero entrants counted AND a catalogue too
+// small to trust the zero: the Steam crawl only reaches titles popular enough to surface on its
+// discovery lists, so a niche tag's "no new supply" is an absence of observation, not a calm
+// market. Readers render it as "supply not measured", never as an open lane.
+export type SupplyTrend = "rising" | "steady" | "cooling" | "quiet" | "unobserved";
 
 export interface GenreRow {
   genre: string;

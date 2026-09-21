@@ -3112,6 +3112,14 @@ a.est-chip:hover {
   background: color-mix(in srgb, var(--green) 12%, var(--surface));
   color: var(--green);
 }
+/* Neutral, deliberately NOT the green open-lane chip (#245): unmeasured is not calm. May wrap
+   so the longer label never widens a table column on a phone. */
+.supply-unobserved {
+  background: var(--surface-2);
+  color: var(--text-3);
+  font-style: italic;
+  white-space: normal;
+}
 .supply-flag {
   margin-left: var(--sp-2);
   font-family: "Fira Code";

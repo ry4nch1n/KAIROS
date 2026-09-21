@@ -230,7 +230,12 @@ export const CONTRACT = {
   // v34: browser gap ranking keeps one row per distinct market (#230). Tags equal to their genre
   //      no longer form cells (Steam's rule), and (genre, tag) cells with IDENTICAL game sets fold
   //      into one row before scoring; `MarketGap.aliasTags` (additive) lists the folded tags.
-  version: 34,
+  // v35: `SupplyTrend` gains "unobserved" (#245), emitted by the Steam sub-genre lens
+  //      (`SteamTagEconomics.supplyTrend`) only: zero recent + prior entrants on a tag with fewer
+  //      than 10 crawled titles. The crawl is a survivor sample, so that zero is an absence of
+  //      observation, not a quiet market. `supplyRising` stays false. Browser and store-genre
+  //      supply are unchanged. Additive to the enum; readers should treat unknown values as neutral.
+  version: 35,
   pitch: {
     // v2: added visual-card fields — setting, artStyle, codeName, headerUrl, shotUrl.
     // v3: rating rework — scoreFields d1Fit/steamCeiling/buildCost → browserFit/steamFit/buildEase.

@@ -406,9 +406,10 @@ const SUPPLY_LABEL: Record<string, string> = {
   steady: "▬ steady",
   cooling: "▼ cooling",
   quiet: "· quiet",
+  unobserved: "supply not measured",
 };
 const SUPPLY_TIP =
-  "New entrants in the last ~30 days vs the prior ~30 (by first-seen / release date, anchored to the latest crawl). 'crowding' = supply arriving fast; 'quiet' = an open lane.";
+  "New entrants in the last ~30 days vs the prior ~30 (by first-seen / release date, anchored to the latest crawl). 'crowding' = supply arriving fast; 'quiet' = an open lane; 'supply not measured' = too few titles of this sub-genre are tracked to count its releases, so no new entrants is not evidence of an open lane.";
 
 // "This week's read" — the answer strip (server-computed, decision-framed; the charts
 // below are the evidence). Lines carry server-trusted <b> markup, same as insights.

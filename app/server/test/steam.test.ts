@@ -548,6 +548,36 @@ describe("D10c getSteamTagEconomics (sub-genre lens, #90)", () => {
     expect(deck.demandTrajectory).toBe("new");
   });
 
+  // #245 — the Steam crawl is a survivor sample, so a zero over a tiny catalogue is unmeasured.
+  it("classifySampledSupply reads a zero over a small crawled catalogue as unobserved, not quiet", () => {
+    const min = q.SUPPLY_MIN_OBSERVED_CATALOGUE;
+    expect(q.classifySampledSupply(0, 0, 3)).toBe("unobserved");
+    expect(q.classifySampledSupply(0, 0, min - 1)).toBe("unobserved");
+    expect(q.classifySampledSupply(0, 0, min)).toBe("quiet"); // big enough that zero means zero
+    expect(q.classifySampledSupply(3, 0, 3)).toBe("rising"); // a nonzero count is unchanged
+    expect(q.classifySampledSupply(1, 5, 3)).toBe("cooling");
+    expect(q.classifySampledSupply(4, 4, 50)).toBe("steady");
+  });
+
+  // #245 — zero entrants on a niche tag the crawl barely sees is unmeasured, not a quiet market.
+  it("reads zero supply on a small tag as unobserved, and on a large tag as quiet", async () => {
+    const db = await freshMemoryDb();
+    const old = (id: string, tag: string) =>
+      steamGame({ sourceGameId: id, tags: [tag], releaseDate: "2020-01-01" });
+    const games: RawGame[] = [
+      steamGame({ sourceGameId: "A1", tags: ["Anchor"], releaseDate: "2026-06-01" }), // sets the window
+      ...[1, 2, 3].map((i) => old(`N${i}`, "Niche Tag")),
+      ...Array.from({ length: 12 }, (_, i) => old(`B${i}`, "Broad Tag")),
+    ];
+    await loadGames(db, "steam", STEAM_BASE_URL, games, "2026-06-30T00:00:00.000Z");
+    const rows = await q.getSteamTagEconomics(db, { cohort: "all", minSupply: 3 });
+    const niche = rows.find((r) => r.genre === "Niche Tag")!;
+    const broad = rows.find((r) => r.genre === "Broad Tag")!;
+    expect(niche.supplyTrend).toBe("unobserved");
+    expect(niche.supplyRising).toBe(false);
+    expect(broad.supplyTrend).toBe("quiet");
+  });
+
   it("demand trajectory deepens to a trend once snapshot history accrues", async () => {
     const db = await freshMemoryDb();
     // Same three-title Deckbuilding market, but crawled twice at different dates with rising

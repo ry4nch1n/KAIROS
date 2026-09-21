@@ -31,6 +31,7 @@ import {
   classifyTrajectory,
   classifySupply,
   genreSupplyTrend,
+  classifySampledSupply,
   steerRanking,
   steeringLens,
   MIN_MARKET_SUPPLY,
@@ -386,6 +387,8 @@ export async function getSteamTagEconomics(
     .map((r) => {
       const medRev = Math.round(num(r.med_rev_cents) / 100);
       const sup = supply.get(r.tag);
+      // #245: a zero count over a survivor-sampled tag is unmeasured, not quiet.
+      const supplyTrend = classifySampledSupply(sup?.recent ?? 0, sup?.prior ?? 0, num(r.games));
       return {
         genre: r.tag, // same row shape as the store-genre table, keyed on the tag
         games: num(r.games),
@@ -402,8 +405,8 @@ export async function getSteamTagEconomics(
         // crawled Steam title, so it reads immediately. Demand trajectory depends on snapshot
         // history accumulating; it stays "new" (honest, not a fake trend) until the series
         // deepens — the identical treatment the store-genre lens uses for thin history.
-        supplyTrend: sup?.trend ?? "quiet",
-        supplyRising: sup?.trend === "rising",
+        supplyTrend,
+        supplyRising: supplyTrend === "rising",
         demandTrajectory: demand.get(r.tag) ?? "new",
         ...econBandFields(medRev, r.med_rev_bl_cents),
       };

@@ -254,6 +254,22 @@ export function classifySupply(recent: number, prior: number): SupplyTrend {
   return "steady";
 }
 
+// Sampled-catalogue guard (#245). The Steam crawl is a survivor sample (top sellers, SteamSpy
+// lists, featured shelves), so for a tag it has seen only a handful of titles a zero entrant
+// count says nothing about releases — the cheap launches that flood a niche never reach the
+// crawl. Below this many crawled titles a zero reads "unobserved", not "quiet". 10 is the
+// point where a tag's census stops being "a few megahits": the #245 niche tags sat at 3–7.
+// Browser portals are crawled as full catalogues, so this applies to the Steam tag lens only.
+export const SUPPLY_MIN_OBSERVED_CATALOGUE = 10;
+export function classifySampledSupply(
+  recent: number,
+  prior: number,
+  catalogue: number,
+): SupplyTrend {
+  if (recent + prior === 0 && catalogue < SUPPLY_MIN_OBSERVED_CATALOGUE) return "unobserved";
+  return classifySupply(recent, prior);
+}
+
 export interface SupplyInfo {
   recent: number;
   prior: number;
