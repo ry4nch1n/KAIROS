@@ -154,10 +154,10 @@ describe("A7 market gaps (interpretable)", () => {
       ["Logic", 90],
     ]);
     const out = q.collapseIdenticalCells(
-      [cell("Henry Stickmin", "1,2,3"), cell("Stickman", "1,2,3"), cell("Logic", "1,2,3,4")],
+      [cell("Henry Stickmin", "1,2,3"), cell("Stickman", "1,2,3"), cell("Logic", "3,4,5")],
       counts,
     );
-    // Identical sets → one row with the alias; overlapping-but-unequal stays its own market.
+    // Identical sets → one row with the alias; partially overlapping stays its own market.
     expect(out.map((r) => [r.tag, r.aliasTags])).toEqual([
       ["Stickman", ["Henry Stickmin"]],
       ["Logic", []],
@@ -172,6 +172,51 @@ describe("A7 market gaps (interpretable)", () => {
     // Tie on catalogue count → alphabetical, independent of input order.
     const tie = q.collapseIdenticalCells([cell("Zed", "7,8,9"), cell("Ant", "7,8,9")], new Map());
     expect(tie.map((r) => [r.tag, r.aliasTags])).toEqual([["Ant", ["Zed"]]]);
+  });
+
+  it("folds a strict subset into its superset within one genre only (#253)", () => {
+    const cell = (tag: string, ids: string, genre = "Adventure") => ({ genre, tag, ids });
+    const counts = new Map([
+      ["Stickman", 40],
+      ["Henry Stickmin", 6],
+    ]);
+    const tags = (rows: { tag: string; aliasTags: string[] }[]) =>
+      rows.map((r) => [r.tag, r.aliasTags]);
+    const fold = (rows: ReturnType<typeof cell>[], c = new Map<string, number>()) =>
+      tags(q.collapseIdenticalCells(rows, c));
+    // Strict subset in one genre → the superset keeps its label and carries the alias.
+    expect(fold([cell("Henry Stickmin", "1,2,3"), cell("Stickman", "1,2,3,4,5")], counts)).toEqual([
+      ["Stickman", ["Henry Stickmin"]],
+    ]);
+    // Same subset relationship across two genres → two markets.
+    expect(
+      fold([cell("Henry Stickmin", "1,2,3", "Puzzle"), cell("Stickman", "1,2,3,4,5")], counts),
+    ).toHaveLength(2);
+    // Disjoint and partially overlapping sets stay separate.
+    expect(fold([cell("A", "1,2,3"), cell("B", "4,5,6"), cell("C", "3,4,9")])).toEqual([
+      ["A", []],
+      ["B", []],
+      ["C", []],
+    ]);
+    // Chain A ⊂ B ⊂ C folds into C, carrying B's own equality alias too, whatever the input order.
+    const chain = [
+      cell("A", "1,2"),
+      cell("B", "1,2,3"),
+      cell("B2", "1,2,3"),
+      cell("C", "1,2,3,4"),
+      cell("D", "7,8,9"),
+    ];
+    const want = [
+      ["C", ["A", "B", "B2"]],
+      ["D", []],
+    ];
+    expect(fold(chain)).toEqual(want);
+    expect(fold([...chain].reverse()).reverse()).toEqual(want);
+    // A subset of two non-nested supersets folds once, into the larger.
+    expect(fold([cell("S", "1,2"), cell("X", "1,2,3"), cell("Y", "1,2,4,5")])).toEqual([
+      ["X", []],
+      ["Y", ["S"]],
+    ]);
   });
 
   it("ranks nothing rather than artifacts when every cell sits under the floor (#215)", async () => {
@@ -930,7 +975,8 @@ async function seedRatings(db: Querier) {
         [sid, ts],
       )
     ).id;
-    // Two tags → two cells per portal (Merge: the 4 best-rated, Casual: all 8).
+    // Two tags → two cells per portal (Merge: the 4 best-rated, Casual: the 6 lowest). They only
+    // partly overlap, so the containment collapse (#253) keeps both as separate markets.
     for (let i = 0; i < 8; i++) {
       const gid = (
         await one(
@@ -942,7 +988,7 @@ async function seedRatings(db: Querier) {
         `INSERT INTO game_snapshots(game_id, crawl_id, captured_at, rating, votes, genre) VALUES ($1,$2,$3,$4,$5,$6)`,
         [gid, cid, ts, 3.8 + i * 0.1 + OFFSET[name], 100 * (i + 1), GENRE[name]],
       );
-      for (const tag of i >= 4 ? ["Merge", "Casual"] : ["Casual"]) {
+      for (const tag of [...(i >= 4 ? ["Merge"] : []), ...(i < 6 ? ["Casual"] : [])]) {
         const tid = (
           await one(
             `INSERT INTO tags(name) VALUES ($1) ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name RETURNING id`,
