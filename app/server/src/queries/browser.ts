@@ -636,29 +636,52 @@ export async function getHiddenGems(
   });
 }
 
-/** One (genre, tag) cell per distinct market (#230). Two tags that sit on exactly the same games
- *  (a franchise tag inside its theme tag: `Henry Stickmin` ⊂ `Stickman`) are one market reached
- *  twice, so cells with IDENTICAL game-id sets within a genre fold into one row. The kept label is
- *  the tag with the larger catalogue-wide count — the broader, more legible market name — ties
- *  broken alphabetically; the others ride along as `aliasTags`. Overlapping-but-unequal sets are
- *  real, distinct markets and are never merged. */
+/** One (genre, tag) cell per distinct market (#230, #253). Two tags that reach the same games
+ *  within a genre are one market named twice, so cells fold before scoring:
+ *  - IDENTICAL game-id sets fold into one row whose label is the tag with the larger
+ *    catalogue-wide count — the broader, more legible market name — ties broken alphabetically.
+ *  - A cell whose game set is a STRICT SUBSET of another cell's in the same genre (a franchise tag
+ *    inside its theme tag: `Henry Stickmin` ⊂ `Stickman`, typical on `all`, where the parent tag
+ *    picks up the other portal's titles) is the same market named more narrowly: it folds into
+ *    the superset row. Chains (A ⊂ B ⊂ C) fold into the maximal set C. A subset of two
+ *    non-nested supersets folds into the larger one (then catalogue count, then alphabetical).
+ *  Folded tags (and their own aliases) ride along, sorted, as `aliasTags`. Partially overlapping
+ *  sets and the same set under another genre are real, distinct markets and are never merged. */
 export function collapseIdenticalCells<T extends { genre: string; tag: string; ids: string }>(
   rows: T[],
   tagCount: Map<string, number>,
 ): (T & { aliasTags: string[] })[] {
+  const alpha = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
+  const byLabel = (a: T, b: T) =>
+    (tagCount.get(b.tag) ?? 0) - (tagCount.get(a.tag) ?? 0) || alpha(a.tag, b.tag);
+  // Pass 1 — identical sets (#230).
   const groups = new Map<string, T[]>();
   for (const r of rows) {
     const k = `${r.genre}|${r.ids}`;
     groups.set(k, [...(groups.get(k) ?? []), r]);
   }
-  return [...groups.values()].map((g) => {
-    const [keep, ...rest] = [...g].sort(
-      (a, b) =>
-        (tagCount.get(b.tag) ?? 0) - (tagCount.get(a.tag) ?? 0) ||
-        (a.tag < b.tag ? -1 : a.tag > b.tag ? 1 : 0),
-    );
-    return { ...keep, aliasTags: rest.map((r) => r.tag).sort() };
+  const cells = [...groups.values()].map((g, order) => {
+    const [keep, ...rest] = [...g].sort(byLabel);
+    return { keep, aliases: rest.map((r) => r.tag), ids: new Set(keep.ids.split(",")), order };
   });
+  // Pass 2 — containment within a genre (#253). Largest sets first, so every cell meets its
+  // maximal supersets before itself; a cell no kept root contains becomes a root.
+  type Cell = (typeof cells)[number];
+  const roots: Cell[] = [];
+  const sorted = [...cells].sort(
+    (a, b) =>
+      b.ids.size - a.ids.size || byLabel(a.keep, b.keep) || alpha(a.keep.genre, b.keep.genre),
+  );
+  for (const c of sorted) {
+    const host = roots.find(
+      (r) => r.keep.genre === c.keep.genre && [...c.ids].every((id) => r.ids.has(id)),
+    );
+    if (host) host.aliases.push(c.keep.tag, ...c.aliases);
+    else roots.push(c);
+  }
+  return roots
+    .sort((a, b) => a.order - b.order)
+    .map((r) => ({ ...r.keep, aliasTags: [...r.aliases].sort() }));
 }
 
 /** Catalogue-wide distinct-game count per canonical tag on this platform — the collapse's label rule. */
@@ -714,8 +737,8 @@ export async function rankMarketGaps(db: Querier, platform: Platform): Promise<M
     gapExamples(db, platform),
   ]);
   // Drop platform-curation tags up front so they don't seed junk gaps OR skew the z-baseline, then
-  // fold identical game sets into one market (#230) — also before the z-scores, so a cell reached
-  // through two tags can't count twice in the mean and SD.
+  // fold identical and nested game sets into one market (#230, #253) — also before the z-scores,
+  // so a cell reached through two tags can't count twice in the mean and SD.
   const clean = collapseIdenticalCells(
     rows.filter((r) => !isCurationTag(r.tag)),
     await tagCatalogueCounts(db, platform),

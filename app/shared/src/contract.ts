@@ -246,7 +246,12 @@ export const CONTRACT = {
   //      from the last 7 days exists, so "unobserved" becomes a real reading. A census page that
   //      ran out within a week of one month reads "rising" (~100 releases in a month: crowding);
   //      one that reached further into the prior window compares daily rates. Additive.
-  version: 37,
+  // v38: browser gap collapse extends from identical sets to CONTAINMENT within a genre (#253). A
+  //      (genre, tag) cell whose game set is a strict subset of another cell's in the same genre
+  //      folds into the superset row before scoring (chains fold into the maximal set), so
+  //      `MarketGap.aliasTags` now also lists nested tags. Shape unchanged; cross-genre repeats and
+  //      partial overlaps stay separate rows.
+  version: 38,
   pitch: {
     // v2: added visual-card fields — setting, artStyle, codeName, headerUrl, shotUrl.
     // v3: rating rework — scoreFields d1Fit/steamCeiling/buildCost → browserFit/steamFit/buildEase.
