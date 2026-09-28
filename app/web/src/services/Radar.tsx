@@ -705,7 +705,18 @@ export function steeringNote(lens?: SteeringLens): string | null {
   const unlisted = lens.unlisted ?? [];
   const markets = (n: number) => `${n} market${n === 1 ? "" : "s"}`;
   const per = `+${lens.weight.toFixed(2)} per matching flag`;
-  const named = unlisted.map((u) => `${u.label} (rank ${u.rank})`).join(", ");
+  // #254: name only rows the lift actually moved (delta > 0), nearest first, at most three —
+  // a matched-but-unlifted cell at rank 243 is neither "steered" nor "close". The overflow is
+  // counted so the sentence stays honest about how many lifted rows it left out.
+  const lifted = unlisted.filter((u) => u.delta > 0).sort((a, b) => a.rank - b.rank);
+  const cap = 3;
+  const more = lifted.length - cap;
+  const named = lifted.length
+    ? `${lifted
+        .slice(0, cap)
+        .map((u) => `${u.label} (rank ${u.rank})`)
+        .join(", ")}${more > 0 ? ` — and ${more} more` : ""}`
+    : "";
   let head: string;
   if (!lens.applied.length) {
     // Nothing matched anywhere in the ranking — the only case where "your flags found nothing"

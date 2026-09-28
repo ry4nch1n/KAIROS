@@ -5,12 +5,12 @@ import type { SteeringLens } from "shared";
 import { steerLabel, steeringNote } from "./Radar.tsx";
 
 // A matched-but-unlisted market (#167) — only its label and rank reach the sentence.
-const unl = (label: string, rank: number) => ({
+const unl = (label: string, rank: number, delta = 0.5) => ({
   label,
   genre: label.split(" × ")[0],
   tag: label.split(" × ")[1],
   rank,
-  delta: 0.5,
+  delta,
   flags: ["cozy"],
 });
 
@@ -71,6 +71,73 @@ describe("steeringNote", () => {
     )!;
     expect(s).toContain("3 markets lifted");
     expect(s).toContain("Also matched below the list: Action × Roguelike (rank 11)");
+  });
+
+  // #254 — "Closest" names only rows the lift actually moved, nearest first, capped at three.
+  it("drops the Closest clause when no unlisted row was lifted", () => {
+    const s = steeringNote(
+      lens({
+        steered: 3,
+        steeredShown: 0,
+        unlisted: [unl("Strategy × Roguelike", 147, 0), unl("Action × Soldier", 243, 0)],
+      }),
+    )!;
+    expect(s).toContain("none climbed into the list below.");
+    expect(s).not.toContain("Closest");
+    expect(s).not.toContain("rank ");
+  });
+
+  it("names only the lifted rows when deltas are mixed, sorted by rank", () => {
+    const s = steeringNote(
+      lens({
+        steered: 5,
+        steeredShown: 0,
+        unlisted: [
+          unl("Action × Roguelike", 18, 1.56),
+          unl("Strategy × Roguelike", 147, 0),
+          unl("Adventure × Roguelike", 13, 1.56),
+          unl("Action × Soldier", 243, 0),
+        ],
+      }),
+    )!;
+    expect(s).toContain("Closest: Adventure × Roguelike (rank 13), Action × Roguelike (rank 18).");
+    expect(s).not.toContain("Strategy × Roguelike");
+    expect(s).not.toContain("rank 243");
+  });
+
+  it("caps the named list at three and counts the rest", () => {
+    const s = steeringNote(
+      lens({
+        steered: 6,
+        steeredShown: 0,
+        unlisted: [
+          unl("A × X", 20),
+          unl("B × X", 7),
+          unl("C × X", 30),
+          unl("D × X", 9),
+          unl("E × X", 12),
+          unl("F × X", 400, 0),
+        ],
+      }),
+    )!;
+    expect(s).toContain("Closest: B × X (rank 7), D × X (rank 9), E × X (rank 12) — and 2 more.");
+    expect(s).not.toContain("A × X");
+  });
+
+  it("applies the same filter to the Also-matched-below wording", () => {
+    const s = steeringNote(
+      lens({
+        steered: 3,
+        steeredShown: 1,
+        unlisted: [unl("Action × Roguelike", 11, 1), unl("Arcade × Roguelike", 168, 0)],
+      }),
+    )!;
+    expect(s).toContain("Also matched below the list: Action × Roguelike (rank 11).");
+    expect(s).not.toContain("Arcade × Roguelike");
+    const none = steeringNote(
+      lens({ steered: 3, steeredShown: 1, unlisted: [unl("Arcade × Roguelike", 168, 0)] }),
+    )!;
+    expect(none).not.toContain("Also matched below the list");
   });
 });
 
