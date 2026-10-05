@@ -17,3 +17,21 @@ export function censusTitle(c: SupplyCensus): string {
     (c.truncated ? " The listing page ran out early, so this is a lower bound." : "")
   );
 }
+
+// Survivor qualifier for the success-band chip (#258). Where the crawl holds a sliver of a tag's
+// census (below 5%), the band is the median of the market's crawled leaders, so the chip says
+// "top 3 of 909" and the tooltip says what the median is of. Null when the band reads the market.
+export function survivorBandNote(r: {
+  games: number;
+  survivorBand?: boolean;
+  census?: SupplyCensus | null;
+}): { note: string; title: string } | null {
+  if (!r.survivorBand || !r.census) return null;
+  const total = r.census.totalCount.toLocaleString("en-US");
+  return {
+    note: `top ${r.games} of ${total}`,
+    title:
+      `Survivor read: this tier is the median of the ${r.games} crawled leaders, not of the ` +
+      `${total} games carrying the tag on the store. The market's typical title earns less.`,
+  };
+}

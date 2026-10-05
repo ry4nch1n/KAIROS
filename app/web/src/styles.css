@@ -3192,6 +3192,15 @@ a.est-chip:hover {
   border-color: color-mix(in srgb, var(--accent) 35%, var(--surface));
   background: color-mix(in srgb, var(--accent) 10%, var(--surface));
 }
+/* Survivor read (#258): the tier is a median of the crawled leaders of a much larger market, so
+   it gives up the focus colour and takes a dashed edge — it is a ceiling, not the typical title. */
+.succ-chip.succ-survivor {
+  color: var(--text-2);
+  background: var(--surface-2);
+  border-color: var(--border-soft);
+  border-style: dashed;
+  font-weight: 500;
+}
 
 /* Demand/Supply quadrant colour legend (B3) */
 .q-legend {

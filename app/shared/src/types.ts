@@ -79,6 +79,11 @@ export interface SteamTagEconomics extends SteamGenreEconomics {
   // for this tag (a steered tag with a recent census row); "crawl" = the crawled sample.
   supplySource: "census" | "crawl";
   census: SupplyCensus | null; // the census reading behind a "census" supply, else null
+  // Census coverage of `successBand` (#258): crawled `games` ÷ `census.totalCount`, or null with
+  // no census. Below BAND_COVERAGE_FLOOR (5%) `survivorBand` is true: the band is a median of the
+  // market's crawled leaders, not of the market, and must be labelled so.
+  bandCoverage: number | null;
+  survivorBand: boolean;
   // Median-reviews momentum across snapshot windows. "new" = history too thin to read yet
   // (the honest state; demand trajectory deepens as game_snapshots accrues), never a fake trend.
   demandTrajectory: Trajectory;
