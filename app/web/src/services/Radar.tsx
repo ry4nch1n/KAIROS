@@ -42,7 +42,7 @@ import type {
   Trajectory,
 } from "shared";
 import { api } from "../lib/api.ts";
-import { censusNote, censusTitle } from "../lib/supplyCensus.ts";
+import { censusNote, censusTitle, survivorBandNote } from "../lib/supplyCensus.ts";
 import type { RevenueSeed } from "../lib/steamRevenue.ts";
 import { EChart } from "../components/EChart.tsx";
 import {
@@ -1502,13 +1502,23 @@ const pctlTitle = (r: SteamGenreEconomics) =>
     ? `Within this market: p25 ${proxy(r.revenuePercentiles.p25)} · p75 ${proxy(r.revenuePercentiles.p75)} · p90 ${proxy(r.revenuePercentiles.p90)}. Clearing p75 puts a title in the top quarter.`
     : "Too few titles in this market to quote quartiles honestly — the tier is shown without percentile context.";
 
-/** Absolute outcome tier for the headline median, under the uncertainty band. */
-function SuccessChip({ r }: { r: SteamGenreEconomics }) {
+/** Absolute outcome tier for the headline median, under the uncertainty band. A tag whose crawl
+ *  holds a sliver of its store census (#258) keeps the tier but reads as a survivor sample. */
+function SuccessChip({
+  r,
+}: {
+  r: SteamGenreEconomics & { survivorBand?: boolean; census?: SupplyCensus | null };
+}) {
   if (!r.successBand) return null; // older payloads carry no ladder
+  const survivor = survivorBandNote(r);
   return (
     <div className="succ-line">
-      <span className={"succ-chip succ-" + r.successBand} title={pctlTitle(r)}>
+      <span
+        className={"succ-chip succ-" + r.successBand + (survivor ? " succ-survivor" : "")}
+        title={survivor ? survivor.title : pctlTitle(r)}
+      >
         {SUCCESS_LABEL[r.successBand] || r.successBand}
+        {survivor ? ` · ${survivor.note}` : null}
       </span>
     </div>
   );
@@ -1558,6 +1568,7 @@ function EconTable({
     medianVotes?: number;
     supplyTrend?: SupplyTrend;
     census?: SupplyCensus | null;
+    survivorBand?: boolean;
     demandTrajectory?: Trajectory;
   })[];
   keyLabel?: string;

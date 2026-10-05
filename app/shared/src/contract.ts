@@ -251,7 +251,11 @@ export const CONTRACT = {
   //      folds into the superset row before scoring (chains fold into the maximal set), so
   //      `MarketGap.aliasTags` now also lists nested tags. Shape unchanged; cross-genre repeats and
   //      partial overlaps stay separate rows.
-  version: 38,
+  // v39: `SteamTagEconomics` gains `bandCoverage` (crawled games ÷ `census.totalCount`, or null
+  //      without a census) and `survivorBand` (#258). Below a 5% floor the `successBand` stays but
+  //      is a SURVIVOR read — the median of the market's crawled leaders, not of the market — and
+  //      the client labels it "top N of M". Rows without a census are unchanged. Additive.
+  version: 39,
   pitch: {
     // v2: added visual-card fields — setting, artStyle, codeName, headerUrl, shotUrl.
     // v3: rating rework — scoreFields d1Fit/steamCeiling/buildCost → browserFit/steamFit/buildEase.

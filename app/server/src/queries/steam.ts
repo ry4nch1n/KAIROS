@@ -220,6 +220,20 @@ export function successBandFor(revenueDollars: number): SuccessBand {
     .band;
 }
 
+// Census coverage of the band (#258). On a tag with a store census, the crawled titles are the
+// survivors of a much larger market (3 crawled of 909 listed), so a median over them is a read of
+// the market's crawled leaders, not of its typical title. Below this share the band is kept but
+// marked a survivor read. Null without a census — the crawl is then the only count there is.
+export const BAND_COVERAGE_FLOOR = 0.05;
+export function bandCoverageFor(
+  games: number,
+  census: { totalCount: number } | null,
+): { bandCoverage: number | null; survivorBand: boolean } {
+  if (!census || !(census.totalCount > 0)) return { bandCoverage: null, survivorBand: false };
+  const bandCoverage = +(games / census.totalCount).toFixed(4);
+  return { bandCoverage, survivorBand: bandCoverage < BAND_COVERAGE_FLOOR };
+}
+
 // Percentile context (#177). A band on the MEDIAN says where the typical title lands; it cannot
 // say how steep the market's tail is. The quartile/decile cut points do — but only where enough
 // titles exist for a quantile to mean anything. Below this floor one or two games move p90 by an
@@ -418,6 +432,7 @@ export async function getSteamTagEconomics(
         census: c,
         demandTrajectory: demand.get(r.tag) ?? "new",
         ...econBandFields(medRev, r.med_rev_bl_cents),
+        ...bandCoverageFor(num(r.games), c),
       };
     });
 }

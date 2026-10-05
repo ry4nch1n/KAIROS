@@ -189,6 +189,24 @@ describe("census end to end", () => {
     expect(deck.supplySource).toBe("census");
     expect(deck.supplyTrend).not.toBe("unobserved");
     expect(deck.census?.totalCount).toBeGreaterThan(800);
+    // #258: three crawled survivors of an 800+ title market — the band stays, marked a survivor read.
+    expect(deck.successBand).toBeTruthy();
+    expect(deck.bandCoverage).toBeCloseTo(3 / (deck.census?.totalCount ?? 1), 4);
+    expect(deck.bandCoverage!).toBeLessThan(q.BAND_COVERAGE_FLOOR);
+    expect(deck.survivorBand).toBe(true);
+  });
+
+  it("band coverage: survivor below the floor, plain read above it, null with no census", () => {
+    expect(q.bandCoverageFor(3, { totalCount: 2360 }).survivorBand).toBe(true);
+    expect(q.bandCoverageFor(120, { totalCount: 909 })).toEqual({
+      bandCoverage: 0.132,
+      survivorBand: false,
+    });
+    expect(q.bandCoverageFor(3, null)).toEqual({ bandCoverage: null, survivorBand: false });
+    expect(q.bandCoverageFor(3, { totalCount: 0 })).toEqual({
+      bandCoverage: null,
+      survivorBand: false,
+    });
   });
 
   it("without a census row the crawl read stands", async () => {
@@ -209,5 +227,7 @@ describe("census end to end", () => {
     expect(row.supplySource).toBe("crawl");
     expect(row.census).toBeNull();
     expect(row.supplyTrend).toBe("unobserved");
+    expect(row.bandCoverage).toBeNull();
+    expect(row.survivorBand).toBe(false);
   });
 });
