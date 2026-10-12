@@ -36,6 +36,8 @@ import type {
   SteamUpcoming,
   SteamComparable,
   SteamTagLookup,
+  SteamTagEconomics,
+  SteamTagPriceBand,
   ScoreComponents,
   SupplyTrend,
   SupplyCensus,
@@ -1558,6 +1560,57 @@ function ConvChip({ c }: { c: SteamGenreEconomics["conversion"] }) {
   );
 }
 
+// One price tier inside a sub-genre (#261). Under 3 titles the count stays but the medians drop
+// behind "thin" — two games' median reviews is two games' opinion, not a tier's performance.
+const PRICE_BAND_THIN = 3;
+const priceBandNote = (b: SteamTagPriceBand) =>
+  b.games < PRICE_BAND_THIN
+    ? `${b.band} · ${b.games} · thin`
+    : `${b.band} · ${b.games} · ${fmt(b.medianVotes)} rev` +
+      (b.medianRating == null ? "" : ` · rated ${b.medianRating.toFixed(1)}`);
+
+/** Under the looked-up sub-genre table (#260/#261), one block per row: its price-tier strip, then
+ *  the titles its medians are made of, collapsed. Outside the table, so it wraps at phone width. */
+function TagMembers({ r }: { r: SteamTagEconomics }) {
+  const examples = r.examples ?? []; // older payloads carry neither field
+  const bands = r.priceBands ?? [];
+  if (!examples.length && !bands.length) return null;
+  return (
+    <div className="tag-members">
+      <div className="tag-members-name">{r.genre}</div>
+      {bands.length ? (
+        <div className="band-strip" title="Titles per price tier, with median reviews and rating">
+          {bands.map((b) => (
+            <span
+              key={b.band}
+              className={"band-cell" + (b.games < PRICE_BAND_THIN ? " band-thin" : "")}
+            >
+              {priceBandNote(b)}
+            </span>
+          ))}
+        </div>
+      ) : null}
+      {examples.length ? (
+        <details>
+          <summary>
+            {examples.length === 1 ? "The title" : `The ${examples.length} most-reviewed titles`}{" "}
+            behind these medians
+          </summary>
+          <ul>
+            {examples.map((e) => (
+              <li key={e.title}>
+                <b>{e.title}</b> · {money(e.priceCents)} · {fmt(e.votes ?? 0)} reviews · rated{" "}
+                {rate(e.rating)}
+                {e.releaseDate ? ` · ${e.releaseDate.slice(0, 4)}` : ""} · {e.tier}
+              </li>
+            ))}
+          </ul>
+        </details>
+      ) : null}
+    </div>
+  );
+}
+
 function EconTable({
   rows,
   keyLabel = "Genre",
@@ -2419,12 +2472,15 @@ function GenreEconCard({ data }: { data: SteamOverview }) {
         </>
       )}
       {lens === "tag" ? (
-        <EconTable
-          rows={searching ? (lookup?.rows ?? []) : tagRows}
-          keyLabel="Sub-genre"
-          demand
-          trend
-        />
+        <>
+          <EconTable
+            rows={searching ? (lookup?.rows ?? []) : tagRows}
+            keyLabel="Sub-genre"
+            demand
+            trend
+          />
+          {searching ? lookup?.rows.map((r) => <TagMembers key={r.genre} r={r} />) : null}
+        </>
       ) : (
         <EconTable rows={cohort === "indie" ? data.indie : data.all} />
       )}

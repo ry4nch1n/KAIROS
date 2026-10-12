@@ -3130,6 +3130,47 @@ a.est-chip:hover {
   white-space: normal;
   min-width: 0;
 }
+/* Under the looked-up sub-genre table (#260/#261): per row, a price-tier strip + collapsed member
+   list. Block flow outside the table, so both wrap on a phone instead of widening anything. */
+.tag-members {
+  margin-top: var(--sp-3);
+  max-width: 640px;
+  min-width: 0;
+  font-size: var(--fs-2);
+  line-height: 1.4;
+  color: var(--text-3);
+}
+.tag-members-name {
+  font-weight: 600;
+  color: var(--text-2);
+}
+.band-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1) var(--sp-2);
+  margin-bottom: var(--sp-1);
+}
+.band-cell {
+  padding: 1px var(--sp-2);
+  border: 1px solid var(--border-soft);
+  border-radius: 4px;
+  font-family: "Fira Code";
+}
+.band-cell.band-thin {
+  opacity: 0.7;
+  border-style: dashed;
+}
+.tag-members summary {
+  cursor: pointer;
+  color: var(--text-2);
+}
+.tag-members ul {
+  margin: var(--sp-1) 0 0;
+  padding-left: var(--sp-4);
+}
+.tag-members li {
+  overflow-wrap: anywhere;
+}
 .supply-flag {
   margin-left: var(--sp-2);
   font-family: "Fira Code";
