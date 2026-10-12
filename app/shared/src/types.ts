@@ -84,9 +84,31 @@ export interface SteamTagEconomics extends SteamGenreEconomics {
   // market's crawled leaders, not of the market, and must be labelled so.
   bandCoverage: number | null;
   survivorBand: boolean;
+  // The members behind the medians (#260): up to 5 titles, most-reviewed first, so a median over
+  // three survivors can be checked against who the three are.
+  examples: SteamTagExample[];
+  // Price tiers inside the sub-genre (#261): the global `pricing` bands, over this row's titles.
+  // Only bands that hold a title are listed. (Census rows carry no per-title price, so there is no
+  // census-side split.)
+  priceBands: SteamTagPriceBand[];
   // Median-reviews momentum across snapshot windows. "new" = history too thin to read yet
   // (the honest state; demand trajectory deepens as game_snapshots accrues), never a fake trend.
   demandTrajectory: Trajectory;
+}
+
+export interface SteamTagExample {
+  title: string;
+  releaseDate: string | null; // YYYY-MM-DD
+  priceCents: number | null;
+  votes: number | null;
+  rating: number | null;
+  tier: string; // scale tier, "—" when unclassified
+}
+export interface SteamTagPriceBand {
+  band: string; // "Free" | "<$5" | "$5–10" | "$10–20" | "$20+" — same cut as SteamPriceBand
+  games: number;
+  medianVotes: number;
+  medianRating: number | null;
 }
 
 // Named sub-genre lookup (#113). The ranked lens is a top-30 by TOTAL revenue, which generic

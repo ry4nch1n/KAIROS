@@ -8,6 +8,8 @@ import type {
   ScaleTierRow,
   SteamGenreEconomics,
   SteamTagEconomics,
+  SteamTagExample,
+  SteamTagPriceBand,
   SupplyCensus,
   SteamTagLookup,
   SteamCohort,
@@ -393,10 +395,11 @@ export async function getSteamTagEconomics(
   // sub-genre row reads identically to a store-genre row. Both are single set-based queries
   // scoped by the SAME cohort + name filters as the rows above, so the lookup path stays cheap
   // (only the matched tags are computed) and the ranked path computes over the indie cohort.
-  const [supply, demand, census] = await Promise.all([
+  const [supply, demand, census, members] = await Promise.all([
     tagSupplyTrend(db, tierFilter, matchFilter, params),
     tagDemandTrajectory(db, tierFilter, matchFilter, params),
     latestTagCensus(db),
+    tagMembers(db, tierFilter, matchFilter, params),
   ]);
   return rows
     .filter((r) => !isCurationTag(r.tag))
@@ -433,8 +436,85 @@ export async function getSteamTagEconomics(
         demandTrajectory: demand.get(r.tag) ?? "new",
         ...econBandFields(medRev, r.med_rev_bl_cents),
         ...bandCoverageFor(num(r.games), c),
+        examples: members.examples.get(r.tag) ?? [],
+        priceBands: members.bands.get(r.tag) ?? [],
       };
     });
+}
+
+// Who a sub-genre's medians are made of (#260) and how its titles split by price tier (#261).
+// Same cohort + name filters as the rows, so the members are exactly the titles aggregated.
+// Examples are ordered by reviews — the demand signal the row reports — and capped at 5.
+const TAG_EXAMPLES_MAX = 5;
+async function tagMembers(
+  db: Querier,
+  tierFilter: string,
+  matchFilter: string,
+  params: string[],
+): Promise<{ examples: Map<string, SteamTagExample[]>; bands: Map<string, SteamTagPriceBand[]> }> {
+  const from = `FROM v_latest l
+     JOIN games g ON g.id = l.game_id
+     JOIN sources src ON src.id = g.source_id
+     JOIN game_tags gt ON gt.game_id = g.id
+     JOIN tags t ON t.id = gt.tag_id
+     WHERE g.is_live AND src.name = 'steam' ${tierFilter} ${matchFilter} ${RELEASED_ONLY}`;
+  const p = params.length ? params : undefined;
+  const [exRows, bandRows] = await Promise.all([
+    db.query(
+      `SELECT * FROM (
+         SELECT ${canonSql("t.name")} AS tag, g.title AS title,
+                to_char(g.release_date, 'YYYY-MM-DD') AS release_date,
+                l.price_cents AS price, l.votes AS votes, l.rating AS rating, l.scale_tier AS tier,
+                row_number() OVER (PARTITION BY ${canonSql("t.name")}
+                                   ORDER BY coalesce(l.votes, 0) DESC, g.title) AS rn
+         ${from}
+       ) x WHERE rn <= ${TAG_EXAMPLES_MAX} ORDER BY tag, rn`,
+      p,
+    ),
+    db.query(
+      `SELECT ${canonSql("t.name")} AS tag, ${PRICE_BAND_SQL} AS band, count(*)::int AS games,
+              percentile_cont(0.5) WITHIN GROUP (ORDER BY coalesce(l.votes, 0))::float AS med_votes,
+              percentile_cont(0.5) WITHIN GROUP (ORDER BY l.rating)::float AS med_rating
+       ${from}
+       GROUP BY ${canonSql("t.name")}, band`,
+      p,
+    ),
+  ]);
+  const examples = new Map<string, SteamTagExample[]>();
+  for (const r of exRows) {
+    const a = examples.get(r.tag) ?? [];
+    a.push({
+      title: r.title,
+      releaseDate: r.release_date ?? null,
+      priceCents: r.price == null ? null : num(r.price),
+      votes: r.votes == null ? null : num(r.votes),
+      rating: r.rating == null ? null : +Number(r.rating).toFixed(2),
+      tier: r.tier ?? "—",
+    });
+    examples.set(r.tag, a);
+  }
+  const byTag = new Map<string, Map<string, Record<string, unknown>>>();
+  for (const r of bandRows) {
+    const m = byTag.get(r.tag) ?? new Map();
+    m.set(r.band, r);
+    byTag.set(r.tag, m);
+  }
+  const bands = new Map<string, SteamTagPriceBand[]>();
+  for (const [tag, m] of byTag) {
+    bands.set(
+      tag,
+      PRICE_BANDS.filter((b) => m.has(b)).map((band) => {
+        const r = m.get(band)!;
+        return {
+          band,
+          games: num(r.games),
+          medianVotes: Math.round(num(r.med_votes)),
+          medianRating: r.med_rating == null ? null : +Number(r.med_rating).toFixed(2),
+        };
+      }),
+    );
+  }
+  return { examples, bands };
 }
 
 // Newest census reading per tag name (#245), keyed on the lower-cased CANONICAL name (the same
@@ -735,16 +815,18 @@ export async function getSteamComparables(db: Querier, limit = 12): Promise<Stea
 }
 
 // Steam pricing: price-band breakdown over the indie cohort (how indies price + what each band is worth).
+// One band definition, shared with the sub-genre price split (#261) so the two never drift.
 const PRICE_BANDS = ["Free", "<$5", "$5–10", "$10–20", "$20+"];
-export async function getSteamPricing(db: Querier): Promise<SteamPriceBand[]> {
-  const rows = await db.query(
-    `SELECT CASE
+const PRICE_BAND_SQL = `CASE
               WHEN l.price_cents IS NULL OR l.price_cents = 0 THEN 'Free'
               WHEN l.price_cents < 500  THEN '<$5'
               WHEN l.price_cents < 1000 THEN '$5–10'
               WHEN l.price_cents < 2000 THEN '$10–20'
               ELSE '$20+'
-            END AS band,
+            END`;
+export async function getSteamPricing(db: Querier): Promise<SteamPriceBand[]> {
+  const rows = await db.query(
+    `SELECT ${PRICE_BAND_SQL} AS band,
             count(*)::int AS games,
             percentile_cont(0.5) WITHIN GROUP (ORDER BY l.rating)::float AS med_rating,
             coalesce(sum(l.owners_est), 0)::float AS total_owners,

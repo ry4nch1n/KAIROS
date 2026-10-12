@@ -255,7 +255,11 @@ export const CONTRACT = {
   //      without a census) and `survivorBand` (#258). Below a 5% floor the `successBand` stays but
   //      is a SURVIVOR read — the median of the market's crawled leaders, not of the market — and
   //      the client labels it "top N of M". Rows without a census are unchanged. Additive.
-  version: 39,
+  // v40: `SteamTagEconomics` gains `examples` (#260 — up to 5 member titles, most-reviewed first:
+  //      title, releaseDate, priceCents, votes, rating, tier) and `priceBands` (#261 — the global
+  //      pricing bands over the row's titles: games, medianVotes, medianRating; empty bands
+  //      omitted). No census-side split: census rows carry no per-title price. Additive.
+  version: 40,
   pitch: {
     // v2: added visual-card fields — setting, artStyle, codeName, headerUrl, shotUrl.
     // v3: rating rework — scoreFields d1Fit/steamCeiling/buildCost → browserFit/steamFit/buildEase.

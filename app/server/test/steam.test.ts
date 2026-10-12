@@ -531,6 +531,43 @@ describe("D10c getSteamTagEconomics (sub-genre lens, #90)", () => {
     expect(ov.tagEconomics.find((r) => r.genre === "Deckbuilding")!.games).toBe(3);
   });
 
+  // #260/#261 — a median over a handful of survivors must name them, and split them by price tier.
+  it("names its member titles and splits them into the global price bands", async () => {
+    const db = await freshMemoryDb();
+    await seedTagged(db);
+    const deck = (await q.getSteamTagEconomics(db, { minSupply: 3 })).find(
+      (r) => r.genre === "Deckbuilding",
+    )!;
+    // Most-reviewed first; the AAA title is outside the indie cohort, so it is no member either.
+    expect(deck.examples.map((e) => e.title)).toEqual(["Game T1", "Game T2", "Game T3"]);
+    expect(deck.examples[0]).toEqual({
+      title: "Game T1",
+      releaseDate: "2024-01-01",
+      priceCents: 1500,
+      votes: 4_000,
+      rating: 4.6,
+      tier: "small_indie",
+    });
+    // Band order follows the global pricing array; empty bands are omitted.
+    expect(deck.priceBands).toEqual([
+      { band: "$5–10", games: 1, medianVotes: 900, medianRating: 4.2 },
+      { band: "$10–20", games: 2, medianVotes: 3_000, medianRating: 4.5 },
+    ]);
+    // Bands partition the row's titles.
+    expect(deck.priceBands.reduce((a, b) => a + b.games, 0)).toBe(deck.games);
+  });
+
+  it("caps examples at five", async () => {
+    const db = await freshMemoryDb();
+    const games = Array.from({ length: 7 }, (_, i) =>
+      steamGame({ sourceGameId: `C${i}`, tags: ["Card Battler"], votes: 100 * (i + 1) }),
+    );
+    await loadGames(db, "steam", STEAM_BASE_URL, games, "2026-06-30T00:00:00.000Z");
+    const row = (await q.getSteamTagEconomics(db, { match: ["card battler"] }))[0];
+    expect(row.examples).toHaveLength(5);
+    expect(row.examples[0].votes).toBe(700);
+  });
+
   // #114 — a sub-genre must carry the same momentum signals a store genre does, so "is this
   // market growing or saturating?" is answerable at tag grain.
   it("carries supply-trend + demand-trajectory momentum fields", async () => {
