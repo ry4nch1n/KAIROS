@@ -259,7 +259,11 @@ export const CONTRACT = {
   //      title, releaseDate, priceCents, votes, rating, tier) and `priceBands` (#261 — the global
   //      pricing bands over the row's titles: games, medianVotes, medianRating; empty bands
   //      omitted). No census-side split: census rows carry no per-title price. Additive.
-  version: 40,
+  // v41: `SteamOverview` gains `upcomingBaseline` (#264 — p25/median/p75/p90 followers/day over
+  //      the WHOLE coming-soon cohort, not just the display rows; rates over a window < 7 days are
+  //      excluded and counted; `thin` under 10 measured; scoped by store genre and community tag,
+  //      never price) and each `SteamUpcoming` row gains `followerPercentile`. Additive.
+  version: 41,
   pitch: {
     // v2: added visual-card fields — setting, artStyle, codeName, headerUrl, shotUrl.
     // v3: rating rework — scoreFields d1Fit/steamCeiling/buildCost → browserFit/steamFit/buildEase.

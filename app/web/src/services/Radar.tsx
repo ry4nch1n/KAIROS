@@ -34,6 +34,8 @@ import type {
   SteamDeveloperRow,
   SteamNewRelease,
   SteamUpcoming,
+  SteamUpcomingBaseline,
+  FollowerBaseline,
   SteamComparable,
   SteamTagLookup,
   SteamTagEconomics,
@@ -1957,6 +1959,47 @@ const FOLLOWERS_TIP =
   "Followers of the store page. An unreleased game has no reviews and no owners, so this is its only demand reading — and the accepted public stand-in for the wishlist counts Steam does not publish. Blank means not measured, never zero.";
 const FOLL_DAY_TIP =
   "Followers gained per day, averaged over the longest measured span up to two weeks (hover a value for its window). The total says how big the audience already is; only the rate says whether it is still growing. Blank until two days have been measured.";
+const BASELINE_TIP =
+  "Followers/day across every tracked unreleased title, not just the rows below (those are the most-followed, so they run high). Rates measured over fewer days than the minimum are left out and counted; 'thin' marks a scope with too few measured titles to treat as a benchmark. Unreleased titles rarely show a price, so price is not a scope.";
+const fr = (n: number | null) => (n == null ? "—" : fmt(Math.round(n)));
+const baselineNote = (b: FollowerBaseline) =>
+  b.median == null
+    ? `${b.scope} · no measured rate`
+    : `${b.scope} · p25 ${fr(b.p25)} · med ${fr(b.median)} · p75 ${fr(b.p75)} · p90 ${fr(b.p90)} · n ${b.n}` +
+      (b.thin ? " · thin" : "");
+/** Velocity baseline strip above the Upcoming table (#264); wraps at phone width. */
+function UpcomingBaselineStrip({ b }: { b?: SteamUpcomingBaseline }) {
+  if (!b || !b.all.titles) return null;
+  const a = b.all;
+  return (
+    <div className="tag-members">
+      <div className="tag-members-name">
+        Velocity baseline (followers/day)
+        <Tip text={BASELINE_TIP} />
+      </div>
+      <div className="band-strip">
+        <span className={"band-cell" + (a.thin ? " band-thin" : "")}>{baselineNote(a)}</span>
+      </div>
+      <div style={{ color: "var(--text-3)", marginBottom: "var(--sp-1)" }}>
+        {a.titles} titles · {a.noVelocity} not yet measurable · {a.shortWindow} on a window under{" "}
+        {b.minWindowDays} days · {b.withPrice} with a price
+      </div>
+      {[...b.byGenre, ...b.byTag].length ? (
+        <details>
+          <summary>By genre and tag</summary>
+          <div className="band-strip" style={{ marginTop: "var(--sp-1)" }}>
+            {[...b.byGenre, ...b.byTag].map((s, i) => (
+              <span key={i} className={"band-cell" + (s.thin ? " band-thin" : "")}>
+                {baselineNote(s)}
+              </span>
+            ))}
+          </div>
+        </details>
+      ) : null}
+    </div>
+  );
+}
+
 function UpcomingTable({ rows }: { rows: SteamUpcoming[] }) {
   const anyArt = rows.some((r) => !!r.capsuleUrl);
   if (!rows.length)
@@ -1996,6 +2039,15 @@ function UpcomingTable({ rows }: { rows: SteamUpcoming[] }) {
             {/* Window in the title: a widened one (a failed fetch day) stays inspectable. */}
             <td className="r" title={`measured over ${r.followerWindowDays ?? 0} day(s)`}>
               {r.followerVelocity == null ? "—" : signed(r.followerVelocity)}
+              {r.followerPercentile != null ? (
+                <span
+                  className="traj"
+                  style={{ marginLeft: 6 }}
+                  title="Percentile of this rate among all measured unreleased titles"
+                >
+                  p{r.followerPercentile}
+                </span>
+              ) : null}
             </td>
             <td className="r">{money(r.priceCents)}</td>
           </tr>
@@ -2629,6 +2681,7 @@ function SteamView({
             "Upcoming — pre-release demand",
             "unreleased titles, most-followed first · followers stand in for wishlists",
           )}
+          <UpcomingBaselineStrip b={data.upcomingBaseline} />
           <UpcomingTable rows={data.upcoming ?? []} />
         </div>
       </>
