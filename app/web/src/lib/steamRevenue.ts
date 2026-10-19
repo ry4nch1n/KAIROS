@@ -165,3 +165,15 @@ export const STEAM_DEFAULTS: Omit<SteamInputs, "engineId"> = {
   licenseYears: 2,
   sgdPerUsd: 1.292,
 };
+
+/** Published basis for each default above, shown as `assumed · <basis>` (mirrors HINTS). */
+export const STEAM_HINTS: Record<keyof typeof STEAM_DEFAULTS, string> = {
+  wishlists: "your audience lever — set it from your own store page",
+  conversion: "0.05–0.20× first-year; launches spread 10–20× (GameDiscoverCo 2024)",
+  priceUsd: "a common indie list price",
+  refundRate: "typical indie refund rate (2-hour / 14-day policy)",
+  storeCut: "Steam's standard 30% below US$10M",
+  seats: "one seat for a solo developer",
+  licenseYears: "years the licence is held after crossing US$200k",
+  sgdPerUsd: "recent USD→SGD spot rate",
+};

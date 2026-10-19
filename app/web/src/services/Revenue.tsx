@@ -26,6 +26,7 @@ import {
   steamProjection,
   scenarioBand,
   STEAM_DEFAULTS,
+  STEAM_HINTS,
   type EngineId,
   type RevenueSeed,
 } from "../lib/steamRevenue.ts";
@@ -37,28 +38,48 @@ import {
   browserAdProjection,
   type BrowserAdInputs,
 } from "../lib/browserAds.ts";
+import { provenanceNote, resolveProvenance, type Provenance } from "../lib/provenance.ts";
 
 const usd = (n: number) => "$" + Math.round(n).toLocaleString("en-US");
 const eur = (n: number) => "€" + Math.round(n).toLocaleString("en-US");
 
-/** One editable assumption. `src` names the published basis, so a modelled input is never
- *  misread as observed data. */
-type Field = { label: string; v: number; set: (n: number) => void; step: number; src?: string };
+/** One editable input, shared by both modes. `origin` says where the value came from
+ *  (assumed default, seeded comparable, measured); a user edit overrides it, so a modelled
+ *  input is never misread as observed data. The note sits under the input (column flex). */
+type Field = {
+  label: string;
+  v: number;
+  set: (n: number) => void;
+  step?: number;
+  min?: number;
+  max?: number;
+  range?: boolean;
+  origin: Provenance;
+};
 function Num(f: Field) {
+  const [edited, setEdited] = useState(false);
+  const min = f.min ?? 0;
   return (
     <label className="rev-field">
       <span>{f.label}</span>
       <input
-        type="number"
-        min={0}
+        type={f.range ? "range" : "number"}
+        min={min}
+        max={f.max}
         step={f.step}
         value={f.v}
-        onChange={(e) => f.set(Math.max(0, +e.target.value))}
+        onChange={(e) => {
+          setEdited(true);
+          f.set(Math.max(min, +e.target.value));
+        }}
       />
-      {f.src && <small className="kpi-note">assumed · {f.src}</small>}
+      <small className="kpi-note" data-provenance={resolveProvenance(f.origin, edited).kind}>
+        {provenanceNote(resolveProvenance(f.origin, edited))}
+      </small>
     </label>
   );
 }
+const assumed = (basis: string): Provenance => ({ kind: "assumed", basis });
 
 // In the order they compose: audience → engagement → portal terms.
 const AD_FIELDS: [keyof BrowserAdInputs, string, number][] = [
@@ -329,10 +350,23 @@ function BrowserPanel({
 
           <div className="rev-panel">
             {AD_FIELDS.map(([k, label, step]) => (
-              <Num key={k} label={label} v={ads[k]} set={set(k)} step={step} src={HINTS[k]} />
+              <Num
+                key={k}
+                label={label}
+                v={ads[k]}
+                set={set(k)}
+                step={step}
+                origin={assumed(HINTS[k])}
+              />
             ))}
             {/* targetBandUsd falls back to the default rate if this is cleared to 0 */}
-            <Num label="FX rate (SGD per USD)" v={rate} step={0.01} set={setRate} />
+            <Num
+              label="FX rate (SGD per USD)"
+              v={rate}
+              step={0.01}
+              set={setRate}
+              origin={assumed(STEAM_HINTS.sgdPerUsd)}
+            />
             {/* Session length, not the dial, decides how many midgame ads fit: the portal SDK
                 paces them one per three minutes. The dial stays editable — portal terms differ —
                 but it is clamped to that ceiling, and the clamp is stated when it binds. */}
@@ -419,9 +453,14 @@ function SteamPanel({
   // Anchor prefill (A3): the comparable's real list price replaces the default dial.
   // Only price — wishlists stay yours to reason about; the anchor strip shows the
   // comparable's actual outcome for calibration instead of inventing a wishlist count.
+  // The price keeps its comparable's provenance until edited — clearing the seed leaves
+  // that value in place, so the note must not fall back to "assumed".
+  const [seededFrom, setSeededFrom] = useState<string | null>(null);
   useEffect(() => {
-    if (seed?.priceCents != null && seed.priceCents > 0)
+    if (seed?.priceCents != null && seed.priceCents > 0) {
       setPriceUsd(+(seed.priceCents / 100).toFixed(2));
+      setSeededFrom(seed.title);
+    }
   }, [seed]);
 
   const inputs = {
@@ -599,89 +638,74 @@ function SteamPanel({
           </div>
 
           <div className="rev-panel">
-            <label className="rev-field">
-              <span>Wishlists at launch</span>
-              <input
-                type="number"
-                min={0}
-                value={wishlists}
-                onChange={(e) => setWishlists(Math.max(0, +e.target.value))}
-              />
-            </label>
-            <label className="rev-field">
-              <span>Wishlist → sale conversion ({conversion.toFixed(2)}×)</span>
-              <input
-                type="number"
-                min={0}
-                max={2}
-                step={0.01}
-                value={conversion}
-                onChange={(e) => setConversion(Math.max(0, +e.target.value))}
-              />
-            </label>
-            <label className="rev-field">
-              <span>List price (USD)</span>
-              <input
-                type="number"
-                min={0}
-                step={0.5}
-                value={priceUsd}
-                onChange={(e) => setPriceUsd(Math.max(0, +e.target.value))}
-              />
-            </label>
-            <label className="rev-field">
-              <span>Refund rate — {Math.round(refundRate * 100)}%</span>
-              <input
-                type="range"
-                min={0}
-                max={0.25}
-                step={0.01}
-                value={refundRate}
-                onChange={(e) => setRefundRate(+e.target.value)}
-              />
-            </label>
-            <label className="rev-field">
-              <span>Steam cut — {Math.round(storeCut * 100)}%</span>
-              <input
-                type="range"
-                min={0}
-                max={0.4}
-                step={0.01}
-                value={storeCut}
-                onChange={(e) => setStoreCut(+e.target.value)}
-              />
-            </label>
+            <Num
+              label="Wishlists at launch"
+              v={wishlists}
+              set={setWishlists}
+              origin={assumed(STEAM_HINTS.wishlists)}
+            />
+            <Num
+              label={`Wishlist → sale conversion (${conversion.toFixed(2)}×)`}
+              v={conversion}
+              set={setConversion}
+              max={2}
+              step={0.01}
+              origin={assumed(STEAM_HINTS.conversion)}
+            />
+            <Num
+              key={"price:" + (seededFrom ?? "")}
+              label="List price (USD)"
+              v={priceUsd}
+              set={setPriceUsd}
+              step={0.5}
+              origin={
+                seededFrom ? { kind: "seeded", from: seededFrom } : assumed(STEAM_HINTS.priceUsd)
+              }
+            />
+            <Num
+              label={`Refund rate — ${Math.round(refundRate * 100)}%`}
+              v={refundRate}
+              set={setRefundRate}
+              range
+              max={0.25}
+              step={0.01}
+              origin={assumed(STEAM_HINTS.refundRate)}
+            />
+            <Num
+              label={`Steam cut — ${Math.round(storeCut * 100)}%`}
+              v={storeCut}
+              set={setStoreCut}
+              range
+              max={0.4}
+              step={0.01}
+              origin={assumed(STEAM_HINTS.storeCut)}
+            />
             {engineId === "unity" && (
-              <label className="rev-field">
-                <span>
-                  Unity Pro seats × years — {seats} × {licenseYears}
-                </span>
-                <div className="rev-dual">
-                  <input
-                    type="number"
-                    min={1}
-                    value={seats}
-                    onChange={(e) => setSeats(Math.max(1, +e.target.value))}
-                  />
-                  <input
-                    type="number"
-                    min={1}
-                    value={licenseYears}
-                    onChange={(e) => setLicenseYears(Math.max(1, +e.target.value))}
-                  />
-                </div>
-              </label>
+              <>
+                <Num
+                  label="Unity Pro seats"
+                  v={seats}
+                  set={setSeats}
+                  min={1}
+                  origin={assumed(STEAM_HINTS.seats)}
+                />
+                <Num
+                  label="Unity Pro licence years"
+                  v={licenseYears}
+                  set={setLicenseYears}
+                  min={1}
+                  origin={assumed(STEAM_HINTS.licenseYears)}
+                />
+              </>
             )}
-            <label className="rev-field">
-              <span>FX rate (SGD per USD)</span>
-              <input
-                type="number"
-                min={0.5}
-                step={0.01}
-                value={sgdPerUsd}
-                onChange={(e) => setSgdPerUsd(Math.max(0.5, +e.target.value))}
-              />
-            </label>
+            <Num
+              label="FX rate (SGD per USD)"
+              v={sgdPerUsd}
+              set={setSgdPerUsd}
+              min={0.5}
+              step={0.01}
+              origin={assumed(STEAM_HINTS.sgdPerUsd)}
+            />
             <p className="rev-note">
               {units.toLocaleString("en-US")} units × ${priceUsd.toFixed(2)} = {usd(p.grossList)}{" "}
               list → {usd(p.grossRevenue)} after refunds → −{usd(p.storeFee)} Steam cut
