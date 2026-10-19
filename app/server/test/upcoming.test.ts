@@ -10,6 +10,11 @@ import {
   FOLLOWER_MAX_WINDOW_DAYS,
   followerTraction,
   getSteamUpcoming,
+  getSteamUpcomingWithBaseline,
+  followerBaseline,
+  followerPercentile,
+  UPCOMING_BASELINE_MIN_WINDOW_DAYS,
+  UPCOMING_BASELINE_THIN,
   getSteamNewReleases,
   getSteamComparables,
 } from "../src/queries/steam.ts";
@@ -154,5 +159,70 @@ describe("#164 getSteamUpcoming", () => {
 
   it("an empty cohort is an empty list, not a throw", async () => {
     await expect(getSteamUpcoming(await freshMemoryDb())).resolves.toEqual([]);
+  }, 60000);
+});
+
+// #264: the velocity baseline is over the WHOLE coming-soon cohort, excludes (and counts) short
+// windows, never treats "no rate" as 0, and marks a scope under the measured floor as thin.
+const vr = (v: number | null, w: number | null) => ({ followerVelocity: v, followerWindowDays: w });
+describe("#264 followerBaseline (pure)", () => {
+  it("percentiles over window ≥ min only; short windows and missing rates are counted, not mixed in", () => {
+    const rows = [
+      ...[10, 20, 30, 40, 50].map((v) => vr(v, 14)),
+      vr(9999, 1), // 1-day noise — excluded
+      vr(null, null),
+      vr(null, null),
+    ];
+    const b = followerBaseline("All upcoming", rows);
+    expect(UPCOMING_BASELINE_MIN_WINDOW_DAYS).toBe(7);
+    expect(b).toMatchObject({ titles: 8, n: 5, shortWindow: 1, noVelocity: 2 });
+    expect(b).toMatchObject({ p25: 20, median: 30, p75: 40, p90: 46 });
+    expect(b.thin).toBe(5 < UPCOMING_BASELINE_THIN);
+  });
+
+  it("an all-unmeasured scope has null percentiles, never 0", () => {
+    expect(followerBaseline("x", [vr(null, null)])).toMatchObject({
+      n: 0,
+      median: null,
+      p90: null,
+      thin: true,
+    });
+  });
+
+  it("per-row percentile is null outside the baseline", () => {
+    const cohort = [10, 20, 30, 40].map((v) => vr(v, 10));
+    expect(followerPercentile(vr(30, 10), cohort)).toBe(75);
+    expect(followerPercentile(vr(30, 2), cohort)).toBeNull();
+    expect(followerPercentile(vr(null, null), cohort)).toBeNull();
+  });
+
+  it("getSteamUpcomingWithBaseline covers the cohort beyond the display cap, scoped by genre + tag", async () => {
+    const db = await freshMemoryDb();
+    const base = "https://store.steampowered.com";
+    const titles = Array.from({ length: 3 }, (_, i) => `T${i}`);
+    const day = (followers: number[], d: string) =>
+      loadGames(
+        db,
+        "steam",
+        base,
+        titles.map((t, i) =>
+          game({
+            sourceGameId: String(10 + i),
+            title: t,
+            followers: followers[i],
+            tags: ["roguelike"],
+          }),
+        ),
+        d,
+      );
+    await day([100, 200, 300], "2026-08-01");
+    await day([200, 400, 900], "2026-08-11"); // 10-day window: 10, 20, 60 /day
+    const { upcoming, baseline } = await getSteamUpcomingWithBaseline(db, 1);
+    expect(upcoming).toHaveLength(1); // display cap applies to rows …
+    expect(baseline.all).toMatchObject({ titles: 3, n: 3, median: 20, thin: true }); // … not the baseline
+    expect(upcoming[0]).toMatchObject({ title: "T2", followerPercentile: 100 });
+    expect(baseline.withPrice).toBe(0);
+    expect(baseline.byGenre[0]).toMatchObject({ scope: "Indie", n: 3 });
+    expect(baseline.byTag.map((t) => t.scope)).toContain("roguelike");
   }, 60000);
 });

@@ -277,6 +277,32 @@ export interface SteamUpcoming {
   followerVelocity: number | null; // followers/day, latest vs oldest measured snapshot ≤14 days back — null with <2
   followerWindowDays: number | null; // days the velocity is measured over; null when velocity is null
   capsuleUrl: string | null; // Steam header capsule; null when not crawled
+  // Where this row's rate sits in the whole-cohort baseline, 0–100 (#264). null when the row is not
+  // IN the baseline (no rate, or a window under `minWindowDays`) or the baseline is empty.
+  followerPercentile?: number | null;
+}
+
+/** Follower-velocity distribution over one scope of the coming-soon cohort (#264). */
+export interface FollowerBaseline {
+  scope: string; // "All upcoming", a store genre, or a community tag
+  titles: number; // coming-soon titles in the scope, measured or not
+  n: number; // titles whose rate is IN the percentiles (window ≥ minWindowDays)
+  noVelocity: number; // no measurable rate yet (fewer than two usable snapshots)
+  shortWindow: number; // a rate exists but over < minWindowDays — excluded as noise
+  p25: number | null; // followers/day; all four null when n = 0
+  median: number | null;
+  p75: number | null;
+  p90: number | null;
+  thin: boolean; // n < thinBelow — read as a hint, not a benchmark
+}
+
+export interface SteamUpcomingBaseline {
+  minWindowDays: number;
+  thinBelow: number;
+  withPrice: number; // titles with an announced price — coverage only, never a scope
+  all: FollowerBaseline;
+  byGenre: FollowerBaseline[]; // coarse store genre, most-measured first
+  byTag: FollowerBaseline[]; // community tags, most-measured first; empty when none are stored
 }
 
 export interface SteamOverview {
@@ -306,6 +332,7 @@ export interface SteamOverview {
   developers: SteamDeveloperRow[];
   newReleases: SteamNewRelease[];
   upcoming: SteamUpcoming[]; // unreleased cohort — follower demand + velocity (#164)
+  upcomingBaseline?: SteamUpcomingBaseline; // velocity percentiles over the WHOLE cohort (#264)
   subtitle: string;
 }
 

@@ -21,6 +21,8 @@ import type {
   SteamDeveloperRow,
   SteamNewRelease,
   SteamUpcoming,
+  SteamUpcomingBaseline,
+  FollowerBaseline,
   SuccessBand,
   RevenuePercentiles,
 } from "shared";
@@ -986,7 +988,106 @@ export function followerTraction(snaps: { followers: unknown; capturedAt: unknow
   };
 }
 
+// Follower-velocity baseline (#264): where a coming-soon title's rate sits among ALL coming-soon
+// titles, not just the display rows (those are the most-followed, so biased high). A rate over a
+// window under MIN_WINDOW_DAYS is excluded and COUNTED (a 1-day rate is mostly fetch noise), and
+// a scope with fewer than THIN measured titles carries `thin`. Price is not a scope: almost no
+// unreleased title shows one, so `withPrice` reports coverage only.
+export const UPCOMING_BASELINE_MIN_WINDOW_DAYS = 7;
+export const UPCOMING_BASELINE_THIN = 10;
+const UPCOMING_BASELINE_SCOPES = 8;
+
+type VelocityRow = { followerVelocity: number | null; followerWindowDays: number | null };
+const inBaseline = (r: VelocityRow) =>
+  r.followerVelocity != null && (r.followerWindowDays ?? 0) >= UPCOMING_BASELINE_MIN_WINDOW_DAYS;
+/** Linear-interpolated percentile (percentile_cont semantics) over an ascending array. */
+const pctOf = (s: number[], p: number) => {
+  const i = (s.length - 1) * p;
+  const lo = Math.floor(i);
+  return +(s[lo] + (s[Math.ceil(i)] - s[lo]) * (i - lo)).toFixed(2);
+};
+
+/** Pure — exported for tests. */
+export function followerBaseline(scope: string, rows: VelocityRow[]): FollowerBaseline {
+  const v = rows.filter(inBaseline).map((r) => r.followerVelocity as number);
+  v.sort((a, b) => a - b);
+  const noVelocity = rows.filter((r) => r.followerVelocity == null).length;
+  const q = (p: number) => (v.length ? pctOf(v, p) : null);
+  return {
+    scope,
+    titles: rows.length,
+    n: v.length,
+    noVelocity,
+    shortWindow: rows.length - noVelocity - v.length,
+    p25: q(0.25),
+    median: q(0.5),
+    p75: q(0.75),
+    p90: q(0.9),
+    thin: v.length < UPCOMING_BASELINE_THIN,
+  };
+}
+
+/** Pure — share (0–100) of the baseline's measured rates at or below this row's; null if not in it. */
+export function followerPercentile(row: VelocityRow, cohort: VelocityRow[]): number | null {
+  if (!inBaseline(row)) return null;
+  const v = cohort.filter(inBaseline).map((r) => r.followerVelocity as number);
+  if (!v.length) return null;
+  return Math.round(
+    (v.filter((x) => x <= (row.followerVelocity as number)).length / v.length) * 100,
+  );
+}
+
+const scopedBaselines = (groups: Map<string, VelocityRow[]>) =>
+  [...groups]
+    .map(([k, rows]) => followerBaseline(k, rows))
+    .filter((b) => b.titles > 0)
+    .sort((a, b) => b.n - a.n || b.titles - a.titles || a.scope.localeCompare(b.scope))
+    .slice(0, UPCOMING_BASELINE_SCOPES);
+
 export async function getSteamUpcoming(db: Querier, limit = 40): Promise<SteamUpcoming[]> {
+  return (await getSteamUpcomingWithBaseline(db, limit)).upcoming;
+}
+
+export async function getSteamUpcomingWithBaseline(
+  db: Querier,
+  limit = 40,
+): Promise<{ upcoming: SteamUpcoming[]; baseline: SteamUpcomingBaseline }> {
+  const [cohort, tagRows] = await Promise.all([
+    upcomingCohort(db),
+    db.query(
+      `SELECT g.id AS game_id, ${canonSql("t.name")} AS tag
+       FROM v_latest l JOIN games g ON g.id = l.game_id JOIN sources src ON src.id = g.source_id
+       JOIN game_tags gt ON gt.game_id = g.id JOIN tags t ON t.id = gt.tag_id
+       WHERE g.is_live AND src.name = 'steam' AND l.coming_soon IS TRUE`,
+    ),
+  ]);
+  const byId = new Map(cohort.map((r) => [r.gameId, r]));
+  const genres = new Map<string, VelocityRow[]>();
+  for (const r of cohort) genres.set(r.genre, [...(genres.get(r.genre) ?? []), r]);
+  const tags = new Map<string, VelocityRow[]>();
+  for (const t of tagRows) {
+    const r = byId.get(String(t.game_id));
+    if (!r || !t.tag || isCurationTag(String(t.tag))) continue;
+    tags.set(String(t.tag), [...(tags.get(String(t.tag)) ?? []), r]);
+  }
+  const upcoming = cohort
+    .slice(0, limit)
+    .map(({ gameId, ...r }) => ({ ...r, followerPercentile: followerPercentile(r, cohort) }));
+  return {
+    upcoming,
+    baseline: {
+      minWindowDays: UPCOMING_BASELINE_MIN_WINDOW_DAYS,
+      thinBelow: UPCOMING_BASELINE_THIN,
+      withPrice: cohort.filter((r) => r.priceCents != null).length,
+      all: followerBaseline("All upcoming", cohort),
+      byGenre: scopedBaselines(genres),
+      byTag: scopedBaselines(tags),
+    },
+  };
+}
+
+/** Every coming-soon title (uncapped), most-followed first, with its follower traction. */
+async function upcomingCohort(db: Querier): Promise<(SteamUpcoming & { gameId: string })[]> {
   // One row per (game, measured snapshot). The LEFT JOIN keeps a never-measured game visible.
   const rows = await db.query(
     `SELECT g.id AS game_id, g.title, ${canonSql("l.genre")} AS genre, l.price_cents AS price,
@@ -999,10 +1100,11 @@ export async function getSteamUpcoming(db: Querier, limit = 40): Promise<SteamUp
      ) h ON TRUE
      WHERE g.is_live AND src.name = 'steam' AND l.coming_soon IS TRUE`,
   );
-  const byGame = new Map<string, SteamUpcoming & { snaps: typeof rows }>();
+  const byGame = new Map<string, SteamUpcoming & { gameId: string; snaps: typeof rows }>();
   for (const r of rows) {
     const k = String(r.game_id);
     const row = byGame.get(k) ?? {
+      gameId: k,
       title: r.title,
       genre: r.genre ?? "—",
       priceCents: r.price == null ? null : num(r.price),
@@ -1017,8 +1119,7 @@ export async function getSteamUpcoming(db: Querier, limit = 40): Promise<SteamUp
   }
   return [...byGame.values()]
     .map(({ snaps, ...row }) => ({ ...row, ...followerTraction(snaps) }))
-    .sort((a, b) => (b.followers ?? -1) - (a.followers ?? -1) || a.title.localeCompare(b.title))
-    .slice(0, limit);
+    .sort((a, b) => (b.followers ?? -1) - (a.followers ?? -1) || a.title.localeCompare(b.title));
 }
 
 async function steamGapExamples(db: Querier): Promise<Map<string, string[]>> {
@@ -1143,7 +1244,7 @@ export async function getSteamOverview(db: Querier): Promise<SteamOverview> {
     getSteamDevelopers(db),
     getSteamNewReleases(db),
     getSteamTagEconomics(db),
-    getSteamUpcoming(db),
+    getSteamUpcomingWithBaseline(db),
   ]);
   const games = tiers.reduce((s, t) => s + t.games, 0);
   const aaa = tiers.find((t) => t.tier === "aaa")?.games ?? 0;
@@ -1218,7 +1319,8 @@ export async function getSteamOverview(db: Querier): Promise<SteamOverview> {
     ownership,
     developers,
     newReleases,
-    upcoming,
+    upcoming: upcoming.upcoming,
+    upcomingBaseline: upcoming.baseline,
     subtitle: "Steam (PC) · indie-addressable cohort default",
   };
 }
