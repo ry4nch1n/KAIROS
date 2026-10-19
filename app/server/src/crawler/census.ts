@@ -20,6 +20,7 @@ import { matchSteering } from "../queries/shared.ts";
 import { getBriefSteering } from "../queries/library.ts";
 import type { Querier } from "../db/db.ts";
 import { politeFetch, sleep } from "./base.ts";
+import { parseSearchAppids } from "./steam.ts";
 
 const STORE = "https://store.steampowered.com";
 export const CENSUS_MAX_TAGS = 15;
@@ -218,4 +219,70 @@ export async function runCensus(
     }
   }
   return res;
+}
+
+// ── Tag-seeded discovery (#265) ──────────────────────────────────────────────────────────────
+// The census counts a steered tag's releases but never feeds titles back into the crawl, so a
+// mid-band deckbuilder with a few hundred reviews never enters `games` and the tag lens reads
+// only the genre's megahits. One more store-search page per steered tag, sorted by reviews,
+// hands the Steam crawl that tag's top appids. The census page itself is Released_DESC (newest
+// shovelware first), so it cannot be reused — this is a separate request on the same host.
+
+/** Appids taken from each steered tag's reviews-sorted page (STEAM_TAG_SEED_N overrides). */
+export const TAG_SEED_N_DEFAULT = 25;
+
+export function tagSeedUrl(tagid: number, n = TAG_SEED_N_DEFAULT): string {
+  return (
+    `${STORE}/search/results/?tags=${tagid}&sort_by=Reviews_DESC&infinite=1` +
+    `&start=0&count=${n}&category1=998&cc=us&l=english`
+  );
+}
+
+/** Top appids from one reviews-sorted search response. Throws on a shape change (as the census). */
+export function parseTagSeedPage(json: string, n = TAG_SEED_N_DEFAULT): number[] {
+  const body = JSON.parse(json);
+  if (typeof body?.results_html !== "string") throw new Error("tag seed: no results_html");
+  return parseSearchAppids(body.results_html).slice(0, n);
+}
+
+export interface TagSeed {
+  tag: string;
+  appids: number[];
+}
+
+/** Fail-soft by contract: any failure — steering, the tag list, one tag's page — logs and the
+ *  crawl carries on with whatever it has. Seeding widens the peer set; it must never cost a day. */
+export async function fetchTagSeeds(
+  db: Querier,
+  log: (m: string) => void = console.log,
+  fetchText: (url: string) => Promise<string> = (u) => politeFetch(u, 12000),
+  n = TAG_SEED_N_DEFAULT,
+  delayMs = 2000,
+): Promise<TagSeed[]> {
+  const out: TagSeed[] = [];
+  if (n <= 0) return out;
+  let targets: StoreTag[];
+  try {
+    const { flags } = await getBriefSteering(db);
+    if (!flags.length) return out;
+    targets = selectCensusTags(
+      parseStoreTags(await fetchText(`${STORE}/tagdata/populartags/english`)),
+      flags,
+    );
+  } catch (e) {
+    log(`[steam] tag seeding skipped: ${String(e)}\n`);
+    return out;
+  }
+  for (const t of targets) {
+    await sleep(delayMs);
+    try {
+      out.push({
+        tag: t.name,
+        appids: parseTagSeedPage(await fetchText(tagSeedUrl(t.tagid, n)), n),
+      });
+    } catch (e) {
+      log(`[steam] tag seed ${t.name}: FAILED ${String(e)}\n`);
+    }
+  }
+  return out;
 }

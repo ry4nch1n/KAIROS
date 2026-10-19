@@ -614,6 +614,49 @@ export function mergeSeeds(lists: number[][], limit: number): number[] {
   return out;
 }
 
+/** Share of the per-run cap tag seeds may take (#265) — the rest stays with the general seeds. */
+export const TAG_SEED_SHARE = 0.25;
+
+/**
+ * Fold steered-tag seeds (#265) into an already-merged seed list WITHOUT raising the cap: the
+ * last `budget` slots of `base` are reopened, filled with tag appids the base did not already
+ * hold (interleaved across tags so every tag gets some), and any slots left over go back to
+ * `base`'s own tail. `known` counts tag appids already in the kept base or in an earlier tag.
+ */
+export function addTagSeeds(
+  base: number[],
+  tagSeeds: { tag: string; appids: number[] }[],
+  limit: number,
+  share = TAG_SEED_SHARE,
+): { ids: number[]; perTag: { tag: string; added: number; known: number }[] } {
+  const budget = Math.min(
+    Math.floor(limit * share),
+    tagSeeds.reduce((n, t) => n + t.appids.length, 0),
+  );
+  const core = base.slice(0, Math.max(0, Math.min(base.length, limit - budget)));
+  const seen = new Set(core);
+  const perTag = tagSeeds.map((t) => ({ tag: t.tag, added: 0, known: 0 }));
+  const extra: number[] = [];
+  const depth = Math.max(0, ...tagSeeds.map((t) => t.appids.length));
+  for (let i = 0; i < depth; i++) {
+    tagSeeds.forEach((t, k) => {
+      const id = t.appids[i];
+      if (id == null) return;
+      if (seen.has(id)) perTag[k].known++;
+      else if (extra.length < budget) {
+        seen.add(id);
+        extra.push(id);
+        perTag[k].added++;
+      }
+    });
+  }
+  const fill = base.slice(core.length).filter((id) => !seen.has(id));
+  return {
+    ids: [...core, ...extra, ...fill].slice(0, limit),
+    perTag,
+  };
+}
+
 /** Build a deduped appid seed list. Indie stream is listed first so it is well represented. */
 export async function seedAppIds(limit = SEED_LIMIT_DEFAULT): Promise<number[]> {
   const fetchIds = async (label: string, fn: () => Promise<number[]>): Promise<number[]> => {
@@ -728,10 +771,15 @@ export const STEAM_BASE_URL = STORE;
 export async function steamCrawl(
   limit = SEED_LIMIT_DEFAULT,
   log: (m: string) => void = () => {},
+  tagSeeds: { tag: string; appids: number[] }[] = [],
 ): Promise<{ games: RawGame[]; baseUrl: string }> {
   log(`[steam] seeding appids (limit ${limit})…\n`);
   resetFollowerRun(); // breaker is per-run, not per-process
-  const ids = await seedAppIds(limit);
+  const seeded = addTagSeeds(await seedAppIds(limit), tagSeeds, limit);
+  for (const t of seeded.perTag) {
+    log(`[steam] tag ${t.tag}: seeded ${t.added} new / ${t.known} already known\n`);
+  }
+  const ids = seeded.ids;
   log(`[steam] ${ids.length} appids\n`);
   const games: RawGame[] = [];
   for (const id of ids) {

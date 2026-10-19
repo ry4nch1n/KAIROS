@@ -2,7 +2,7 @@
 import { crazygames } from "./crazygames.ts";
 import { poki } from "./poki.ts";
 import { steamCrawl } from "./steam.ts";
-import { runCensus } from "./census.ts";
+import { TAG_SEED_N_DEFAULT, fetchTagSeeds, runCensus } from "./census.ts";
 import { crawlRotation, loadGames } from "./load.ts";
 import { politeFetch, sleep, type SourceAdapter, type RawGame } from "./base.ts";
 import { appDb, applySchema, usingNeon } from "../db/db.ts";
@@ -30,7 +30,12 @@ let baseUrl: string;
 
 if (which === "steam") {
   // Steam is JSON/multi-endpoint, not HTML-sitemap — uses its own orchestrator.
-  const r = await steamCrawl(limit, (m) => process.stdout.write(m));
+  // Tag-seeded discovery (#265): each steered tag's reviews-sorted page feeds the seed list,
+  // inside the same CRAWL_LIMIT. Fail-soft — a blocked search page never fails the crawl.
+  const log = (m: string) => process.stdout.write(m);
+  const seedN = Number(process.env.STEAM_TAG_SEED_N ?? TAG_SEED_N_DEFAULT);
+  const tagSeeds = await fetchTagSeeds(db, log, undefined, Number.isFinite(seedN) ? seedN : 0);
+  const r = await steamCrawl(limit, log, tagSeeds);
   raw = r.games;
   sourceName = "steam";
   baseUrl = r.baseUrl;

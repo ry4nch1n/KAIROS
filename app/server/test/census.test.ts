@@ -5,7 +5,9 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   censusUrl,
+  fetchTagSeeds,
   parseCensusPage,
+  parseTagSeedPage,
   parseStoreDate,
   parseStoreTags,
   runCensus,
@@ -16,7 +18,7 @@ import { classifyCensusSupply, matchSteering } from "../src/queries/shared.ts";
 import { setBriefSteering } from "../src/queries/library.ts";
 import { freshMemoryDb } from "../src/db/db.ts";
 import { loadGames } from "../src/crawler/load.ts";
-import { STEAM_BASE_URL } from "../src/crawler/steam.ts";
+import { STEAM_BASE_URL, addTagSeeds } from "../src/crawler/steam.ts";
 import * as q from "../src/queries/index.ts";
 import type { RawGame } from "../src/crawler/base.ts";
 
@@ -229,5 +231,64 @@ describe("census end to end", () => {
     expect(row.supplyTrend).toBe("unobserved");
     expect(row.bandCoverage).toBeNull();
     expect(row.survivorBand).toBe(false);
+  });
+});
+
+// #265 tag-seeded discovery. Fixture: Roguelike Deckbuilder's reviews-sorted search page
+// (count=25), captured live 2026-10-19.
+const REVIEWS = fx("steam_search_reviews_1091588.json");
+
+describe("tag-seeded discovery (#265)", () => {
+  it("reads the top appids of a reviews-sorted page, mid-band titles included", () => {
+    const ids = parseTagSeedPage(REVIEWS);
+    expect(ids).toHaveLength(25);
+    expect(ids.slice(0, 2)).toEqual([646570, 2379780]); // Slay the Spire, Balatro
+    expect(parseTagSeedPage(REVIEWS, 5)).toHaveLength(5);
+    expect(() => parseTagSeedPage("{}")).toThrow();
+  });
+
+  it("fetches one page per steered tag and fails soft per tag and overall", async () => {
+    const db = await freshMemoryDb();
+    await setBriefSteering(db, ["Roguelike deckbuilder"]);
+    const urls: string[] = [];
+    const store = (url: string) => {
+      urls.push(url);
+      return Promise.resolve(url.includes("populartags") ? TAGS : REVIEWS);
+    };
+    const seeds = await fetchTagSeeds(db, () => {}, store, 25, 0);
+    expect(seeds.length).toBeGreaterThan(0);
+    expect(seeds.find((s) => s.tag === "Roguelike Deckbuilder")?.appids).toHaveLength(25);
+    expect(urls.filter((u) => u.includes("sort_by=Reviews_DESC"))).toHaveLength(seeds.length);
+
+    const logs: string[] = [];
+    const blocked = (url: string) =>
+      url.includes("populartags") ? Promise.resolve(TAGS) : Promise.reject(new Error("403"));
+    expect(await fetchTagSeeds(db, (m) => logs.push(m), blocked, 25, 0)).toEqual([]);
+    expect(logs.some((m) => m.includes("FAILED"))).toBe(true);
+    const down = () => Promise.reject(new Error("down"));
+    expect(await fetchTagSeeds(db, () => {}, down, 25, 0)).toEqual([]);
+    expect(await fetchTagSeeds(await freshMemoryDb(), () => {}, store, 25, 0)).toEqual([]); // no flags
+  });
+
+  it("dedupes against the base seed and never raises the cap", () => {
+    const base = Array.from({ length: 200 }, (_, i) => i + 1);
+    const tagSeeds = [
+      { tag: "A", appids: [1, 2, 9001, 9002, 9003] }, // 1 and 2 already in the kept base
+      { tag: "B", appids: [9101, 9102, 9103, 9002] }, // interleaved: A reaches 9002 first
+    ];
+    const r = addTagSeeds(base, tagSeeds, 200);
+    expect(r.ids).toHaveLength(200);
+    expect(new Set(r.ids).size).toBe(200);
+    expect(r.ids).toEqual(expect.arrayContaining([9001, 9002, 9003, 9101, 9102, 9103]));
+    expect(r.perTag).toEqual([
+      { tag: "A", added: 3, known: 2 },
+      { tag: "B", added: 3, known: 1 },
+    ]);
+    // Tag seeds take at most a quarter of the cap; unused slots return to the base tail.
+    const many = [{ tag: "C", appids: Array.from({ length: 100 }, (_, i) => 5000 + i) }];
+    const capped = addTagSeeds(base, many, 200);
+    expect(capped.ids).toHaveLength(200);
+    expect(capped.perTag[0].added).toBe(50);
+    expect(addTagSeeds(base, [], 200).ids).toEqual(base);
   });
 });
