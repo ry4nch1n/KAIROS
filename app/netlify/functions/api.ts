@@ -26,8 +26,9 @@ const pp = (v: string | null): Platform => (v && PLATFORMS.includes(v) ? v : "al
 // before any cached response is served. ⚠️ Do NOT add a `cache` property to that edge function's
 // config — that would let a cached response bypass the gate entirely.
 //
-// Netlify voids s-maxage/max-age on every new deploy, so the daily deploy already acts as a
-// cache purge aligned with the daily crawl — no manual invalidation needed.
+// Netlify voids s-maxage/max-age on every new deploy, but deploys are weekly, so freshness
+// after the daily crawl comes from the one-hour edge TTL below, not from a deploy purge — no
+// manual invalidation needed.
 //
 // `durable` is load-bearing, not decoration: without it an edge-cache MISS on any node still
 // invokes the function (and wakes Neon). The durable cache is shared across edge nodes, so a
