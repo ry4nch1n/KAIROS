@@ -45,16 +45,16 @@ says what each one is for.
 |---|---|---|
 | `ci.yml` | Every PR to `main`, plus manual | **The required merge gate:** lint → test → build. Branch protection blocks merging until it is green |
 | `auto-merge.yml` | Non-draft PRs | Enables GitHub auto-merge, so a PR merges itself once CI passes. Nothing is merged by hand |
-| `deploy.yml` | Scheduled (see its cron), plus manual | Ships `main` to Netlify **only if it changed** since the last deploy, and moves the **`live` tag** onto what is in production. No `NETLIFY_AUTH_TOKEN` secret, no deploy |
+| `deploy.yml` | Manual only | Ships `main` to Netlify **only if it changed** since the last deploy, and moves the **`live` tag** onto what is in production. No `NETLIFY_AUTH_TOKEN` secret, no deploy |
 | `crawl.yml` | Daily, plus manual | Migrate schema → crawl CrazyGames → Poki → Steam → data-quality gate → Steam release census. A failure opens or updates one issue in the backlog |
 | `migrate.yml` | Manual | Applies additive schema changes (and idempotent data backfills) to Neon |
 | `backfill-tiers.yml` | Manual | Re-classifies stored Steam rows after a scale-tier rule change |
 | `check-data.yml` | Manual | Runs the data-quality gate against Neon without crawling |
 
-**Why deploys are batched.** Netlify meters production deploys and does not meter draft deploys. So
-merges pile up on `main` and ship at most once a day. An automated run that has already deployed moves
-`live` itself, and the daily job then skips. Don't run a manual production deploy unless you mean to
-bypass the batch.
+**Why deploys are weekly.** Netlify meters production deploys and does not meter draft deploys. So
+merges pile up on `main` and ship once a week, when the Monday implement routine deploys and moves
+`live` itself. Anything merged later in the week waits for the next Monday. Run `deploy.yml` by hand
+only when something can't wait.
 
 ## Secrets and configuration
 
@@ -90,7 +90,7 @@ No secret lives in code.
 
 | When | What you do | Effort |
 |---|---|---|
-| **Never (automatic)** | Daily crawl and snapshot append · PRs merge on green CI · a daily deploy only when `main` changed | 0 |
+| **Never (automatic)** | Daily crawl and snapshot append · PRs merge on green CI · a weekly deploy (the Monday routine) when `main` changed | 0 |
 | **A portal changes its markup** | The gate or crawl goes red and an issue appears → fix *one* adapter and refresh its captured fixture | ~30 min, rare |
 | **A new source** | Implement a `SourceAdapter`, register it in `server/src/crawler/run.ts`, add a crawl step | A few hours |
 | **A schema change** | Additive DDL in `schema.sql`; it reaches Neon through `db:migrate`, which the crawl runs first | Minutes |
