@@ -12,7 +12,7 @@
     "e2e:ui": "playwright test --ui"
   },
   "dependencies": {
-    "echarts": "^5.5.1",
+    "echarts": "^6.1.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "shared": "*"
