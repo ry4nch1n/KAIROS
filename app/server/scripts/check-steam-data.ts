@@ -26,6 +26,7 @@ import {
   voteFreshnessReport,
 } from "../src/checks/voteFreshness.ts";
 import { assessVoteBasis } from "../src/checks/voteBasis.ts";
+import { assessLoadVolume, sourceLoadVolumes } from "../src/checks/loadVolume.ts";
 
 // Golden appids: known-correct classifications that must hold regardless of thresholds.
 const GOLDEN_INDIE = new Set(["1145360"]); // Hades (self-pub megahit) → NOT aaa
@@ -41,6 +42,13 @@ const GOLDEN_AAA = new Set(["730", "578080"]); // CS2 (Valve), PUBG (Krafton) �
   // Comparables is the actual queryable UI output over ALL live Steam games.
   const comparables = await getSteamComparables(db, 14);
   const res = assessSteamDataQuality({ ...agg, comparables: comparables.length });
+
+  // Load volume (#269) — the cohort every v_latest read below assumes actually landed. One line
+  // per crawled source; each source fails on its own line, so a dead browser portal reddens the
+  // gate without hiding (or skipping) the Steam result reported below.
+  const volume = assessLoadVolume(await sourceLoadVolumes(db));
+  for (const line of volume.lines) console.log("Load volume:", line);
+  res.failures.push(...volume.failures);
 
   const m = res.metrics;
   console.log("Steam data-quality (latest crawl cohort, RELEASED titles only):", {
