@@ -373,14 +373,97 @@ export async function fetchAiDisclosure(
   appid: number,
 ): Promise<{ aiDisclosure: boolean; aiDisclosureNote: string | null } | null> {
   try {
-    const html = await politeFetch(`${STORE}/app/${appid}/?cc=us&l=english`, 8000, {
-      Cookie:
-        "birthtime=0; wants_mature_content=1; lastagecheckage=1-January-1970; Steam_Language=english",
-    });
-    return parseAiDisclosure(html);
+    return parseAiDisclosure(await fetchStorePage(appid));
   } catch (e) {
     console.warn(`  ai-disclosure ${appid} failed:`, String(e));
     return null;
+  }
+}
+
+/** The English/USD store app page, past the age-gate. Shared by AI disclosure (#110) and tags (#264). */
+function fetchStorePage(appid: number): Promise<string> {
+  return politeFetch(`${STORE}/app/${appid}/?cc=us&l=english`, 8000, {
+    Cookie:
+      "birthtime=0; wants_mature_content=1; lastagecheckage=1-January-1970; Steam_Language=english",
+  });
+}
+
+// ── Store-page tags for coming-soon titles (#264) ───────────────────────────
+// SteamSpy returns NO tags before release, so an unreleased title never reached game_tags and the
+// upcoming baseline's tag scope (`byTag`) stayed empty. The store app page already carries the
+// "Popular user-defined tags" glance block pre-release, in vote order. Coming-soon titles never take
+// the AI-disclosure store fetch (that cohort needs a release date), so this is their one store-page
+// request — gated to coming-soon rows SteamSpy left untagged, fail-soft, with a per-run breaker.
+
+const decodeEntities = (s: string): string =>
+  s
+    .replace(/&#(\d+);/g, (_, d) => String.fromCharCode(Number(d)))
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&amp;/g, "&");
+
+/**
+ * The popular user tags off a Steam store app page, in page (vote) order, top `n` — matching the
+ * SteamSpy top-10 the released rows carry. Pure + unit-tested. Scoped to the glance block so the
+ * tag modal and the "+" add_button can never leak in; no block → [] ("none captured").
+ */
+export function parseStoreTags(html: string | null | undefined, n = 10): string[] {
+  const h = html ?? "";
+  const start = h.search(/class="glance_tags popular_tags"/i);
+  if (start < 0) return [];
+  const end = h.indexOf("add_button", start);
+  const block = h.slice(start, end < 0 ? undefined : end);
+  const out: string[] = [];
+  for (const m of block.matchAll(/<a\b[^>]*class="app_tag"[^>]*>([\s\S]*?)<\/a>/gi)) {
+    const name = decodeEntities(m[1].replace(/<[^>]*>/g, ""))
+      .replace(/\s+/g, " ")
+      .trim();
+    if (name && !out.includes(name)) out.push(name);
+    if (out.length >= n) break;
+  }
+  return out;
+}
+
+/** Coming-soon titles SteamSpy left untagged — the only rows the store-tag fetch is for. */
+export function wantsStoreTags(g: RawGame): boolean {
+  return g.comingSoon === true && g.tags.length === 0;
+}
+
+export const STORE_TAG_MAX_CONSECUTIVE_FAILURES = 5;
+const tagRun = { attempts: 0, captured: 0, consecutiveFailures: 0, tripped: false };
+
+/** Reset the per-run store-tag counters + breaker. Called at the top of every {@link steamCrawl}. */
+export function resetStoreTagRun(): void {
+  Object.assign(tagRun, { attempts: 0, captured: 0, consecutiveFailures: 0, tripped: false });
+}
+
+/** Read-only snapshot of this run's store-tag stats (for the `tags captured k/m` log + tests). */
+export function storeTagRunState(): Readonly<typeof tagRun> {
+  return { ...tagRun };
+}
+
+/**
+ * Fetch one app's store-page tags. Returns [] on ANY failure — never a crawl-breaking throw.
+ * After {@link STORE_TAG_MAX_CONSECUTIVE_FAILURES} failures in a row the host is refusing us, so
+ * the rest of the run skips the fetch. `fetchHtml` is a test seam; production passes nothing.
+ */
+export async function fetchStoreTags(
+  appid: number,
+  fetchHtml: (appid: number) => Promise<string> = fetchStorePage,
+): Promise<string[]> {
+  if (tagRun.tripped) return [];
+  tagRun.attempts++;
+  try {
+    const tags = parseStoreTags(await fetchHtml(appid));
+    tagRun.consecutiveFailures = 0;
+    if (tags.length) tagRun.captured++;
+    return tags;
+  } catch (e) {
+    console.warn(`  store-tags ${appid} failed:`, String(e));
+    if (++tagRun.consecutiveFailures >= STORE_TAG_MAX_CONSECUTIVE_FAILURES) tagRun.tripped = true;
+    return [];
   }
 }
 
@@ -762,6 +845,9 @@ export async function fetchSteamGame(appid: number): Promise<RawGame | null> {
   // 5th fetch (#54), gated to the COMING-SOON cohort — see wantsFollowers. Outside it we leave
   // `followers` undefined, which the loader writes as NULL = "not measured" (never a measured 0).
   if (wantsFollowers(g)) g.followers = await fetchFollowers(appid);
+  // 6th fetch (#264), coming-soon rows SteamSpy left untagged: the store page's user tags, so the
+  // loader writes them to game_tags and the upcoming baseline's tag scope can fill.
+  if (wantsStoreTags(g)) g.tags = await fetchStoreTags(appid);
   return g;
 }
 
@@ -775,6 +861,7 @@ export async function steamCrawl(
 ): Promise<{ games: RawGame[]; baseUrl: string }> {
   log(`[steam] seeding appids (limit ${limit})…\n`);
   resetFollowerRun(); // breaker is per-run, not per-process
+  resetStoreTagRun();
   const seeded = addTagSeeds(await seedAppIds(limit), tagSeeds, limit);
   for (const t of seeded.perTag) {
     log(`[steam] tag ${t.tag}: seeded ${t.added} new / ${t.known} already known\n`);
@@ -796,9 +883,11 @@ export async function steamCrawl(
     await sleep(1500); // polite ~1 req-group / 1.5s
   }
   const f = followerRunState();
+  const t = storeTagRunState();
   log(
     `\n[steam] parsed ${games.length}/${ids.length}` +
-      ` · followers ${f.captured}/${f.attempts}${f.tripped ? " (breaker OPEN — see #54)" : ""}\n`,
+      ` · followers ${f.captured}/${f.attempts}${f.tripped ? " (breaker OPEN — see #54)" : ""}` +
+      ` · tags captured ${t.captured}/${t.attempts}${t.tripped ? " (breaker OPEN — see #264)" : ""}\n`,
   );
   return { games, baseUrl: STORE };
 }
