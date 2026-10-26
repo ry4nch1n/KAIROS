@@ -27,7 +27,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.3",
-    "concurrently": "^9.1.0"
+    "concurrently": "^9.2.5"
   },
   "allowScripts": {
     "esbuild@0.28.1": true,
