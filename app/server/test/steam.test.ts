@@ -13,6 +13,8 @@ import {
   STEAM_BASE_URL,
   mergeSeeds,
   appDetailsUrl,
+  appReviewsUrl,
+  reviewSummary,
   rankTagByOwners,
   INDIE_CANON,
   parseSearchAppids,
@@ -282,6 +284,39 @@ const hades = () =>
     fx("steam_reviews_1145360.json").query_summary,
     fx("steamspy_1145360.json"),
   );
+
+// Valve disabled store.steampowered.com/appreviews on 2026-10-22; every app then skipped on
+// HTML-not-JSON and Steam loaded 0 rows. Fixture is a live GetAppReviews capture (2026-10-27).
+describe("D5b review summary via IUserReviewsService/GetAppReviews", () => {
+  it("builds a keyless WebAPI URL that counts every language", () => {
+    const url = new URL(appReviewsUrl(1145360));
+    expect(url.origin + url.pathname).toBe(
+      "https://api.steampowered.com/IUserReviewsService/GetAppReviews/v1/",
+    );
+    expect(url.searchParams.has("key")).toBe(false);
+    const input = JSON.parse(url.searchParams.get("input_json") ?? "{}");
+    expect(input.appid).toBe(1145360);
+    expect(input.languages).toEqual(["all"]); // omitted → English-only totals
+  });
+
+  it("unwraps response.query_summary and feeds parseSteamGame", () => {
+    const summary = reviewSummary(fx("steam_getappreviews_1145360.json"));
+    expect(summary.total_reviews).toBe(287362);
+    const g = parseSteamGame(
+      1145360,
+      fx("steam_appdetails_1145360.json")["1145360"].data,
+      summary,
+      fx("steamspy_1145360.json"),
+    );
+    expect(g.votes).toBe(287362);
+    expect(g.rating).toBeCloseTo(normalizeSteamRating(281577, 287362) ?? 0, 5);
+  });
+
+  it("returns an empty summary for a payload without one", () => {
+    expect(reviewSummary({})).toEqual({});
+    expect(reviewSummary({ response: {} })).toEqual({});
+  });
+});
 
 describe("D7 loader persists Steam fields", () => {
   it("writes price/owners/ccu/tier/plays into the snapshot and release_date onto the game", async () => {

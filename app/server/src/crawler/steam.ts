@@ -1,12 +1,13 @@
 // Steam (PC) adapter. Unlike the browser portals (HTML __NEXT_DATA__ / INITIAL_STATE),
 // Steam data comes from three free, key-less JSON endpoints, joined per appid:
 //   1. store appdetails   → price, release, genres, developer/publisher, metacritic
-//   2. appreviews summary → review %positive (→ rating), total_reviews (→ votes)
+//   2. GetAppReviews      → review %positive (→ rating), total_reviews (→ votes)
 //   3. SteamSpy appdetails→ owners (→ plays), ccu, playtime, weighted tags
 // The pure transforms below are unit-tested; the network layer is a thin orchestrator.
 import { type RawGame, STORE_FEATURES, politeFetch, sleep } from "./base.ts";
 
 const STORE = "https://store.steampowered.com";
+const STEAM_WEBAPI = "https://api.steampowered.com";
 const STEAMSPY = "https://steamspy.com/api.php";
 const COMMUNITY = "https://steamcommunity.com";
 
@@ -814,16 +815,27 @@ export function appDetailsUrl(appid: number | string): string {
   return `${STORE}/api/appdetails?appids=${appid}&l=english&cc=us`;
 }
 
+/** Review-summary URL. Valve disabled `store.steampowered.com/appreviews/<id>?json=1` on
+ *  2026-10-22 (it now 302s to the store homepage); its replacement is the keyless WebAPI
+ *  method below, which takes its parameters as one `input_json`. `languages: ["all"]` keeps
+ *  the old `language=all` — omitted, the method silently counts English reviews only.
+ *  purchase_type stays at its default (Steam purchases), matching the old call's series. */
+export function appReviewsUrl(appid: number | string): string {
+  const input = { appid: Number(appid), languages: ["all"], num_per_page: 1 };
+  return `${STEAM_WEBAPI}/IUserReviewsService/GetAppReviews/v1/?input_json=${encodeURIComponent(JSON.stringify(input))}`;
+}
+
+/** GetAppReviews wraps the summary in `response` (the old store endpoint returned it bare). */
+export function reviewSummary(json: any): any {
+  return json?.response?.query_summary ?? {};
+}
+
 /** Fetch + join the three endpoints for one appid. Returns null if the app isn't a usable game. */
 export async function fetchSteamGame(appid: number): Promise<RawGame | null> {
   const adWrap = JSON.parse(await politeFetch(appDetailsUrl(appid)));
   const entry = adWrap?.[appid];
   if (!entry?.success || entry.data?.type !== "game") return null;
-  const reviews = JSON.parse(
-    await politeFetch(
-      `${STORE}/appreviews/${appid}?json=1&language=all&filter=summary&num_per_page=0`,
-    ),
-  );
+  const reviews = reviewSummary(JSON.parse(await politeFetch(appReviewsUrl(appid))));
   let steamspy: any = {};
   try {
     // SteamSpy is the most rate-limit-prone of the three endpoints and its data is enrichment,
@@ -833,7 +845,7 @@ export async function fetchSteamGame(appid: number): Promise<RawGame | null> {
   } catch (e) {
     console.warn(`  steamspy ${appid} failed:`, String(e));
   }
-  const g = parseSteamGame(appid, entry.data, reviews?.query_summary ?? {}, steamspy);
+  const g = parseSteamGame(appid, entry.data, reviews, steamspy);
   // 4th fetch (#110), gated to the recent non-AAA cohort so the crawl budget isn't blown on the
   // whole seed. Tri-state: true=discloses, false=checked & absent, null=fetch failed. Outside the
   // cohort we leave both null — "not checked" is honestly distinct from "checked & absent".
