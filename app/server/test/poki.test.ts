@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { poki } from "../src/crawler/poki.ts";
+import { extractInitialState, poki } from "../src/crawler/poki.ts";
 
 const fixture = readFileSync(
   fileURLToPath(new URL("./fixtures/poki_game.html", import.meta.url)),
@@ -31,6 +31,23 @@ describe("Poki adapter parse", () => {
     expect(g.featured).toBe(true);
     expect(g.homepagePosition).toBe(3); // 1-based rank in the ordered homepage array
     expect(g.trending).toBe(true); // trending_rank: 7
+  });
+
+  // Since ~2026-10-19 Poki ships the state as INITIAL_STATE = JSON.parse("…escaped JSON…").
+  // Same captured state re-encoded in that live form (incl. / for "/"); every field must match.
+  it('parses the JSON.parse("…") string form identically to the object-literal form', () => {
+    const jsonParseForm = readFileSync(
+      fileURLToPath(new URL("./fixtures/poki_game_jsonparse.html", import.meta.url)),
+      "utf8",
+    );
+    expect(jsonParseForm).toContain('INITIAL_STATE = JSON.parse("');
+    for (const url of [
+      "https://poki.com/en/g/subway-surfers",
+      "https://poki.com/en/g/quiet-title",
+    ]) {
+      expect(poki.parseGame(jsonParseForm, url)).toEqual(poki.parseGame(fixture, url));
+    }
+    expect(extractInitialState(jsonParseForm)).toEqual(extractInitialState(fixture));
   });
 
   it("leaves a non-promoted game unfeatured, position null, not trending", () => {

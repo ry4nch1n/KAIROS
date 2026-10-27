@@ -19,12 +19,27 @@ const IMG = "https://img.poki-cdn.com/cdn-cgi/image/width=1200,f=auto/";
 const NEW_URL = `${BASE}/en/new`;
 const newGameLinks = linkExtractor(BASE, "/en/g/");
 
-// Extract the balanced {...} object assigned to window.INITIAL_STATE.
-// Brace-counts while skipping braces that appear inside string literals — the
+// Extract the state assigned to window.INITIAL_STATE. Poki serves two shapes:
+//   1. an object literal — `INITIAL_STATE = {...}`
+//   2. a JSON string — `INITIAL_STATE = JSON.parse("{\"router\":…}")` (seen since ~2026-10-19;
+//      the brace-counter below would slice the *escaped* text and every game failed to parse)
+// For (1) we brace-count while skipping braces inside string literals — the
 // RTK query KEYS themselves contain `{`/`}` (e.g. getGame({"slug":"x"})).
-function extractInitialState(html: string): any {
+export function extractInitialState(html: string): any {
   const marker = html.indexOf("INITIAL_STATE");
   if (marker < 0) throw new Error("no INITIAL_STATE");
+  const assigned = html.slice(marker).match(/^INITIAL_STATE\s*=\s*JSON\.parse\(\s*"/);
+  if (assigned) {
+    // The argument is a JS double-quoted literal; Poki only emits JSON-compatible escapes
+    // (\" \\ \uXXXX), so JSON.parse decodes the literal and a second JSON.parse the state.
+    const open = marker + assigned[0].length - 1;
+    let end = open + 1;
+    for (; end < html.length; end++) {
+      if (html[end] === "\\") end++;
+      else if (html[end] === '"') break;
+    }
+    return JSON.parse(JSON.parse(html.slice(open, end + 1)));
+  }
   const start = html.indexOf("{", marker);
   if (start < 0) throw new Error("no object after INITIAL_STATE");
   let depth = 0,
