@@ -216,9 +216,11 @@ funnel**.
   interleaves a curated indie canon, recent indie top-sellers, the popular-upcoming shelf, trending,
   featured and the indie tag list round-robin, so the AAA-heavy lists can't crowd the indie stream
   out at small limits. Each steered tag also contributes the top appids of its reviews-sorted store
-  search page (`STEAM_TAG_SEED_N`, default 25), deduped and capped at a quarter of the same
-  `CRAWL_LIMIT`, so a niche's mid-band peers enter `games`, not only its megahits. Tag seeding is
-  fail-soft: a blocked page is logged and the crawl carries on.
+  search page (`STEAM_TAG_SEED_N`, default 25), interleaved with the same number from a second
+  reviews-sorted page capped at US$20 and kept to titles whose list price is US$10–20. Both are
+  deduped and capped at a quarter of the same `CRAWL_LIMIT`, so a niche's mid-band peers enter
+  `games`, not only its megahits. Tag seeding is fail-soft per page: a blocked page is logged and
+  the crawl carries on.
 - **Released and upcoming are separate cohorts.** Market analytics read released titles only; upcoming
   titles get their own surface, where follower momentum stands in for wishlists
   ([decision](docs/decisions/2026-08-24-upcoming-cohort-gets-its-own-surface.md)).
