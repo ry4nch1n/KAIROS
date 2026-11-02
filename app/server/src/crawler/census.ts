@@ -245,6 +245,55 @@ export function parseTagSeedPage(json: string, n = TAG_SEED_N_DEFAULT): number[]
   return parseSearchAppids(body.results_html).slice(0, n);
 }
 
+// The reviews-sorted page is still the genre's top end, so after a few crawls it is mostly titles
+// already in `games`, and the US$10–20 band (the one the price-tier split needs) stays thin. A
+// second page per steered tag asks the store for its reviews-sorted titles under US$20 and keeps
+// those whose LIST price sits in the band. `maxprice` filters on the sale price, so a discounted
+// US$24.99 title can appear; the list-price check drops it.
+
+/** The mid-band list-price window, inclusive, in US cents. */
+export const TAG_BAND_MIN_CENTS = 1000;
+export const TAG_BAND_MAX_CENTS = 2000;
+/** Rows read from the price-capped page; about half sit under US$10, so read twice the depth. */
+export const TAG_BAND_PAGE_SIZE = 50;
+
+export function tagBandUrl(tagid: number, count = TAG_BAND_PAGE_SIZE): string {
+  return (
+    `${STORE}/search/results/?tags=${tagid}&sort_by=Reviews_DESC&maxprice=${TAG_BAND_MAX_CENTS / 100}` +
+    `&infinite=1&start=0&count=${count}&category1=998&cc=us&l=english`
+  );
+}
+
+/** Appids of a price-capped search page whose list price is in the band, in page order. A row's
+ *  list price is its struck-through original when discounted, else its final price. */
+export function parseTagBandPage(json: string, n = TAG_SEED_N_DEFAULT): number[] {
+  const body = JSON.parse(json);
+  if (typeof body?.results_html !== "string") throw new Error("tag band: no results_html");
+  const ids: number[] = [];
+  for (const chunk of body.results_html.split('data-ds-appid="').slice(1)) {
+    const id = Number(chunk.match(/^(\d+)/)?.[1]);
+    const orig = chunk.match(/class="discount_original_price">\$([\d,]+(?:\.\d{2})?)</);
+    const final = chunk.match(/data-price-final="(\d+)"/);
+    const list = orig
+      ? Math.round(Number(orig[1].replace(/,/g, "")) * 100)
+      : final
+        ? Number(final[1])
+        : null;
+    if (!(id > 0) || list == null || ids.includes(id)) continue;
+    if (list >= TAG_BAND_MIN_CENTS && list <= TAG_BAND_MAX_CENTS) ids.push(id);
+  }
+  return ids.slice(0, n);
+}
+
+/** Alternate two seed lists (deduped) so neither the top end nor the band starves the other. */
+export function interleaveSeeds(a: number[], b: number[]): number[] {
+  const out: number[] = [];
+  for (let i = 0; i < Math.max(a.length, b.length); i++) {
+    for (const id of [a[i], b[i]]) if (id != null && !out.includes(id)) out.push(id);
+  }
+  return out;
+}
+
 export interface TagSeed {
   tag: string;
   appids: number[];
@@ -275,14 +324,20 @@ export async function fetchTagSeeds(
   }
   for (const t of targets) {
     await sleep(delayMs);
+    let top: number[] = [];
+    let band: number[] = [];
     try {
-      out.push({
-        tag: t.name,
-        appids: parseTagSeedPage(await fetchText(tagSeedUrl(t.tagid, n)), n),
-      });
+      top = parseTagSeedPage(await fetchText(tagSeedUrl(t.tagid, n)), n);
     } catch (e) {
       log(`[steam] tag seed ${t.name}: FAILED ${String(e)}\n`);
     }
+    await sleep(delayMs);
+    try {
+      band = parseTagBandPage(await fetchText(tagBandUrl(t.tagid)), n);
+    } catch (e) {
+      log(`[steam] tag band ${t.name}: FAILED ${String(e)}\n`);
+    }
+    if (top.length || band.length) out.push({ tag: t.name, appids: interleaveSeeds(top, band) });
   }
   return out;
 }

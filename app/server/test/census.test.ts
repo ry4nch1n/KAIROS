@@ -6,13 +6,16 @@ import { describe, expect, it } from "vitest";
 import {
   censusUrl,
   fetchTagSeeds,
+  interleaveSeeds,
   parseCensusPage,
+  parseTagBandPage,
   parseTagSeedPage,
   parseStoreDate,
   parseStoreTags,
   runCensus,
   selectCensusTags,
   summarizeCensus,
+  tagBandUrl,
 } from "../src/crawler/census.ts";
 import { classifyCensusSupply, matchSteering } from "../src/queries/shared.ts";
 import { setBriefSteering } from "../src/queries/library.ts";
@@ -237,6 +240,8 @@ describe("census end to end", () => {
 // #265 tag-seeded discovery. Fixture: Roguelike Deckbuilder's reviews-sorted search page
 // (count=25), captured live 2026-10-19.
 const REVIEWS = fx("steam_search_reviews_1091588.json");
+// Same tag, reviews-sorted with maxprice=20 (count=50), captured live 2026-11-02.
+const BAND = fx("steam_search_band_1091588.json");
 
 describe("tag-seeded discovery (#265)", () => {
   it("reads the top appids of a reviews-sorted page, mid-band titles included", () => {
@@ -253,12 +258,25 @@ describe("tag-seeded discovery (#265)", () => {
     const urls: string[] = [];
     const store = (url: string) => {
       urls.push(url);
-      return Promise.resolve(url.includes("populartags") ? TAGS : REVIEWS);
+      if (url.includes("populartags")) return Promise.resolve(TAGS);
+      return Promise.resolve(url.includes("maxprice=") ? BAND : REVIEWS);
     };
     const seeds = await fetchTagSeeds(db, () => {}, store, 25, 0);
     expect(seeds.length).toBeGreaterThan(0);
-    expect(seeds.find((s) => s.tag === "Roguelike Deckbuilder")?.appids).toHaveLength(25);
-    expect(urls.filter((u) => u.includes("sort_by=Reviews_DESC"))).toHaveLength(seeds.length);
+    const rd = seeds.find((s) => s.tag === "Roguelike Deckbuilder")?.appids ?? [];
+    // Top page and band page interleaved: the top end leads, band-only titles follow it.
+    expect(rd.slice(0, 2)).toEqual([646570, 2379780]);
+    expect(rd).toEqual(expect.arrayContaining([3084740, 1678320])); // Command Deck, Heat Death
+    expect(new Set(rd).size).toBe(rd.length);
+    // Two pages per steered tag: the reviews-sorted top and the price-capped band.
+    expect(urls.filter((u) => u.includes("maxprice=20"))).toHaveLength(seeds.length);
+    expect(urls.filter((u) => u.includes("sort_by=Reviews_DESC"))).toHaveLength(seeds.length * 2);
+
+    // The band page failing alone keeps the top page's seeds (and vice versa).
+    const noBand = (url: string) =>
+      url.includes("maxprice=") ? Promise.reject(new Error("429")) : store(url);
+    const partial = await fetchTagSeeds(db, () => {}, noBand, 25, 0);
+    expect(partial.find((s) => s.tag === "Roguelike Deckbuilder")?.appids).toHaveLength(25);
 
     const logs: string[] = [];
     const blocked = (url: string) =>
@@ -268,6 +286,18 @@ describe("tag-seeded discovery (#265)", () => {
     const down = () => Promise.reject(new Error("down"));
     expect(await fetchTagSeeds(db, () => {}, down, 25, 0)).toEqual([]);
     expect(await fetchTagSeeds(await freshMemoryDb(), () => {}, store, 25, 0)).toEqual([]); // no flags
+  });
+
+  it("keeps only US$10-20 list-price titles from the price-capped page", () => {
+    expect(tagBandUrl(1091588)).toContain("maxprice=20");
+    const ids = parseTagBandPage(BAND, 50);
+    expect(ids.length).toBeGreaterThan(10);
+    expect(ids).not.toContain(646570); // Slay the Spire: US$24.99 list, on sale at US$6.24
+    expect(ids).not.toContain(1557740); // ROUNDS: US$5.99
+    expect(ids).toEqual(expect.arrayContaining([2379780, 2084000, 3084740])); // Balatro, Shogun Showdown, Command Deck
+    expect(parseTagBandPage(BAND, 5)).toHaveLength(5);
+    expect(() => parseTagBandPage("{}")).toThrow();
+    expect(interleaveSeeds([1, 2, 3], [2, 9])).toEqual([1, 2, 9, 3]);
   });
 
   it("dedupes against the base seed and never raises the cap", () => {
