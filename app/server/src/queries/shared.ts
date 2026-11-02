@@ -17,6 +17,14 @@ import { loopFamilyFor, loopFamilyFromLabels } from "../data/loopFamilyMap.ts";
 
 export const num = (v: any) => (v === null || v === undefined ? 0 : Number(v));
 
+// Postgres `undefined_table` (SQLSTATE 42P01), exposed as `err.code` by both `pg` and PGlite (#286).
+// A few reads tolerate a table that is not migrated yet and read it as empty — but ONLY that:
+// every other failure (timeout, cold start, auth) must propagate to the handler's 500/no-store
+// path, never come back as a healthy, cacheable empty 200.
+export function isUndefinedTable(err: unknown): boolean {
+  return (err as { code?: unknown } | null)?.code === "42P01";
+}
+
 export function pf(platform: Platform): string {
   if (platform === "poki") return "AND src.name = 'poki'";
   if (platform === "crazygames") return "AND src.name = 'crazygames'";

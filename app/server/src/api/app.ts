@@ -85,7 +85,13 @@ export function createApp(db: Querier) {
     res.json(await q.getBriefEditions(db));
   });
 
-  app.get("/api/brief/steering", async (_req, res) => res.json(await q.getBriefSteering(db)));
+  app.get("/api/brief/steering", async (_req, res) => {
+    try {
+      res.json(await q.getBriefSteering(db));
+    } catch (e) {
+      res.status(500).json({ error: String(e) });
+    }
+  });
   app.post("/api/brief/steering", async (req, res) => {
     if (!isAuthorized(req.headers)) return res.status(UNAUTHORIZED_STATUS).json(unauthorizedBody());
     try {
