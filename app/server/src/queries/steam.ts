@@ -43,6 +43,7 @@ import {
   classifySampledSupply,
   classifyCensusSupply,
   steerRanking,
+  isUndefinedTable,
   steeringLens,
   MIN_MARKET_SUPPLY,
   MIN_RANKABLE_CELLS,
@@ -581,8 +582,9 @@ async function latestTagCensus(db: Querier): Promise<Map<string, SupplyCensus>> 
         medianPriceCents: r.median_price_cents == null ? null : num(r.median_price_cents),
       });
     }
-  } catch {
-    // tag_census not migrated yet → no census
+  } catch (e) {
+    // tag_census not migrated yet → no census; anything else must fail loudly (#286)
+    if (!isUndefinedTable(e)) throw e;
   }
   return m;
 }

@@ -10,7 +10,7 @@ import type {
   LibraryItemInput,
 } from "shared";
 import { CONTRACT, assertPitchInput, validateBriefPayload } from "../../../shared/src/contract.ts";
-import { num } from "./shared.ts";
+import { isUndefinedTable, num } from "./shared.ts";
 import { buildDemandTracker, fetchSteamTaxonomy } from "./briefFamily.ts";
 
 // ── Brief ──
@@ -230,8 +230,9 @@ export async function getBriefSteering(db: Querier): Promise<BriefSteering> {
       flags: Array.isArray(raw) ? raw.filter((x) => typeof x === "string") : [],
       updatedAt: rows[0].updated_at ? new Date(rows[0].updated_at).toISOString() : null,
     };
-  } catch {
-    return { flags: [], updatedAt: null }; // table not migrated yet → behave as empty
+  } catch (e) {
+    if (isUndefinedTable(e)) return { flags: [], updatedAt: null }; // table not migrated yet → empty
+    throw e; // any other DB failure must surface as a 500, not "no flags set" (#286)
   }
 }
 
@@ -343,8 +344,9 @@ export async function getPitches(db: Querier): Promise<Pitch[]> {
        ORDER BY pitch_date DESC, COALESCE(rank, 999) ASC, id ASC`,
     );
     return rows.map(rowToPitch);
-  } catch {
-    return []; // table not migrated yet → behave as empty
+  } catch (e) {
+    if (isUndefinedTable(e)) return []; // table not migrated yet → behave as empty
+    throw e; // any other DB failure must surface as a 500, not a cacheable empty list (#286)
   }
 }
 
