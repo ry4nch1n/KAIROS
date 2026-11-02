@@ -313,6 +313,41 @@ export interface SteamUpcomingBaseline {
   byTag: FollowerBaseline[]; // community tags, most-measured first; empty when none are stored
 }
 
+/** p25/median/p75/p90 over one measure; all null when nothing was measured. */
+export interface FestivalDistribution {
+  p25: number | null;
+  median: number | null;
+  p75: number | null;
+  p90: number | null;
+}
+
+/** One title's follower read across a festival window (#284). null, never 0, when a side is missing. */
+export interface FestivalLiftRow {
+  title: string;
+  entryFollowers: number | null; // last measured count before the window opened
+  preVelocity: number | null; // followers/day before the window (#201 longest-window rule)
+  windowVelocity: number | null; // followers/day from the entry count to the last count in the window
+  lift: number | null; // windowVelocity ÷ preVelocity; null when either is missing or preVelocity ≤ 0
+}
+
+/** Cohort read of one contract `festivalWindows` entry (#284). */
+export interface FestivalLiftRead {
+  id: string;
+  name: string;
+  kind: "next-fest" | "themed-fest" | "showcase" | "award";
+  start: string;
+  end: string;
+  scope: "coming-soon-cohort" | "featured"; // Steam-wide fests: the whole tracked cohort (lift diluted)
+  titles: number; // coming-soon titles with any measured snapshot around the window
+  withEntry: number; // titles with an entry count
+  n: number; // titles with a measurable lift
+  thin: boolean; // n < thinBelow — a hint, not a benchmark
+  entryFollowers: FestivalDistribution;
+  lift: FestivalDistribution;
+  note: string; // plain-language caveat (cohort scope, dilution, thin sample)
+  rows: FestivalLiftRow[]; // most-followed-at-entry first, capped
+}
+
 export interface SteamOverview {
   kpi: {
     games: number;
@@ -341,6 +376,7 @@ export interface SteamOverview {
   newReleases: SteamNewRelease[];
   upcoming: SteamUpcoming[]; // unreleased cohort — follower demand + velocity (#164)
   upcomingBaseline?: SteamUpcomingBaseline; // velocity percentiles over the WHOLE cohort (#264)
+  festivalLift?: FestivalLiftRead[]; // follower lift per contract festival window (#284)
   subtitle: string;
 }
 
