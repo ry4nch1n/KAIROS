@@ -1573,13 +1573,26 @@ const priceBandNote = (b: SteamTagPriceBand) =>
 
 /** Under the looked-up sub-genre table (#260/#261), one block per row: its price-tier strip, then
  *  the titles its medians are made of, collapsed. Outside the table, so it wraps at phone width. */
+// AI disclosure inside one sub-genre (#283). Only titles with a store-page reading count; the
+// review medians are a description of who discloses, never a claim that disclosing moves reviews,
+// and with under 10 titles on either side no comparison is drawn at all.
+function aiSplitNote(r: SteamTagEconomics): string | null {
+  if (r.aiDisclosed == null || !r.aiChecked) return null; // older payloads, or nothing checked
+  const pct = Math.round((r.aiDisclosed / r.aiChecked) * 100);
+  const share = `AI content disclosure: ${fmt(r.aiDisclosed)} of ${fmt(r.aiChecked)} checked titles (${pct}%).`;
+  if (r.aiSplitThin) return `${share} Too few on one side to compare reviews.`;
+  return `${share} Median reviews — disclosed ${fmt(r.aiMedianVotesDisclosed ?? 0)}, not disclosed ${fmt(r.aiMedianVotesUndisclosed ?? 0)}. Describes who discloses; not a cause.`;
+}
+
 function TagMembers({ r }: { r: SteamTagEconomics }) {
   const examples = r.examples ?? []; // older payloads carry neither field
   const bands = r.priceBands ?? [];
-  if (!examples.length && !bands.length) return null;
+  const ai = aiSplitNote(r);
+  if (!examples.length && !bands.length && !ai) return null;
   return (
     <div className="tag-members">
       <div className="tag-members-name">{r.genre}</div>
+      {ai ? <p className="view-head">{ai}</p> : null}
       {bands.length ? (
         <div className="band-strip" title="Titles per price tier, with median reviews and rating">
           {bands.map((b) => (

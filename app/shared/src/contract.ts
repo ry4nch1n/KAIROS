@@ -263,7 +263,11 @@ export const CONTRACT = {
   //      the WHOLE coming-soon cohort, not just the display rows; rates over a window < 7 days are
   //      excluded and counted; `thin` under 10 measured; scoped by store genre and community tag,
   //      never price) and each `SteamUpcoming` row gains `followerPercentile`. Additive.
-  version: 41,
+  // v42: `SteamTagEconomics` (ranked rows and the named lookup) gains `aiChecked`, `aiDisclosed`,
+  //      `aiMedianVotesDisclosed`, `aiMedianVotesUndisclosed` and `aiSplitThin` (#283 — AI
+  //      disclosure at peer scope; null, never 0, when no title was checked; thin under 10 on
+  //      either side). Additive.
+  version: 42,
   pitch: {
     // v2: added visual-card fields — setting, artStyle, codeName, headerUrl, shotUrl.
     // v3: rating rework — scoreFields d1Fit/steamCeiling/buildCost → browserFit/steamFit/buildEase.
