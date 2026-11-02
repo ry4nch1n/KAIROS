@@ -267,7 +267,28 @@ export const CONTRACT = {
   //      `aiMedianVotesDisclosed`, `aiMedianVotesUndisclosed` and `aiSplitThin` (#283 — AI
   //      disclosure at peer scope; null, never 0, when no title was checked; thin under 10 on
   //      either side). Additive.
-  version: 42,
+  // v43: top-level `festivalWindows` taxonomy + `SteamOverview.festivalLift` (#284 — per-window
+  //      entry-follower and lift percentiles, per-title rows; null, never 0). Additive.
+  version: 43,
+  // HAND-MAINTAINED (#284): add a window only with dates verified from the event's own
+  // announcement, never estimated. start/end inclusive UTC dates. A Steam-wide fest has no
+  // participant list (whole coming-soon cohort); showcases/awards carry a `featured` appid list.
+  festivalWindows: [
+    {
+      id: "next-fest-2026-10",
+      name: "Steam Next Fest October 2026",
+      kind: "next-fest",
+      start: "2026-10-19",
+      end: "2026-10-26",
+    },
+  ] as {
+    id: string;
+    name: string;
+    kind: "next-fest" | "themed-fest" | "showcase" | "award";
+    start: string;
+    end: string;
+    featured?: number[];
+  }[],
   pitch: {
     // v2: added visual-card fields — setting, artStyle, codeName, headerUrl, shotUrl.
     // v3: rating rework — scoreFields d1Fit/steamCeiling/buildCost → browserFit/steamFit/buildEase.

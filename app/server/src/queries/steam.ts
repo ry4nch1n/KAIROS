@@ -23,9 +23,13 @@ import type {
   SteamUpcoming,
   SteamUpcomingBaseline,
   FollowerBaseline,
+  FestivalDistribution,
+  FestivalLiftRead,
+  FestivalLiftRow,
   SuccessBand,
   RevenuePercentiles,
 } from "shared";
+import { CONTRACT } from "../../../shared/src/contract.ts";
 import { teamSizeFor } from "../data/teamSize.ts";
 import { conversionFor } from "../data/genreConversion.ts";
 import {
@@ -1151,6 +1155,124 @@ async function upcomingCohort(db: Querier): Promise<(SteamUpcoming & { gameId: s
     .sort((a, b) => (b.followers ?? -1) - (a.followers ?? -1) || a.title.localeCompare(b.title));
 }
 
+// ── Festival-window follower lift — #284 ───────────────────────────────────────────────
+// Lines each title's banked follower series up against a hand-maintained contract window. Per
+// title: entry count before `start`, pre-rate (#201 longest-window rule), window rate and their
+// ratio — each null, never 0, when unmeasured; lift is null over a pre-rate ≤ 0. The cohort is
+// "coming soon at the time", so a title that launched after the fest still counts.
+export const FESTIVAL_ROWS = 8;
+const DAY_MS = 86400000;
+
+/** Pure — exported for tests. `snaps` in any order; `start`/`end` inclusive YYYY-MM-DD (UTC). */
+export function festivalLiftFor(
+  snaps: { followers: unknown; capturedAt: unknown }[],
+  start: string,
+  end: string,
+): Omit<FestivalLiftRow, "title"> {
+  const s0 = Date.parse(`${start}T00:00:00Z`);
+  const s1 = Date.parse(`${end}T00:00:00Z`) + DAY_MS; // exclusive
+  const seen = snaps
+    .filter((s) => s.followers != null && s.capturedAt != null)
+    .map((s) => ({ s, f: Number(s.followers), t: new Date(s.capturedAt as string).getTime() }))
+    .filter((x) => Number.isFinite(x.f) && Number.isFinite(x.t))
+    .sort((a, b) => a.t - b.t);
+  const pre = seen.filter((x) => x.t < s0);
+  const entry = pre[pre.length - 1];
+  const exit = seen.filter((x) => x.t >= s0 && x.t < s1).pop();
+  const preVelocity = followerTraction(pre.map((x) => x.s)).followerVelocity;
+  const days = entry && exit ? (exit.t - entry.t) / DAY_MS : 0;
+  const windowVelocity =
+    entry && exit && days >= FOLLOWER_MIN_WINDOW_DAYS
+      ? +((exit.f - entry.f) / days).toFixed(2)
+      : null;
+  return {
+    entryFollowers: entry ? entry.f : null,
+    preVelocity,
+    windowVelocity,
+    lift:
+      windowVelocity != null && preVelocity != null && preVelocity > 0
+        ? +(windowVelocity / preVelocity).toFixed(2)
+        : null,
+  };
+}
+
+const distribution = (vals: number[]): FestivalDistribution => {
+  const v = [...vals].sort((a, b) => a - b);
+  const q = (p: number) => (v.length ? pctOf(v, p) : null);
+  return { p25: q(0.25), median: q(0.5), p75: q(0.75), p90: q(0.9) };
+};
+
+export async function getFestivalLift(db: Querier): Promise<FestivalLiftRead[]> {
+  const out: FestivalLiftRead[] = [];
+  for (const w of CONTRACT.festivalWindows) {
+    const featured = w.featured?.length ? w.featured.map(String) : null;
+    // From the earliest pre-window snapshot the #201 rule can use to the window's last day.
+    const from = new Date(
+      Date.parse(`${w.start}T00:00:00Z`) - (FOLLOWER_MAX_WINDOW_DAYS + 1) * DAY_MS,
+    );
+    const to = new Date(Date.parse(`${w.end}T00:00:00Z`) + DAY_MS);
+    const rows = await db.query(
+      `SELECT g.id AS game_id, g.title, h.followers, h.captured_at, h.coming_soon
+       FROM games g JOIN sources src ON src.id = g.source_id
+       JOIN LATERAL (
+         SELECT s.followers, s.captured_at, s.coming_soon FROM game_snapshots s
+         WHERE s.game_id = g.id AND s.followers IS NOT NULL
+           AND s.captured_at >= $1 AND s.captured_at < $2
+       ) h ON TRUE
+       WHERE g.is_live AND src.name = 'steam'
+         AND (g.release_date IS NULL OR g.release_date >= $3::date)
+         ${featured ? "AND g.source_game_id = ANY($4)" : ""}`,
+      featured
+        ? [from.toISOString(), to.toISOString(), w.start, featured]
+        : [from.toISOString(), to.toISOString(), w.start],
+    );
+    const games = new Map<string, { title: string; soon: boolean; snaps: typeof rows }>();
+    for (const r of rows) {
+      const g = games.get(String(r.game_id)) ?? { title: r.title, soon: false, snaps: [] };
+      g.soon ||= r.coming_soon === true;
+      g.snaps.push({ followers: r.followers, capturedAt: r.captured_at });
+      games.set(String(r.game_id), g);
+    }
+    const reads: FestivalLiftRow[] = [...games.values()]
+      .filter((g) => g.soon)
+      .map((g) => ({ title: g.title, ...festivalLiftFor(g.snaps, w.start, w.end) }));
+    const entries = reads.flatMap((r) => (r.entryFollowers == null ? [] : [r.entryFollowers]));
+    const lifts = reads.flatMap((r) => (r.lift == null ? [] : [r.lift]));
+    const thin = lifts.length < UPCOMING_BASELINE_THIN;
+    out.push({
+      id: w.id,
+      name: w.name,
+      kind: w.kind,
+      start: w.start,
+      end: w.end,
+      scope: featured ? "featured" : "coming-soon-cohort",
+      titles: reads.length,
+      withEntry: entries.length,
+      n: lifts.length,
+      thin,
+      entryFollowers: distribution(entries),
+      lift: distribution(lifts),
+      note: [
+        featured
+          ? "Featured titles only."
+          : "Covers every tracked coming-soon title, participants and non-participants alike — no participant list exists, so the lift is diluted.",
+        thin
+          ? `Fewer than ${UPCOMING_BASELINE_THIN} measured lifts — read as a hint, not a benchmark.`
+          : "",
+      ]
+        .filter(Boolean)
+        .join(" "),
+      rows: reads
+        .sort(
+          (a, b) =>
+            (b.entryFollowers ?? -1) - (a.entryFollowers ?? -1) || a.title.localeCompare(b.title),
+        )
+        .slice(0, FESTIVAL_ROWS),
+    });
+  }
+  return out;
+}
+
 async function steamGapExamples(db: Querier): Promise<Map<string, string[]>> {
   const rows = await db.query(
     `SELECT genre, tag, title FROM (
@@ -1261,6 +1383,7 @@ export async function getSteamOverview(db: Querier): Promise<SteamOverview> {
     newReleases,
     tagEconomics,
     upcoming,
+    festivalLift,
   ] = await Promise.all([
     getScaleTierBreakdown(db, "steam"),
     getSteamGenreEconomics(db, { cohort: "indie" }),
@@ -1274,6 +1397,7 @@ export async function getSteamOverview(db: Querier): Promise<SteamOverview> {
     getSteamNewReleases(db),
     getSteamTagEconomics(db),
     getSteamUpcomingWithBaseline(db),
+    getFestivalLift(db),
   ]);
   const games = tiers.reduce((s, t) => s + t.games, 0);
   const aaa = tiers.find((t) => t.tier === "aaa")?.games ?? 0;
@@ -1350,6 +1474,7 @@ export async function getSteamOverview(db: Querier): Promise<SteamOverview> {
     newReleases,
     upcoming: upcoming.upcoming,
     upcomingBaseline: upcoming.baseline,
+    festivalLift,
     subtitle: "Steam (PC) · indie-addressable cohort default",
   };
 }
