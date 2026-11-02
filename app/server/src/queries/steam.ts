@@ -356,6 +356,33 @@ export function parseTagQuery(raw: unknown): string[] {
   return [...new Set(terms)].slice(0, TAG_QUERY_MAX_TERMS);
 }
 
+// AI-disclosure share at peer (tag) scope (#283). The overview KPI is one field-wide number; a
+// sub-genre's own share — and how review counts differ between titles that disclose and titles
+// that were checked and don't — is the read a specific market needs. Tri-state discipline as on
+// comparables: only titles with a non-null reading count, and with none checked every field is
+// null, never 0. Either side under AI_SPLIT_MIN is `aiSplitThin`: the medians are still given,
+// but a comparison over a handful of titles is not a finding. Descriptive, not causal.
+export const AI_SPLIT_MIN = 10;
+const AI_SPLIT_SQL = `count(*) FILTER (WHERE l.ai_disclosure)::int AS ai_disclosed,
+            count(*) FILTER (WHERE l.ai_disclosure IS NOT NULL)::int AS ai_checked,
+            percentile_cont(0.5) WITHIN GROUP (ORDER BY coalesce(l.votes, 0))
+              FILTER (WHERE l.ai_disclosure)::float AS ai_med_votes_yes,
+            percentile_cont(0.5) WITHIN GROUP (ORDER BY coalesce(l.votes, 0))
+              FILTER (WHERE l.ai_disclosure = false)::float AS ai_med_votes_no`;
+function aiSplitFor(r: Record<string, unknown>) {
+  const checked = num(r.ai_checked);
+  const disclosed = checked ? num(r.ai_disclosed) : null;
+  const med = (v: unknown) => (checked && v != null ? Math.round(num(v)) : null);
+  return {
+    aiChecked: checked,
+    aiDisclosed: disclosed,
+    aiMedianVotesDisclosed: med(r.ai_med_votes_yes),
+    aiMedianVotesUndisclosed: med(r.ai_med_votes_no),
+    aiSplitThin:
+      disclosed == null || disclosed < AI_SPLIT_MIN || checked - disclosed < AI_SPLIT_MIN,
+  };
+}
+
 export async function getSteamTagEconomics(
   db: Querier,
   opts?: { cohort?: SteamCohort; minSupply?: number; limit?: number; match?: string[] },
@@ -382,6 +409,7 @@ export async function getSteamTagEconomics(
             percentile_cont(0.5) WITHIN GROUP (
               ORDER BY coalesce(l.owners_est, 0) * coalesce(l.price_cents, 0))::float AS med_rev_cents,
             ${BOXLEITER_MED_SQL} AS med_rev_bl_cents,
+            ${AI_SPLIT_SQL},
             ${REV_PCTL_SQL}
      FROM v_latest l
      JOIN games g ON g.id = l.game_id
@@ -440,6 +468,7 @@ export async function getSteamTagEconomics(
         ...bandCoverageFor(num(r.games), c),
         examples: members.examples.get(r.tag) ?? [],
         priceBands: members.bands.get(r.tag) ?? [],
+        ...aiSplitFor(r),
       };
     });
 }

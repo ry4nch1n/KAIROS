@@ -403,6 +403,7 @@ function steamGame(o: Partial<RawGame> & { sourceGameId: string }): RawGame {
     medianPlaytimeMin: 600,
     metacritic: null,
     scaleTier: o.scaleTier ?? "small_indie",
+    aiDisclosure: o.aiDisclosure ?? null,
     sourceGameId: o.sourceGameId,
   };
 }
@@ -712,6 +713,43 @@ describe("D10d getSteamTagLookup — named sub-genre lookup (#113)", () => {
     // work for a SPECIFIC named market (the whole point of the #113→#114 pair), not only top-30.
     expect(found.rows[0].supplyTrend).toBe("rising");
     expect(found.rows[0].demandTrajectory).toBe("new");
+  });
+
+  it("carries the sub-genre's own AI-disclosure share and split (#283), null when unchecked", async () => {
+    const db = await freshMemoryDb();
+    const ids = (p: string, n: number) => Array.from({ length: n }, (_, i) => `${p}${i}`);
+    const games: RawGame[] = [
+      ...many(ids("Y", 10), { tags: ["Card Battler"], aiDisclosure: true, votes: 100 }),
+      ...many(ids("N", 12), { tags: ["Card Battler"], aiDisclosure: false, votes: 400 }),
+      ...many(ids("U", 3), { tags: ["Card Battler"], aiDisclosure: null, votes: 9000 }),
+      ...many(ids("T", 4), { tags: ["Tile Puzzle"], aiDisclosure: true, votes: 50 }),
+      ...many(ids("Z", 3), { tags: ["Unchecked Sim"], aiDisclosure: null }),
+    ];
+    await loadGames(db, "steam", STEAM_BASE_URL, games, "2026-06-30T00:00:00.000Z");
+    const row = async (t: string) => (await q.getSteamTagLookup(db, t)).rows[0];
+    // Unchecked titles stay out of both numerator and denominator.
+    expect(await row("card battler")).toMatchObject({
+      games: 25,
+      aiChecked: 22,
+      aiDisclosed: 10,
+      aiMedianVotesDisclosed: 100,
+      aiMedianVotesUndisclosed: 400,
+      aiSplitThin: false,
+    });
+    // One side under the floor: medians still given, but flagged as no comparison.
+    expect(await row("tile puzzle")).toMatchObject({
+      aiChecked: 4,
+      aiDisclosed: 4,
+      aiMedianVotesUndisclosed: null,
+      aiSplitThin: true,
+    });
+    // Nothing checked → null, never 0.
+    expect(await row("unchecked sim")).toMatchObject({
+      aiChecked: 0,
+      aiDisclosed: null,
+      aiMedianVotesDisclosed: null,
+      aiSplitThin: true,
+    });
   });
 
   it("takes comma-separated tags, and refuses a query too short to name a market", async () => {

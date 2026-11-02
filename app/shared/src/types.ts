@@ -91,6 +91,14 @@ export interface SteamTagEconomics extends SteamGenreEconomics {
   // Only bands that hold a title are listed. (Census rows carry no per-title price, so there is no
   // census-side split.)
   priceBands: SteamTagPriceBand[];
+  // AI disclosure at peer scope (#283): of the row's titles with a store-page reading, how many
+  // carry Steam's AI content disclosure, and median reviews on each side. Null (never 0) when
+  // none were checked; `aiSplitThin` = either side under 10, so the medians are not a comparison.
+  aiChecked: number;
+  aiDisclosed: number | null;
+  aiMedianVotesDisclosed: number | null;
+  aiMedianVotesUndisclosed: number | null;
+  aiSplitThin: boolean;
   // Median-reviews momentum across snapshot windows. "new" = history too thin to read yet
   // (the honest state; demand trajectory deepens as game_snapshots accrues), never a fake trend.
   demandTrajectory: Trajectory;
