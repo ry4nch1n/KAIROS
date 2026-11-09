@@ -26,6 +26,7 @@ import type {
   FestivalDistribution,
   FestivalLiftRead,
   FestivalLiftRow,
+  FestivalScopedRead,
   SuccessBand,
   RevenuePercentiles,
 } from "shared";
@@ -37,6 +38,7 @@ import {
   pf,
   canonSql,
   isCurationTag,
+  matchSteering,
   classifyTrajectory,
   classifySupply,
   genreSupplyTrend,
@@ -1176,6 +1178,7 @@ async function upcomingCohort(db: Querier): Promise<(SteamUpcoming & { gameId: s
 // ratio — each null, never 0, when unmeasured; lift is null over a pre-rate ≤ 0. The cohort is
 // "coming soon at the time", so a title that launched after the fest still counts.
 export const FESTIVAL_ROWS = 8;
+const FESTIVAL_TAG_SCOPES = 6;
 const DAY_MS = 86400000;
 
 /** Pure — exported for tests. `snaps` in any order; `start`/`end` inclusive YYYY-MM-DD (UTC). */
@@ -1217,8 +1220,30 @@ const distribution = (vals: number[]): FestivalDistribution => {
   return { p25: q(0.25), median: q(0.5), p75: q(0.75), p90: q(0.9) };
 };
 
+type FestivalCohortRow = Pick<FestivalLiftRow, "entryFollowers" | "lift">;
+
+const festivalCohort = (reads: FestivalCohortRow[]): Omit<FestivalScopedRead, "scope"> => {
+  const entries = reads.flatMap((r) => (r.entryFollowers == null ? [] : [r.entryFollowers]));
+  const lifts = reads.flatMap((r) => (r.lift == null ? [] : [r.lift]));
+  return {
+    titles: reads.length,
+    withEntry: entries.length,
+    n: lifts.length,
+    thin: lifts.length < UPCOMING_BASELINE_THIN,
+    entryFollowers: distribution(entries),
+    lift: distribution(lifts),
+  };
+};
+
 export async function getFestivalLift(db: Querier): Promise<FestivalLiftRead[]> {
   const out: FestivalLiftRead[] = [];
+  const { flags } = await getBriefSteering(db);
+  const steered = new Map<string, boolean>();
+  const isSteered = (tag: string) => {
+    if (!steered.has(tag))
+      steered.set(tag, !isCurationTag(tag) && matchSteering(flags, { genre: "", tag }).length > 0);
+    return steered.get(tag) as boolean;
+  };
   for (const w of CONTRACT.festivalWindows) {
     const featured = w.featured?.length ? w.featured.map(String) : null;
     // From the earliest pre-window snapshot the #201 rule can use to the window's last day.
@@ -1227,8 +1252,20 @@ export async function getFestivalLift(db: Querier): Promise<FestivalLiftRead[]> 
     );
     const to = new Date(Date.parse(`${w.end}T00:00:00Z`) + DAY_MS);
     const rows = await db.query(
-      `SELECT g.id AS game_id, g.title, h.followers, h.captured_at, h.coming_soon
+      // Band and tags ride this one query (no per-scope fan-out). An unpriced title has no band:
+      // PRICE_BAND_SQL alone reads NULL as 'Free', and most coming-soon titles list no price.
+      `SELECT g.id AS game_id, g.title, h.followers, h.captured_at, h.coming_soon,
+              CASE WHEN l.price_cents IS NOT NULL THEN ${PRICE_BAND_SQL} END AS band, tg.tags
        FROM games g JOIN sources src ON src.id = g.source_id
+       LEFT JOIN LATERAL (
+         SELECT s.price_cents FROM game_snapshots s
+         WHERE s.game_id = g.id AND s.price_cents IS NOT NULL
+         ORDER BY s.captured_at DESC LIMIT 1
+       ) l ON TRUE
+       LEFT JOIN LATERAL (
+         SELECT array_agg(DISTINCT ${canonSql("t.name")}) AS tags
+         FROM game_tags gt JOIN tags t ON t.id = gt.tag_id WHERE gt.game_id = g.id
+       ) tg ON TRUE
        JOIN LATERAL (
          SELECT s.followers, s.captured_at, s.coming_soon FROM game_snapshots s
          WHERE s.game_id = g.id AND s.followers IS NOT NULL
@@ -1241,19 +1278,35 @@ export async function getFestivalLift(db: Querier): Promise<FestivalLiftRead[]> 
         ? [from.toISOString(), to.toISOString(), w.start, featured]
         : [from.toISOString(), to.toISOString(), w.start],
     );
-    const games = new Map<string, { title: string; soon: boolean; snaps: typeof rows }>();
+    const games = new Map<
+      string,
+      { title: string; soon: boolean; band: string | null; tags: string[]; snaps: typeof rows }
+    >();
     for (const r of rows) {
-      const g = games.get(String(r.game_id)) ?? { title: r.title, soon: false, snaps: [] };
+      const g = games.get(String(r.game_id)) ?? {
+        title: r.title,
+        soon: false,
+        band: r.band ?? null,
+        tags: (r.tags ?? []).filter(Boolean).map(String),
+        snaps: [],
+      };
       g.soon ||= r.coming_soon === true;
       g.snaps.push({ followers: r.followers, capturedAt: r.captured_at });
       games.set(String(r.game_id), g);
     }
-    const reads: FestivalLiftRow[] = [...games.values()]
+    const scoped = [...games.values()]
       .filter((g) => g.soon)
-      .map((g) => ({ title: g.title, ...festivalLiftFor(g.snaps, w.start, w.end) }));
-    const entries = reads.flatMap((r) => (r.entryFollowers == null ? [] : [r.entryFollowers]));
-    const lifts = reads.flatMap((r) => (r.lift == null ? [] : [r.lift]));
-    const thin = lifts.length < UPCOMING_BASELINE_THIN;
+      .map((g) => ({
+        band: g.band,
+        tags: g.tags,
+        read: { title: g.title, ...festivalLiftFor(g.snaps, w.start, w.end) },
+      }));
+    const reads: FestivalLiftRow[] = scoped.map((s) => s.read);
+    const { thin, ...cohort } = festivalCohort(reads);
+    const tagCells = new Map<string, FestivalLiftRow[]>();
+    for (const s of scoped)
+      for (const tag of s.tags.filter(isSteered))
+        tagCells.set(tag, [...(tagCells.get(tag) ?? []), s.read]);
     out.push({
       id: w.id,
       name: w.name,
@@ -1261,12 +1314,18 @@ export async function getFestivalLift(db: Querier): Promise<FestivalLiftRead[]> 
       start: w.start,
       end: w.end,
       scope: featured ? "featured" : "coming-soon-cohort",
-      titles: reads.length,
-      withEntry: entries.length,
-      n: lifts.length,
+      ...cohort,
       thin,
-      entryFollowers: distribution(entries),
-      lift: distribution(lifts),
+      priced: scoped.filter((s) => s.band != null).length,
+      tagged: scoped.filter((s) => s.tags.length > 0).length,
+      byPriceBand: PRICE_BANDS.flatMap((band) => {
+        const members = scoped.filter((s) => s.band === band).map((s) => s.read);
+        return members.length ? [{ scope: band, ...festivalCohort(members) }] : [];
+      }),
+      byTag: [...tagCells]
+        .map(([tag, members]) => ({ scope: tag, ...festivalCohort(members) }))
+        .sort((a, b) => b.n - a.n || b.titles - a.titles || a.scope.localeCompare(b.scope))
+        .slice(0, FESTIVAL_TAG_SCOPES),
       note: [
         featured
           ? "Featured titles only."
@@ -1274,6 +1333,7 @@ export async function getFestivalLift(db: Querier): Promise<FestivalLiftRead[]> 
         thin
           ? `Fewer than ${UPCOMING_BASELINE_THIN} measured lifts — read as a hint, not a benchmark.`
           : "",
+        "Price and tag cells leave out titles with no listed price or no store-page tags.",
       ]
         .filter(Boolean)
         .join(" "),

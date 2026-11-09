@@ -36,6 +36,8 @@ import type {
   SteamUpcoming,
   SteamUpcomingBaseline,
   FollowerBaseline,
+  FestivalLiftRead,
+  FestivalScopedRead,
   SteamComparable,
   SteamTagLookup,
   SteamTagEconomics,
@@ -2013,6 +2015,61 @@ function UpcomingBaselineStrip({ b }: { b?: SteamUpcomingBaseline }) {
   );
 }
 
+const FESTIVAL_TIP =
+  "Lift is a title's followers/day during the event divided by its followers/day before it. Only titles with enough readings on both sides count, and n is how many that is. Thin marks too few measured titles to treat as a benchmark. Slices are descriptive; compare them with care.";
+const liftX = (n: number | null) => (n == null ? "—" : `${n.toFixed(2)}×`);
+/** A thin slice shows its median and qualifier only: quartiles of a handful would imply precision. */
+const festivalCell = (s: FestivalScopedRead) => {
+  if (s.lift.median == null) return `${s.scope} · ${s.titles} titles · no measured lift`;
+  if (s.thin) return `${s.scope} · lift med ${liftX(s.lift.median)} · n ${s.n} · thin`;
+  return `${s.scope} · lift p25 ${liftX(s.lift.p25)} · med ${liftX(s.lift.median)} · p75 ${liftX(s.lift.p75)} · n ${s.n}`;
+};
+/** Follower lift around each festival window, on the Upcoming card (#284); wraps at phone width. */
+function FestivalLiftStrip({ reads }: { reads?: FestivalLiftRead[] }) {
+  const shown = (reads ?? []).filter((r) => r.titles > 0);
+  if (!shown.length) return null;
+  return (
+    <>
+      {shown.map((r) => {
+        const slices = [...r.byPriceBand, ...r.byTag];
+        const e = r.entryFollowers;
+        return (
+          <div className="tag-members" key={r.id}>
+            <div className="tag-members-name">
+              Festival lift · {r.name}
+              <Tip text={FESTIVAL_TIP} />
+            </div>
+            <div className="band-strip">
+              <span className={"band-cell" + (r.thin ? " band-thin" : "")}>
+                {festivalCell({ ...r, scope: "All tracked" })}
+              </span>
+              <span className="band-cell">
+                Followers at entry · p25 {fr(e.p25)} · med {fr(e.median)} · p75 {fr(e.p75)} · p90{" "}
+                {fr(e.p90)} · {r.withEntry} titles
+              </span>
+            </div>
+            <div style={{ color: "var(--text-3)", marginBottom: "var(--sp-1)" }}>
+              {r.titles} titles · {r.priced} with a price · {r.tagged} tagged. {r.note}
+            </div>
+            {slices.length ? (
+              <details>
+                <summary>By price band and tag</summary>
+                <div className="band-strip" style={{ marginTop: "var(--sp-1)" }}>
+                  {slices.map((s) => (
+                    <span key={s.scope} className={"band-cell" + (s.thin ? " band-thin" : "")}>
+                      {festivalCell(s)}
+                    </span>
+                  ))}
+                </div>
+              </details>
+            ) : null}
+          </div>
+        );
+      })}
+    </>
+  );
+}
+
 function UpcomingTable({ rows }: { rows: SteamUpcoming[] }) {
   const anyArt = rows.some((r) => !!r.capsuleUrl);
   if (!rows.length)
@@ -2695,6 +2752,7 @@ function SteamView({
             "unreleased titles, most-followed first · followers stand in for wishlists",
           )}
           <UpcomingBaselineStrip b={data.upcomingBaseline} />
+          <FestivalLiftStrip reads={data.festivalLift} />
           <UpcomingTable rows={data.upcoming ?? []} />
         </div>
       </>
