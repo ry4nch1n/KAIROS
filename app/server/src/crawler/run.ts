@@ -35,7 +35,7 @@ if (which === "steam") {
   const log = (m: string) => process.stdout.write(m);
   const seedN = Number(process.env.STEAM_TAG_SEED_N ?? TAG_SEED_N_DEFAULT);
   const tagSeeds = await fetchTagSeeds(db, log, undefined, Number.isFinite(seedN) ? seedN : 0);
-  const r = await steamCrawl(limit, log, tagSeeds);
+  const r = await steamCrawl(limit, log, tagSeeds, await crawlRotation(db, "steam"));
   raw = r.games;
   sourceName = "steam";
   baseUrl = r.baseUrl;

@@ -321,4 +321,26 @@ describe("tag-seeded discovery (#265)", () => {
     expect(capped.perTag[0].added).toBe(50);
     expect(addTagSeeds(base, [], 200).ids).toEqual(base);
   });
+
+  it("rotates each tag's list so deep rows get crawled, inside the same cap", () => {
+    const base = Array.from({ length: 200 }, (_, i) => i + 1);
+    const tagSeeds = [
+      { tag: "A", appids: Array.from({ length: 40 }, (_, i) => 5000 + i) },
+      { tag: "B", appids: Array.from({ length: 33 }, (_, i) => 6000 + i) },
+    ];
+    const all = tagSeeds.flatMap((t) => t.appids);
+    const seen = new Set<number>();
+    for (let rotation = 0; rotation < 8; rotation++) {
+      const r = addTagSeeds(base, tagSeeds, 40, 0.25, rotation);
+      expect(r.ids).toHaveLength(40);
+      expect(new Set(r.ids).size).toBe(40);
+      expect(r.perTag.reduce((n, t) => n + t.added, 0)).toBe(10);
+      for (const id of r.ids) if (id >= 5000) seen.add(id);
+    }
+    expect(seen.size).toBe(all.length);
+    // No rotation is the original front-of-list behaviour.
+    expect(addTagSeeds(base, tagSeeds, 40, 0.25).ids).toEqual(
+      addTagSeeds(base, tagSeeds, 40, 0.25, 0).ids,
+    );
+  });
 });

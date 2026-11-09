@@ -468,12 +468,24 @@ export async function fetchStoreTags(
   }
 }
 
-/** Top-N SteamSpy tags by weight (the rich genre-like signal). */
-function topTags(tags: Record<string, number> | undefined, n = 10): string[] {
+/** Store and SteamSpy spell some tags differently ("Roguelike" / "Rogue-like"). */
+const tagKey = (name: string) => name.toLowerCase().replace(/[^a-z0-9]/g, "");
+
+/**
+ * Top-N SteamSpy tags by weight (the rich genre-like signal), plus any `steered` tag the title
+ * carries below the cut (#265). A deckbuilder whose "Card Battler" ranks 13th is still a Card
+ * Battler peer; every tag nobody steered keeps the plain top-N membership.
+ */
+function topTags(
+  tags: Record<string, number> | undefined,
+  n = 10,
+  steered: string[] = [],
+): string[] {
   if (!tags || typeof tags !== "object") return [];
+  const keep = new Set(steered.map(tagKey));
   return Object.entries(tags)
     .sort((a, b) => b[1] - a[1])
-    .slice(0, n)
+    .filter(([name], i) => i < n || keep.has(tagKey(name)))
     .map(([name]) => name);
 }
 
@@ -570,6 +582,7 @@ export function parseSteamGame(
   appData: any,
   reviewSummary: any,
   steamspy: any,
+  steeredTags: string[] = [],
 ): RawGame {
   const developers: string[] = Array.isArray(appData?.developers) ? appData.developers : [];
   const publishers: string[] = Array.isArray(appData?.publishers) ? appData.publishers : [];
@@ -579,7 +592,7 @@ export function parseSteamGame(
   const selfPublished = isSelfPublished(developers, publishers);
   const majorBacked = isMajorBacked(developers, publishers);
   const price = appData?.price_overview;
-  const tags = topTags(steamspy?.tags);
+  const tags = topTags(steamspy?.tags, 10, steeredTags);
   const comingSoon = isComingSoon(appData);
   // Store-page completeness (#178). appdetails is authoritative; SteamSpy's plainer `languages`
   // is the fallback for the runs where the store payload came back partial. Neither is a new
@@ -706,12 +719,18 @@ export const TAG_SEED_SHARE = 0.25;
  * last `budget` slots of `base` are reopened, filled with tag appids the base did not already
  * hold (interleaved across tags so every tag gets some), and any slots left over go back to
  * `base`'s own tail. `known` counts tag appids already in the kept base or in an earlier tag.
+ *
+ * `rotation` (the source's crawl count) starts each tag's list one fair share further along per
+ * crawl (#265). The budget covers only the first few rows of each list, and those rows barely
+ * move day to day, so without it the same ~50 titles were re-fetched every run and a title further
+ * down its tag's list never entered `games`. Rotating spends the same slots and requests.
  */
 export function addTagSeeds(
   base: number[],
   tagSeeds: { tag: string; appids: number[] }[],
   limit: number,
   share = TAG_SEED_SHARE,
+  rotation = 0,
 ): { ids: number[]; perTag: { tag: string; added: number; known: number }[] } {
   const budget = Math.min(
     Math.floor(limit * share),
@@ -721,10 +740,15 @@ export function addTagSeeds(
   const seen = new Set(core);
   const perTag = tagSeeds.map((t) => ({ tag: t.tag, added: 0, known: 0 }));
   const extra: number[] = [];
-  const depth = Math.max(0, ...tagSeeds.map((t) => t.appids.length));
+  const stride = Math.ceil(budget / Math.max(1, tagSeeds.length));
+  const lists = tagSeeds.map(({ appids }) => {
+    const at = appids.length ? (rotation * stride) % appids.length : 0;
+    return [...appids.slice(at), ...appids.slice(0, at)];
+  });
+  const depth = Math.max(0, ...lists.map((l) => l.length));
   for (let i = 0; i < depth; i++) {
-    tagSeeds.forEach((t, k) => {
-      const id = t.appids[i];
+    lists.forEach((list, k) => {
+      const id = list[i];
       if (id == null) return;
       if (seen.has(id)) perTag[k].known++;
       else if (extra.length < budget) {
@@ -831,7 +855,10 @@ export function reviewSummary(json: any): any {
 }
 
 /** Fetch + join the three endpoints for one appid. Returns null if the app isn't a usable game. */
-export async function fetchSteamGame(appid: number): Promise<RawGame | null> {
+export async function fetchSteamGame(
+  appid: number,
+  steeredTags: string[] = [],
+): Promise<RawGame | null> {
   const adWrap = JSON.parse(await politeFetch(appDetailsUrl(appid)));
   const entry = adWrap?.[appid];
   if (!entry?.success || entry.data?.type !== "game") return null;
@@ -845,7 +872,7 @@ export async function fetchSteamGame(appid: number): Promise<RawGame | null> {
   } catch (e) {
     console.warn(`  steamspy ${appid} failed:`, String(e));
   }
-  const g = parseSteamGame(appid, entry.data, reviews, steamspy);
+  const g = parseSteamGame(appid, entry.data, reviews, steamspy, steeredTags);
   // 4th fetch (#110), gated to the recent non-AAA cohort so the crawl budget isn't blown on the
   // whole seed. Tri-state: true=discloses, false=checked & absent, null=fetch failed. Outside the
   // cohort we leave both null — "not checked" is honestly distinct from "checked & absent".
@@ -870,11 +897,13 @@ export async function steamCrawl(
   limit = SEED_LIMIT_DEFAULT,
   log: (m: string) => void = () => {},
   tagSeeds: { tag: string; appids: number[] }[] = [],
+  rotation = 0,
 ): Promise<{ games: RawGame[]; baseUrl: string }> {
   log(`[steam] seeding appids (limit ${limit})…\n`);
   resetFollowerRun(); // breaker is per-run, not per-process
   resetStoreTagRun();
-  const seeded = addTagSeeds(await seedAppIds(limit), tagSeeds, limit);
+  const seeded = addTagSeeds(await seedAppIds(limit), tagSeeds, limit, TAG_SEED_SHARE, rotation);
+  const steeredTags = tagSeeds.map((t) => t.tag);
   for (const t of seeded.perTag) {
     log(`[steam] tag ${t.tag}: seeded ${t.added} new / ${t.known} already known\n`);
   }
@@ -883,7 +912,7 @@ export async function steamCrawl(
   const games: RawGame[] = [];
   for (const id of ids) {
     try {
-      const g = await fetchSteamGame(id);
+      const g = await fetchSteamGame(id, steeredTags);
       if (g) {
         games.push(g);
         log(".");

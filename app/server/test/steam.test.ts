@@ -285,6 +285,30 @@ const hades = () =>
     fx("steamspy_1145360.json"),
   );
 
+// StarVaders' real SteamSpy shape (2026-11-09): "Card Battler" ranks 13th of its tags.
+describe("D5a steered tags survive the top-10 cut (#265)", () => {
+  const names = Array.from({ length: 12 }, (_, i) => `Tag${i}`);
+  const tags = Object.fromEntries([
+    ...names.map((n, i) => [n, 1000 - i] as const),
+    ["Card Battler", 50],
+    ["Rogue-like", 40],
+    ["Unrelated", 30],
+  ]);
+  const parse = (steered?: string[]) => parseSteamGame(1, {}, {}, { tags }, steered).tags;
+
+  it("keeps the plain top 10 when nothing is steered", () => {
+    expect(parse()).toEqual(names.slice(0, 10));
+  });
+
+  it("adds only steered tags below the cut, matching across store/SteamSpy spelling", () => {
+    expect(parse(["Card Battler", "Roguelike", "Not On This Game"])).toEqual([
+      ...names.slice(0, 10),
+      "Card Battler",
+      "Rogue-like",
+    ]);
+  });
+});
+
 // Valve disabled store.steampowered.com/appreviews on 2026-10-22; every app then skipped on
 // HTML-not-JSON and Steam loaded 0 rows. Fixture is a live GetAppReviews capture (2026-10-27).
 describe("D5b review summary via IUserReviewsService/GetAppReviews", () => {
