@@ -92,6 +92,9 @@ ALTER TABLE game_snapshots ADD COLUMN IF NOT EXISTS coming_soon         BOOLEAN;
 ALTER TABLE game_snapshots ADD COLUMN IF NOT EXISTS language_count         INT;
 ALTER TABLE game_snapshots ADD COLUMN IF NOT EXISTS has_simplified_chinese BOOLEAN;
 ALTER TABLE game_snapshots ADD COLUMN IF NOT EXISTS store_features         TEXT[];
+-- #283: each game's newest non-null AI-disclosure reading. Partial, so it holds only the checked rows.
+CREATE INDEX IF NOT EXISTS idx_snap_ai_reading ON game_snapshots (game_id, captured_at DESC)
+  WHERE ai_disclosure IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS tags (
   id   SERIAL PRIMARY KEY,

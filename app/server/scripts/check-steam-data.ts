@@ -27,6 +27,11 @@ import {
 } from "../src/checks/voteFreshness.ts";
 import { assessVoteBasis } from "../src/checks/voteBasis.ts";
 import { assessLoadVolume, sourceLoadVolumes } from "../src/checks/loadVolume.ts";
+import {
+  aiDisclosureCanary,
+  formatAiCoverage,
+  steeredAiCoverage,
+} from "../src/checks/aiDisclosureCoverage.ts";
 
 // Golden appids: known-correct classifications that must hold regardless of thresholds.
 const GOLDEN_INDIE = new Set(["1145360"]); // Hades (self-pub megahit) → NOT aaa
@@ -163,6 +168,18 @@ const GOLDEN_AAA = new Set(["730", "578080"]); // CS2 (Valve), PUBG (Krafton) �
   const basis = assessVoteBasis(voteSteps);
   console.log("Vote basis:", basis.lines.join(" · ") || "no browser vote steps");
   res.failures.push(...basis.failures);
+
+  // AI-disclosure coverage (#283) — WARN ONLY. The capture-yield row above reads the 120-day
+  // cohort and stays green while a steered tag's peers are mostly unchecked; most established
+  // titles legitimately have no reading, so neither line below can fail the gate.
+  const aiCanary = aiDisclosureCanary(agg.aiCaptured, agg.aiDisclosed);
+  if (aiCanary) console.warn("⚠️ AI disclosure canary:", aiCanary);
+  try {
+    for (const row of await steeredAiCoverage(db))
+      console.log("AI disclosure coverage:", formatAiCoverage(row));
+  } catch (err) {
+    console.warn("AI disclosure coverage unavailable:", err);
+  }
 
   // Golden spot-checks (only assert for appids actually present in the crawl).
   const golden = await db.query(

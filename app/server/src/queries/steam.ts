@@ -367,13 +367,24 @@ export function parseTagQuery(raw: unknown): string[] {
 // comparables: only titles with a non-null reading count, and with none checked every field is
 // null, never 0. Either side under AI_SPLIT_MIN is `aiSplitThin`: the medians are still given,
 // but a comparison over a handful of titles is not a finding. Descriptive, not causal.
+//
+// The reading is STICKY per title: the crawl checks a store page only inside a title's first 120
+// days, so the newest snapshot goes NULL after that (or after any crawl that skipped the check)
+// and v_latest alone forgets a measurement it had. `ai_last` is each game's newest non-null
+// reading, served by the small partial index idx_snap_ai_reading. A title never checked in its
+// window stays unchecked, and an old reading is last-known, not re-verified.
 export const AI_SPLIT_MIN = 10;
-const AI_SPLIT_SQL = `count(*) FILTER (WHERE l.ai_disclosure)::int AS ai_disclosed,
-            count(*) FILTER (WHERE l.ai_disclosure IS NOT NULL)::int AS ai_checked,
+const AI_LAST_CTE = `ai_last AS (
+       SELECT DISTINCT ON (game_id) game_id, ai_disclosure
+       FROM game_snapshots WHERE ai_disclosure IS NOT NULL
+       ORDER BY game_id, captured_at DESC
+     )`;
+const AI_SPLIT_SQL = `count(*) FILTER (WHERE ai.ai_disclosure)::int AS ai_disclosed,
+            count(*) FILTER (WHERE ai.ai_disclosure IS NOT NULL)::int AS ai_checked,
             percentile_cont(0.5) WITHIN GROUP (ORDER BY coalesce(l.votes, 0))
-              FILTER (WHERE l.ai_disclosure)::float AS ai_med_votes_yes,
+              FILTER (WHERE ai.ai_disclosure)::float AS ai_med_votes_yes,
             percentile_cont(0.5) WITHIN GROUP (ORDER BY coalesce(l.votes, 0))
-              FILTER (WHERE l.ai_disclosure = false)::float AS ai_med_votes_no`;
+              FILTER (WHERE ai.ai_disclosure = false)::float AS ai_med_votes_no`;
 function aiSplitFor(r: Record<string, unknown>) {
   const checked = num(r.ai_checked);
   const disclosed = checked ? num(r.ai_disclosed) : null;
@@ -405,7 +416,8 @@ export async function getSteamTagEconomics(
     ? `AND (${match.map((_, i) => `lower(${canonSql("t.name")}) LIKE $${i + 1}`).join(" OR ")})`
     : "";
   const rows = await db.query(
-    `SELECT ${canonSql("t.name")} AS tag, count(*)::int AS games,
+    `WITH ${AI_LAST_CTE}
+     SELECT ${canonSql("t.name")} AS tag, count(*)::int AS games,
             percentile_cont(0.5) WITHIN GROUP (ORDER BY l.price_cents)::float AS med_price,
             percentile_cont(0.5) WITHIN GROUP (ORDER BY l.rating)::float AS med_rating,
             percentile_cont(0.5) WITHIN GROUP (ORDER BY coalesce(l.votes, 0))::float AS med_votes,
@@ -421,6 +433,7 @@ export async function getSteamTagEconomics(
      JOIN sources src ON src.id = g.source_id
      JOIN game_tags gt ON gt.game_id = g.id
      JOIN tags t ON t.id = gt.tag_id
+     LEFT JOIN ai_last ai ON ai.game_id = l.game_id
      WHERE g.is_live AND src.name = 'steam' ${tierFilter} ${matchFilter} ${RELEASED_ONLY}
      GROUP BY ${canonSql("t.name")} HAVING count(*) >= ${Number(minSupply) | 0}
      ORDER BY rev_cents DESC`,
