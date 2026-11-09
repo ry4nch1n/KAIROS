@@ -16,6 +16,7 @@ import {
   selectCensusTags,
   summarizeCensus,
   tagBandUrl,
+  tagUpcomingUrl,
 } from "../src/crawler/census.ts";
 import { classifyCensusSupply, matchSteering } from "../src/queries/shared.ts";
 import { setBriefSteering } from "../src/queries/library.ts";
@@ -342,5 +343,77 @@ describe("tag-seeded discovery (#265)", () => {
     expect(addTagSeeds(base, tagSeeds, 40, 0.25).ids).toEqual(
       addTagSeeds(base, tagSeeds, 40, 0.25, 0).ids,
     );
+  });
+});
+
+// #292 coming-soon seeding. Fixture: Card Battler's coming-soon page, Released_ASC, count=25,
+// captured live 2026-11-09.
+const COMING_SOON = fx("steam_search_comingsoon_791774.json");
+
+describe("coming-soon tag seeds (#292)", () => {
+  const base = Array.from({ length: 200 }, (_, i) => i + 1);
+  const released = Array.from({ length: 100 }, (_, i) => 5000 + i);
+  const soonIds = Array.from({ length: 100 }, (_, i) => 7000 + i);
+  const isSoon = (id: number) => id >= 7000;
+
+  it("asks for the coming-soon page ascending, which leads with near-term launches", () => {
+    const url = tagUpcomingUrl(791774);
+    expect(url).toContain("filter=comingsoon");
+    expect(url).toContain("sort_by=Released_ASC");
+    const ids = parseTagSeedPage(COMING_SOON, 25);
+    expect(ids).toHaveLength(25);
+    expect(ids[0]).toBe(3445440); // Fablery, launching on the capture date
+    const dates = [
+      ...JSON.parse(COMING_SOON).results_html.matchAll(/search_released[^>]*>\s*([^<]*?)\s*</g),
+    ].map((m: RegExpMatchArray) => m[1]);
+    expect(dates).toHaveLength(25);
+    for (const d of dates) expect(d).toMatch(/^Nov \d+, 2026$/);
+  });
+
+  it("reserves part of a budget the released seeds would otherwise fill", () => {
+    const r = addTagSeeds(base, [{ tag: "A", appids: released, upcoming: soonIds }], 200);
+    expect(r.ids).toHaveLength(200);
+    expect(new Set(r.ids).size).toBe(200);
+    expect(r.ids.filter(isSoon)).toHaveLength(20);
+    expect(r.ids.filter((id) => id >= 5000 && id < 7000)).toHaveLength(30);
+    expect(r.perTagUpcoming).toEqual([{ tag: "A", added: 20, known: 0 }]);
+  });
+
+  it("gives unused reserved slots back to released seeds and counts known titles", () => {
+    const short = addTagSeeds(base, [{ tag: "A", appids: released, upcoming: [7000, 1] }], 200);
+    expect(short.ids.filter(isSoon)).toEqual([7000]);
+    expect(short.ids.filter((id) => id >= 5000 && id < 7000)).toHaveLength(49);
+    expect(short.perTagUpcoming).toEqual([{ tag: "A", added: 1, known: 1 }]); // 1 is in the base
+  });
+
+  it("rotates the coming-soon list across crawls inside its reserved slots", () => {
+    const tagSeeds = [{ tag: "A", appids: released, upcoming: soonIds.slice(0, 12) }];
+    const seen = new Set<number>();
+    for (let rotation = 0; rotation < 3; rotation++) {
+      const r = addTagSeeds(base, tagSeeds, 40, 0.25, rotation);
+      expect(r.ids.filter(isSoon)).toHaveLength(4);
+      for (const id of r.ids.filter(isSoon)) seen.add(id);
+    }
+    expect(seen.size).toBe(12);
+  });
+
+  it("fetches one extra page per tag and fails soft on it alone", async () => {
+    const db = await freshMemoryDb();
+    await setBriefSteering(db, ["Roguelike deckbuilder"]);
+    const store = (url: string) => {
+      if (url.includes("populartags")) return Promise.resolve(TAGS);
+      if (url.includes("filter=comingsoon")) return Promise.resolve(COMING_SOON);
+      return Promise.resolve(url.includes("maxprice=") ? BAND : REVIEWS);
+    };
+    const seeds = await fetchTagSeeds(db, () => {}, store, 25, 0);
+    expect(seeds[0].upcoming?.[0]).toBe(3445440);
+
+    const logs: string[] = [];
+    const noSoon = (url: string) =>
+      url.includes("filter=comingsoon") ? Promise.reject(new Error("429")) : store(url);
+    const partial = await fetchTagSeeds(db, (m) => logs.push(m), noSoon, 25, 0);
+    expect(partial[0].upcoming).toEqual([]);
+    expect(partial[0].appids.length).toBeGreaterThan(0);
+    expect(logs.some((m) => m.includes("tag upcoming"))).toBe(true);
   });
 });

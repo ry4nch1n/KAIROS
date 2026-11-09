@@ -2,7 +2,7 @@
 import { crazygames } from "./crazygames.ts";
 import { poki } from "./poki.ts";
 import { steamCrawl } from "./steam.ts";
-import { TAG_SEED_N_DEFAULT, fetchTagSeeds, runCensus } from "./census.ts";
+import { TAG_SEED_N_DEFAULT, TAG_UPCOMING_N_DEFAULT, fetchTagSeeds, runCensus } from "./census.ts";
 import { crawlRotation, loadGames } from "./load.ts";
 import { politeFetch, sleep, type SourceAdapter, type RawGame } from "./base.ts";
 import { appDb, applySchema, usingNeon } from "../db/db.ts";
@@ -34,7 +34,15 @@ if (which === "steam") {
   // inside the same CRAWL_LIMIT. Fail-soft — a blocked search page never fails the crawl.
   const log = (m: string) => process.stdout.write(m);
   const seedN = Number(process.env.STEAM_TAG_SEED_N ?? TAG_SEED_N_DEFAULT);
-  const tagSeeds = await fetchTagSeeds(db, log, undefined, Number.isFinite(seedN) ? seedN : 0);
+  const upcomingN = Number(process.env.STEAM_TAG_UPCOMING_N ?? TAG_UPCOMING_N_DEFAULT);
+  const tagSeeds = await fetchTagSeeds(
+    db,
+    log,
+    undefined,
+    Number.isFinite(seedN) ? seedN : 0,
+    undefined,
+    Number.isFinite(upcomingN) ? upcomingN : 0,
+  );
   const r = await steamCrawl(limit, log, tagSeeds, await crawlRotation(db, "steam"));
   raw = r.games;
   sourceName = "steam";

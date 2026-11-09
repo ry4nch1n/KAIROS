@@ -715,29 +715,21 @@ export function mergeSeeds(lists: number[][], limit: number): number[] {
 export const TAG_SEED_SHARE = 0.25;
 
 /**
- * Fold steered-tag seeds (#265) into an already-merged seed list WITHOUT raising the cap: the
- * last `budget` slots of `base` are reopened, filled with tag appids the base did not already
- * hold (interleaved across tags so every tag gets some), and any slots left over go back to
- * `base`'s own tail. `known` counts tag appids already in the kept base or in an earlier tag.
- *
- * `rotation` (the source's crawl count) starts each tag's list one fair share further along per
- * crawl (#265). The budget covers only the first few rows of each list, and those rows barely
- * move day to day, so without it the same ~50 titles were re-fetched every run and a title further
- * down its tag's list never entered `games`. Rotating spends the same slots and requests.
+ * Part of the tag-seed budget held for coming-soon titles (#292). Steered tags already fill the
+ * whole budget with released titles, so a coming-soon list drawn after them would get no slots.
+ * Slots the coming-soon lists cannot fill go back to the released seeds.
  */
-export function addTagSeeds(
-  base: number[],
+export const TAG_UPCOMING_SHARE = 0.4;
+
+type TagDraw = { tag: string; added: number; known: number };
+
+/** Interleave up to `budget` unseen appids across tags, each list rotated (#265); mutates `seen`. */
+function drawTagSeeds(
   tagSeeds: { tag: string; appids: number[] }[],
-  limit: number,
-  share = TAG_SEED_SHARE,
-  rotation = 0,
-): { ids: number[]; perTag: { tag: string; added: number; known: number }[] } {
-  const budget = Math.min(
-    Math.floor(limit * share),
-    tagSeeds.reduce((n, t) => n + t.appids.length, 0),
-  );
-  const core = base.slice(0, Math.max(0, Math.min(base.length, limit - budget)));
-  const seen = new Set(core);
+  budget: number,
+  rotation: number,
+  seen: Set<number>,
+): { extra: number[]; perTag: TagDraw[] } {
   const perTag = tagSeeds.map((t) => ({ tag: t.tag, added: 0, known: 0 }));
   const extra: number[] = [];
   const stride = Math.ceil(budget / Math.max(1, tagSeeds.length));
@@ -758,10 +750,43 @@ export function addTagSeeds(
       }
     });
   }
+  return { extra, perTag };
+}
+
+/**
+ * Fold steered-tag seeds (#265) into an already-merged seed list WITHOUT raising the cap: the
+ * last `budget` slots of `base` are reopened, filled with tag appids the base did not already
+ * hold (interleaved across tags so every tag gets some), and any slots left over go back to
+ * `base`'s own tail. `known` counts tag appids already in the kept base or in an earlier tag.
+ *
+ * `rotation` (the source's crawl count) starts each tag's list one fair share further along per
+ * crawl (#265). The budget covers only the first few rows of each list, and those rows barely
+ * move day to day, so without it the same ~50 titles were re-fetched every run and a title further
+ * down its tag's list never entered `games`. Rotating spends the same slots and requests.
+ *
+ * Coming-soon lists (#292) draw first, from their own `TAG_UPCOMING_SHARE` of the budget.
+ */
+export function addTagSeeds(
+  base: number[],
+  tagSeeds: { tag: string; appids: number[]; upcoming?: number[] }[],
+  limit: number,
+  share = TAG_SEED_SHARE,
+  rotation = 0,
+): { ids: number[]; perTag: TagDraw[]; perTagUpcoming: TagDraw[] } {
+  const upcomingSeeds = tagSeeds.map((t) => ({ tag: t.tag, appids: t.upcoming ?? [] }));
+  const released = tagSeeds.reduce((n, t) => n + t.appids.length, 0);
+  const upcoming = upcomingSeeds.reduce((n, t) => n + t.appids.length, 0);
+  const budget = Math.min(Math.floor(limit * share), released + upcoming);
+  const core = base.slice(0, Math.max(0, Math.min(base.length, limit - budget)));
+  const seen = new Set(core);
+  const reserved = Math.min(Math.floor(budget * TAG_UPCOMING_SHARE), upcoming);
+  const soon = drawTagSeeds(upcomingSeeds, reserved, rotation, seen);
+  const rest = drawTagSeeds(tagSeeds, budget - soon.extra.length, rotation, seen);
   const fill = base.slice(core.length).filter((id) => !seen.has(id));
   return {
-    ids: [...core, ...extra, ...fill].slice(0, limit),
-    perTag,
+    ids: [...core, ...soon.extra, ...rest.extra, ...fill].slice(0, limit),
+    perTag: rest.perTag,
+    perTagUpcoming: soon.perTag,
   };
 }
 
@@ -922,7 +947,7 @@ export const STEAM_BASE_URL = STORE;
 export async function steamCrawl(
   limit = SEED_LIMIT_DEFAULT,
   log: (m: string) => void = () => {},
-  tagSeeds: { tag: string; appids: number[] }[] = [],
+  tagSeeds: { tag: string; appids: number[]; upcoming?: number[] }[] = [],
   rotation = 0,
 ): Promise<{ games: RawGame[]; baseUrl: string }> {
   log(`[steam] seeding appids (limit ${limit})…\n`);
@@ -932,6 +957,9 @@ export async function steamCrawl(
   const steeredTags = tagSeeds.map((t) => t.tag);
   for (const t of seeded.perTag) {
     log(`[steam] tag ${t.tag}: seeded ${t.added} new / ${t.known} already known\n`);
+  }
+  for (const t of seeded.perTagUpcoming) {
+    log(`[steam] tag ${t.tag}: upcoming-seeded ${t.added} new / ${t.known} known\n`);
   }
   const ids = seeded.ids;
   log(`[steam] ${ids.length} appids\n`);

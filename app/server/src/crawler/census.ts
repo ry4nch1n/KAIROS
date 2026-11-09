@@ -294,9 +294,27 @@ export function interleaveSeeds(a: number[], b: number[]): number[] {
   return out;
 }
 
+// Reviews-sorted pages cannot surface a title with no reviews, and the popular-upcoming shelf only
+// lists titles that already have buzz, so a solo developer's coming-soon page never entered the
+// crawl (#292). A third page per steered tag lists its coming-soon titles by release date. The
+// sort is ascending on purpose: captured 2026-11-09, Released_DESC led with placeholder dates
+// (2048, "2028", "Q2 2028") while Released_ASC led with titles launching that week.
+
+/** Appids read from each steered tag's coming-soon page (STEAM_TAG_UPCOMING_N overrides). */
+export const TAG_UPCOMING_N_DEFAULT = 50;
+
+export function tagUpcomingUrl(tagid: number, n = TAG_UPCOMING_N_DEFAULT): string {
+  return (
+    `${STORE}/search/results/?tags=${tagid}&filter=comingsoon&sort_by=Released_ASC&infinite=1` +
+    `&start=0&count=${n}&category1=998&cc=us&l=english`
+  );
+}
+
 export interface TagSeed {
   tag: string;
   appids: number[];
+  /** Coming-soon appids, nearest launch first; drawn from their own reserved slots (#292). */
+  upcoming?: number[];
 }
 
 /** Fail-soft by contract: any failure — steering, the tag list, one tag's page — logs and the
@@ -307,9 +325,10 @@ export async function fetchTagSeeds(
   fetchText: (url: string) => Promise<string> = (u) => politeFetch(u, 12000),
   n = TAG_SEED_N_DEFAULT,
   delayMs = 2000,
+  upcomingN = TAG_UPCOMING_N_DEFAULT,
 ): Promise<TagSeed[]> {
   const out: TagSeed[] = [];
-  if (n <= 0) return out;
+  if (n <= 0 && upcomingN <= 0) return out;
   let targets: StoreTag[];
   try {
     const { flags } = await getBriefSteering(db);
@@ -323,21 +342,34 @@ export async function fetchTagSeeds(
     return out;
   }
   for (const t of targets) {
-    await sleep(delayMs);
     let top: number[] = [];
     let band: number[] = [];
-    try {
-      top = parseTagSeedPage(await fetchText(tagSeedUrl(t.tagid, n)), n);
-    } catch (e) {
-      log(`[steam] tag seed ${t.name}: FAILED ${String(e)}\n`);
+    let upcoming: number[] = [];
+    if (n > 0) {
+      await sleep(delayMs);
+      try {
+        top = parseTagSeedPage(await fetchText(tagSeedUrl(t.tagid, n)), n);
+      } catch (e) {
+        log(`[steam] tag seed ${t.name}: FAILED ${String(e)}\n`);
+      }
+      await sleep(delayMs);
+      try {
+        band = parseTagBandPage(await fetchText(tagBandUrl(t.tagid)), n);
+      } catch (e) {
+        log(`[steam] tag band ${t.name}: FAILED ${String(e)}\n`);
+      }
     }
-    await sleep(delayMs);
-    try {
-      band = parseTagBandPage(await fetchText(tagBandUrl(t.tagid)), n);
-    } catch (e) {
-      log(`[steam] tag band ${t.name}: FAILED ${String(e)}\n`);
+    if (upcomingN > 0) {
+      await sleep(delayMs);
+      try {
+        upcoming = parseTagSeedPage(await fetchText(tagUpcomingUrl(t.tagid, upcomingN)), upcomingN);
+      } catch (e) {
+        log(`[steam] tag upcoming ${t.name}: FAILED ${String(e)}\n`);
+      }
     }
-    if (top.length || band.length) out.push({ tag: t.name, appids: interleaveSeeds(top, band) });
+    if (top.length || band.length || upcoming.length) {
+      out.push({ tag: t.name, appids: interleaveSeeds(top, band), upcoming });
+    }
   }
   return out;
 }
