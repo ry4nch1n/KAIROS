@@ -594,6 +594,14 @@ const formsMatch = (flag: Forms, market: Forms) =>
   shares(flag.root, market.compound) ||
   shares(flag.compound, market.root);
 
+/** The two halves of a tag-pair flag ("Card Battler × Cozy", #293), or null for any other flag. */
+export function parseTagPairFlag(flag: string): [string, string] | null {
+  const parts = String(flag)
+    .split("×")
+    .map((p) => p.trim());
+  return parts.length === 2 && parts[0] && parts[1] ? [parts[0], parts[1]] : null;
+}
+
 export const activeFlags = (flags: string[]) =>
   (flags ?? []).filter((f) => typeof f === "string" && f.trim());
 
@@ -611,6 +619,9 @@ export function matchSteering(flags: string[], m: { genre: string; tag: string }
   const out: string[] = [];
   for (const flag of flags) {
     if (typeof flag !== "string" || !flag.trim()) continue;
+    // A pair names the intersection, a different market from either parent (#293): it resolves to
+    // its own census target by exact tag name and must not claim "Card Battler" or "Cozy" here.
+    if (flag.includes("×")) continue;
     const byWord = wordsOf(flag).some(
       (w) => plain.has(w) || plain.has(`${w}s`) || plain.has(w.replace(/s$/, "")),
     );

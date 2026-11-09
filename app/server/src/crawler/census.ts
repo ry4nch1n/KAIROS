@@ -16,11 +16,11 @@
 //  - `total_count` is stored every run but not read yet: its day-to-day change is a supply
 //    series that works for any tag, but it needs ~60 days of history and is noisy (players add
 //    and remove tags). History can't be backfilled, so it is captured from day one.
-import { matchSteering } from "../queries/shared.ts";
+import { canonicalName, matchSteering, parseTagPairFlag } from "../queries/shared.ts";
 import { getBriefSteering } from "../queries/library.ts";
 import type { Querier } from "../db/db.ts";
 import { politeFetch, sleep } from "./base.ts";
-import { parseSearchAppids } from "./steam.ts";
+import { parseSearchAppids, tagKey } from "./steam.ts";
 
 const STORE = "https://store.steampowered.com";
 export const CENSUS_MAX_TAGS = 15;
@@ -54,7 +54,37 @@ export interface CensusSummary {
   priceN: number;
 }
 
-export function censusUrl(tagid: number): string {
+/** One steered market: a store tag, or an intersection of two (#293). `param` is what the store's
+ *  `tags=` takes (a comma is an AND), so a pair costs the same pages as a tag. */
+export interface CensusTarget extends StoreTag {
+  param: string;
+  key: string;
+  parts?: [string, string];
+}
+
+/** `tag_census.tag_id` is an INT, so a pair's row id is a stable hash of its key, negative so it
+ *  can never meet a real store tagid. The readable key is stored beside it in `tag_key`. */
+export function pairRowId(key: string): number {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < key.length; i++) h = Math.imul(h ^ key.charCodeAt(i), 0x01000193);
+  return -(1 + ((h >>> 0) % 0x7fffffff));
+}
+
+/** Larger tagid first, so "A × B" and "B × A" are one market with one key. */
+function pairTarget(x: StoreTag, y: StoreTag): CensusTarget {
+  const [a, b] = x.tagid > y.tagid ? [x, y] : [y, x];
+  const key = `${a.tagid}+${b.tagid}`;
+  return {
+    tagid: pairRowId(key),
+    // Canonical halves: the lens looks a pair up the way it looks a tag up.
+    name: `${canonicalName(a.name)} × ${canonicalName(b.name)}`,
+    param: `${a.tagid},${b.tagid}`,
+    key,
+    parts: [a.name, b.name],
+  };
+}
+
+export function censusUrl(tagid: number | string): string {
   return (
     `${STORE}/search/results/?tags=${tagid}&sort_by=Released_DESC&infinite=1` +
     `&start=0&count=${CENSUS_PAGE_SIZE}&category1=998&cc=us&l=english`
@@ -160,10 +190,30 @@ export function summarizeCensus(page: CensusPage, capturedOn: string): CensusSum
   };
 }
 
-/** Store tags the standing flags match, most popular first, capped. */
-export function selectCensusTags(tags: StoreTag[], flags: string[], cap = CENSUS_MAX_TAGS) {
+/** Markets the standing flags name: tag pairs first, then single tags most popular first, capped.
+ *  Pairs lead because a flag naming one is explicit, whereas single tags are matched loosely; a
+ *  pair therefore displaces the least popular single tag when the cap is full. */
+export function selectCensusTags(
+  tags: StoreTag[],
+  flags: string[],
+  cap = CENSUS_MAX_TAGS,
+): CensusTarget[] {
   if (!flags.length) return [];
-  return tags.filter((t) => matchSteering(flags, { genre: "", tag: t.name }).length).slice(0, cap);
+  const byKey = new Map(tags.map((t) => [tagKey(t.name), t]));
+  const pairs = new Map<string, CensusTarget>();
+  for (const flag of flags) {
+    const halves = parseTagPairFlag(flag);
+    if (!halves) continue;
+    const x = byKey.get(tagKey(halves[0]));
+    const y = byKey.get(tagKey(halves[1]));
+    if (!x || !y || x.tagid === y.tagid) continue;
+    const t = pairTarget(x, y);
+    pairs.set(t.key, t);
+  }
+  const singles = tags
+    .filter((t) => matchSteering(flags, { genre: "", tag: t.name }).length)
+    .map((t) => ({ ...t, param: String(t.tagid), key: String(t.tagid) }));
+  return [...pairs.values(), ...singles].slice(0, cap);
 }
 
 export interface CensusRunResult {
@@ -183,16 +233,21 @@ export async function runCensus(
   const all = parseStoreTags(await fetchText(`${STORE}/tagdata/populartags/english`));
   const targets = selectCensusTags(all, flags);
   log(`[census] ${flags.length} standing flag(s) → ${targets.length} tag(s)`);
+  const named = new Set(targets.flatMap((t) => (t.parts ?? []).map(tagKey)));
+  for (const f of flags.filter((x) => x.includes("×"))) {
+    const halves = parseTagPairFlag(f);
+    if (!halves || !halves.every((h) => named.has(tagKey(h)))) log(`  pair flag unresolved: ${f}`);
+  }
   const res: CensusRunResult = { tags: targets.length, stored: 0, failed: [] };
   for (const t of targets) {
     await sleep(delayMs);
     try {
-      const s = summarizeCensus(parseCensusPage(await fetchText(censusUrl(t.tagid))), capturedOn);
+      const s = summarizeCensus(parseCensusPage(await fetchText(censusUrl(t.param))), capturedOn);
       // Append-only, one row per tag per day: a re-run the same day keeps the first capture.
       await db.query(
         `INSERT INTO tag_census (tag_id, tag_name, captured_on, total_count, recent, prior,
-                                 covered_days, truncated, median_price_cents, price_n, parsed)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+                                 covered_days, truncated, median_price_cents, price_n, parsed, tag_key)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
          ON CONFLICT (tag_id, captured_on) DO NOTHING`,
         [
           t.tagid,
@@ -206,6 +261,7 @@ export async function runCensus(
           s.medianPriceCents,
           s.priceN,
           s.parsed,
+          t.key,
         ],
       );
       res.stored++;
@@ -231,7 +287,7 @@ export async function runCensus(
 /** Appids taken from each steered tag's reviews-sorted page (STEAM_TAG_SEED_N overrides). */
 export const TAG_SEED_N_DEFAULT = 25;
 
-export function tagSeedUrl(tagid: number, n = TAG_SEED_N_DEFAULT): string {
+export function tagSeedUrl(tagid: number | string, n = TAG_SEED_N_DEFAULT): string {
   return (
     `${STORE}/search/results/?tags=${tagid}&sort_by=Reviews_DESC&infinite=1` +
     `&start=0&count=${n}&category1=998&cc=us&l=english`
@@ -257,7 +313,7 @@ export const TAG_BAND_MAX_CENTS = 2000;
 /** Rows read from the price-capped page; about half sit under US$10, so read twice the depth. */
 export const TAG_BAND_PAGE_SIZE = 50;
 
-export function tagBandUrl(tagid: number, count = TAG_BAND_PAGE_SIZE): string {
+export function tagBandUrl(tagid: number | string, count = TAG_BAND_PAGE_SIZE): string {
   return (
     `${STORE}/search/results/?tags=${tagid}&sort_by=Reviews_DESC&maxprice=${TAG_BAND_MAX_CENTS / 100}` +
     `&infinite=1&start=0&count=${count}&category1=998&cc=us&l=english`
@@ -303,7 +359,7 @@ export function interleaveSeeds(a: number[], b: number[]): number[] {
 /** Appids read from each steered tag's coming-soon page (STEAM_TAG_UPCOMING_N overrides). */
 export const TAG_UPCOMING_N_DEFAULT = 50;
 
-export function tagUpcomingUrl(tagid: number, n = TAG_UPCOMING_N_DEFAULT): string {
+export function tagUpcomingUrl(tagid: number | string, n = TAG_UPCOMING_N_DEFAULT): string {
   return (
     `${STORE}/search/results/?tags=${tagid}&filter=comingsoon&sort_by=Released_ASC&infinite=1` +
     `&start=0&count=${n}&category1=998&cc=us&l=english`
@@ -315,6 +371,8 @@ export interface TagSeed {
   appids: number[];
   /** Coming-soon appids, nearest launch first; drawn from their own reserved slots (#292). */
   upcoming?: number[];
+  /** A pair's two tag names, which is what a title's own tags carry (#293). */
+  parts?: string[];
 }
 
 /** Fail-soft by contract: any failure — steering, the tag list, one tag's page — logs and the
@@ -329,7 +387,7 @@ export async function fetchTagSeeds(
 ): Promise<TagSeed[]> {
   const out: TagSeed[] = [];
   if (n <= 0 && upcomingN <= 0) return out;
-  let targets: StoreTag[];
+  let targets: CensusTarget[];
   try {
     const { flags } = await getBriefSteering(db);
     if (!flags.length) return out;
@@ -348,13 +406,13 @@ export async function fetchTagSeeds(
     if (n > 0) {
       await sleep(delayMs);
       try {
-        top = parseTagSeedPage(await fetchText(tagSeedUrl(t.tagid, n)), n);
+        top = parseTagSeedPage(await fetchText(tagSeedUrl(t.param, n)), n);
       } catch (e) {
         log(`[steam] tag seed ${t.name}: FAILED ${String(e)}\n`);
       }
       await sleep(delayMs);
       try {
-        band = parseTagBandPage(await fetchText(tagBandUrl(t.tagid)), n);
+        band = parseTagBandPage(await fetchText(tagBandUrl(t.param)), n);
       } catch (e) {
         log(`[steam] tag band ${t.name}: FAILED ${String(e)}\n`);
       }
@@ -362,13 +420,13 @@ export async function fetchTagSeeds(
     if (upcomingN > 0) {
       await sleep(delayMs);
       try {
-        upcoming = parseTagSeedPage(await fetchText(tagUpcomingUrl(t.tagid, upcomingN)), upcomingN);
+        upcoming = parseTagSeedPage(await fetchText(tagUpcomingUrl(t.param, upcomingN)), upcomingN);
       } catch (e) {
         log(`[steam] tag upcoming ${t.name}: FAILED ${String(e)}\n`);
       }
     }
     if (top.length || band.length || upcoming.length) {
-      out.push({ tag: t.name, appids: interleaveSeeds(top, band), upcoming });
+      out.push({ tag: t.name, appids: interleaveSeeds(top, band), upcoming, parts: t.parts });
     }
   }
   return out;

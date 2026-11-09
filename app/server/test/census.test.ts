@@ -18,11 +18,11 @@ import {
   tagBandUrl,
   tagUpcomingUrl,
 } from "../src/crawler/census.ts";
-import { classifyCensusSupply, matchSteering } from "../src/queries/shared.ts";
+import { classifyCensusSupply, matchSteering, parseTagPairFlag } from "../src/queries/shared.ts";
 import { setBriefSteering } from "../src/queries/library.ts";
 import { freshMemoryDb } from "../src/db/db.ts";
 import { loadGames } from "../src/crawler/load.ts";
-import { STEAM_BASE_URL, addTagSeeds } from "../src/crawler/steam.ts";
+import { STEAM_BASE_URL, addTagSeeds, parseSteamGame } from "../src/crawler/steam.ts";
 import * as q from "../src/queries/index.ts";
 import type { RawGame } from "../src/crawler/base.ts";
 
@@ -415,5 +415,98 @@ describe("coming-soon tag seeds (#292)", () => {
     expect(partial[0].upcoming).toEqual([]);
     expect(partial[0].appids.length).toBeGreaterThan(0);
     expect(logs.some((m) => m.includes("tag upcoming"))).toBe(true);
+  });
+});
+
+describe("steered tag pairs (#293)", () => {
+  const PAIR = "Card Battler × Cozy";
+  const store = parseStoreTags(TAGS);
+  // The flags live on 2026-11-05 and what the matcher selected for them before pairs existed.
+  const LIVE =
+    "Unity engine (general)|Godot engine (general)|Luck/deck builder synergy games|Rogue-lites|Blackjack or playing card mechanics|Fairy tale setting|Melancholy tone|Living playing card/toy soldiers setting|Players acceptance on AI use in video games|Steam Next Fest demo-volume trend|Tabletop board game as overworld Map Mechanics".split(
+      "|",
+    );
+  const BEFORE =
+    "1716:Roguelike|3959:Roguelite|1666:Card Game|17389:Tabletop|32322:Deckbuilding|1770:Board Game|791774:Card Battler|1091588:Roguelike Deckbuilder";
+  const pick = (flags: string[], cap?: number) => selectCensusTags(store, flags, cap);
+
+  it("existing single-tag flags select exactly what they selected before", () => {
+    expect(
+      pick(LIVE)
+        .map((t) => `${t.tagid}:${t.name}`)
+        .join("|"),
+    ).toBe(BEFORE);
+    for (const f of LIVE) expect(parseTagPairFlag(f)).toBeNull();
+  });
+
+  it("a pair claims neither parent, in the census or in the matcher", () => {
+    expect(pick([PAIR]).map((t) => t.name)).toEqual([PAIR]);
+    expect(matchSteering([PAIR], { genre: "", tag: "Card Battler" })).toEqual([]);
+    expect(matchSteering([PAIR], { genre: "Casual", tag: "Cozy" })).toEqual([]);
+  });
+
+  it("has one stable key whichever way round it is written", () => {
+    const [a] = pick([PAIR]);
+    expect(a).toMatchObject({ key: "791774+97376", param: "791774,97376" });
+    expect(a.tagid).toBeLessThan(0);
+    expect(pick(["Cozy × Card Battler"])).toEqual([a]);
+    expect(pick([PAIR, "Cozy × Card Battler"])).toHaveLength(1);
+  });
+
+  it("drops a pair unless both halves are distinct exact store tags", () => {
+    expect(pick(["Card Battler × Warm", "Cozy × Cozy", "A × B × C"])).toEqual([]);
+  });
+
+  it("takes a cap seat ahead of single tags", () => {
+    expect(pick([...LIVE, PAIR], 3).map((t) => t.name)).toEqual([PAIR, "Roguelike", "Roguelite"]);
+  });
+
+  it("seeds on one AND search per page and carries both halves for membership", async () => {
+    const db = await freshMemoryDb();
+    await setBriefSteering(db, [PAIR]);
+    const urls: string[] = [];
+    const fetchText = (u: string) => {
+      urls.push(u);
+      return Promise.resolve(u.includes("populartags") ? TAGS : NICHE);
+    };
+    const seeds = await fetchTagSeeds(db, () => {}, fetchText, 5, 0, 5);
+    expect(urls.filter((u) => u.includes("tags=791774,97376&"))).toHaveLength(3);
+    expect(urls).toHaveLength(4); // the tag list + the three pages
+    expect(seeds[0].parts).toEqual(["Card Battler", "Cozy"]);
+    expect(tagBandUrl("791774,97376")).toContain("tags=791774,97376&");
+    expect(tagUpcomingUrl("791774,97376")).toContain("tags=791774,97376&");
+  });
+
+  it("keeps both halves below the top-10 tag cut", () => {
+    const tags: Record<string, number> = { "Card Battler": 50, Cozy: 40 };
+    for (let i = 0; i < 12; i++) tags[`Filler ${i}`] = 1000 - i;
+    const app = { name: "T", steam_appid: 1, release_date: { date: "Jan 1, 2025" } };
+    const kept = parseSteamGame(1, app, null, { tags }, ["Card Battler", "Cozy"]).tags;
+    expect(kept).toEqual(expect.arrayContaining(["Card Battler", "Cozy"]));
+    expect(parseSteamGame(1, app, null, { tags }, []).tags).not.toContain("Cozy");
+  });
+
+  it("records one census row, and the lens returns only titles carrying both", async () => {
+    const db = await freshMemoryDb();
+    await setBriefSteering(db, [PAIR]);
+    const fetchText = (u: string) => Promise.resolve(u.includes("populartags") ? TAGS : NICHE);
+    expect(await runCensus(db, () => {}, fetchText, CAPTURED, 0)).toMatchObject({ stored: 1 });
+    await runCensus(db, () => {}, fetchText, CAPTURED, 0); // same-day re-run keeps the first row
+    const rows = await db.query(`SELECT tag_key, tag_name, total_count FROM tag_census`);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ tag_key: "791774+97376", tag_name: PAIR });
+    const g = (sourceGameId: string, tags: string[]) =>
+      steamGame({ sourceGameId, tags, releaseDate: "2020-01-01" });
+    const both = ["Card Battler", "Cozy"];
+    const games = [g("P1", both), g("P2", both), g("P3", both), g("C1", ["Card Battler"])];
+    await loadGames(db, "steam", STEAM_BASE_URL, [...games, g("Z1", ["Cozy"])], CAPTURED);
+    const lookup = (t: string) => q.getSteamTagLookup(db, t, { cohort: "all" });
+    const [row] = (await lookup("card battler × cozy")).rows;
+    expect(row).toMatchObject({ genre: PAIR, games: 3, supplySource: "census" });
+    expect(row.census?.totalCount).toBeGreaterThan(800);
+    expect(row.examples.map((e) => e.title).sort()).toEqual(["Game P1", "Game P2", "Game P3"]);
+    const [parent] = (await lookup("card battler")).rows;
+    expect(parent).toMatchObject({ games: 4, census: null });
+    expect((await lookup("cozy × card battler")).rows[0].census).toEqual(row.census);
   });
 });
