@@ -79,7 +79,8 @@ No secret lives in code.
   per-app lookups and the trending and indie-tag lists are read.
 - **The release census reads the store's search listing, not app pages.** One tag list request,
   then one 100-row "newest first" search page per tag the standing flags match (at most 15), into
-  `tag_census`. It parses store HTML, so it fails loudly: the step goes red only when every tag
+  `tag_census`. A flag written `Tag A × Tag B`, both exact store tag names, is one market: an AND
+  search stored under `tagA+tagB`, costing what a single tag costs and taking one of the 15. It parses store HTML, so it fails loudly: the step goes red only when every tag
   fails, and supply falls back to the crawl sample once a tag's newest census row is over 7 days old.
 - **`CRAWL_LIMIT` per source is set in `crawl.yml`.** It is a politeness setting, not a cost one
   (see [DESIGN.md §4](DESIGN.md#4-crawl--load-idempotent-per-crawl-day)).

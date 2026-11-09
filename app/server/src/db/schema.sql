@@ -128,6 +128,9 @@ CREATE TABLE IF NOT EXISTS tag_census (
   parsed             INT NOT NULL DEFAULT 0,
   UNIQUE (tag_id, captured_on)
 );
+-- A tag pair (#293) is one row: tag_key holds "791774+97376", tag_id a stable negative hash of it
+-- (real store ids are positive), tag_name the two store names joined.
+ALTER TABLE tag_census ADD COLUMN IF NOT EXISTS tag_key TEXT;
 CREATE INDEX IF NOT EXISTS idx_tag_census_name ON tag_census (lower(tag_name), captured_on DESC);
 
 -- latest snapshot per game

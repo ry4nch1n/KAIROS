@@ -39,6 +39,8 @@ import {
   canonSql,
   isCurationTag,
   matchSteering,
+  parseTagPairFlag,
+  canonicalName,
   classifyTrajectory,
   classifySupply,
   genreSupplyTrend,
@@ -403,7 +405,14 @@ function aiSplitFor(r: Record<string, unknown>) {
 
 export async function getSteamTagEconomics(
   db: Querier,
-  opts?: { cohort?: SteamCohort; minSupply?: number; limit?: number; match?: string[] },
+  opts?: {
+    cohort?: SteamCohort;
+    minSupply?: number;
+    limit?: number;
+    match?: string[];
+    /** Read one tag pair (#293): titles carrying both halves, lower-cased canonical names. */
+    pair?: [string, string];
+  },
 ): Promise<SteamTagEconomics[]> {
   const cohort = opts?.cohort ?? "indie";
   const minSupply = opts?.minSupply ?? MIN_MARKET_SUPPLY;
@@ -413,10 +422,17 @@ export async function getSteamTagEconomics(
   // user typing "deckbuild" reaches "Deckbuilding". Values are PARAMETERS ($1…$n) — never
   // interpolated — and the placeholder count comes from code, not from the input.
   const match = opts?.match ?? [];
-  const params = match.map((t) => `%${t}%`);
-  const matchFilter = match.length
-    ? `AND (${match.map((_, i) => `lower(${canonSql("t.name")}) LIKE $${i + 1}`).join(" OR ")})`
-    : "";
+  const pair = opts?.pair;
+  const params = pair ?? match.map((t) => `%${t}%`);
+  // Every query below filters through this one string, so a pair's members, supply and demand
+  // all read the same titles: the first half's rows, kept only when the title has the second.
+  const matchFilter = pair
+    ? `AND lower(${canonSql("t.name")}) = $1 AND EXISTS (
+         SELECT 1 FROM game_tags gt2 JOIN tags t2 ON t2.id = gt2.tag_id
+         WHERE gt2.game_id = g.id AND lower(${canonSql("t2.name")}) = $2)`
+    : match.length
+      ? `AND (${match.map((_, i) => `lower(${canonSql("t.name")}) LIKE $${i + 1}`).join(" OR ")})`
+      : "";
   const rows = await db.query(
     `WITH ${AI_LAST_CTE}
      SELECT ${canonSql("t.name")} AS tag, count(*)::int AS games,
@@ -451,6 +467,14 @@ export async function getSteamTagEconomics(
     latestTagCensus(db),
     tagMembers(db, tierFilter, matchFilter, params),
   ]);
+  const secondHalf = pair
+    ? ((
+        await db.query(
+          `SELECT ${canonSql("name")} AS n FROM tags WHERE lower(${canonSql("name")}) = $1 LIMIT 1`,
+          [pair[1]],
+        )
+      )[0]?.n ?? pair[1])
+    : "";
   return rows
     .filter((r) => !isCurationTag(r.tag))
     .slice(0, opts?.limit ?? TAG_ECON_LIMIT)
@@ -459,12 +483,15 @@ export async function getSteamTagEconomics(
       const sup = supply.get(r.tag);
       // #245: the store's own listing wins where a recent census exists; otherwise a zero count
       // over a survivor-sampled tag is unmeasured, not quiet.
-      const c = census.get(String(r.tag).toLowerCase()) ?? null;
+      const c =
+        (pair
+          ? (census.get(`${pair[0]} × ${pair[1]}`) ?? census.get(`${pair[1]} × ${pair[0]}`))
+          : census.get(String(r.tag).toLowerCase())) ?? null;
       const supplyTrend = c
         ? classifyCensusSupply(c)
         : classifySampledSupply(sup?.recent ?? 0, sup?.prior ?? 0, num(r.games));
       return {
-        genre: r.tag, // same row shape as the store-genre table, keyed on the tag
+        genre: pair ? `${r.tag} × ${secondHalf}` : r.tag, // same shape as the store-genre table
         games: num(r.games),
         medianPriceCents: Math.round(num(r.med_price)),
         medianRating: r.med_rating == null ? null : +Number(r.med_rating).toFixed(2),
@@ -706,12 +733,21 @@ export async function getSteamTagLookup(
   // One pass with the floor lowered to 1, then partition in JS — the floor still governs what
   // counts as a market, it just also lets us NAME the too-thin matches. Bounded by the term
   // cap and the fetch limit, so a broad query can't return the whole tag table.
-  const all = await getSteamTagEconomics(db, {
-    cohort: opts?.cohort,
-    minSupply: 1,
-    limit: limit * 2,
-    match: terms,
-  });
+  const singles = terms.filter((t) => !parseTagPairFlag(t));
+  const all = singles.length
+    ? await getSteamTagEconomics(db, {
+        cohort: opts?.cohort,
+        minSupply: 1,
+        limit: limit * 2,
+        match: singles,
+      })
+    : [];
+  for (const term of terms) {
+    const halves = parseTagPairFlag(term);
+    if (!halves) continue;
+    const pair = halves.map((h) => canonicalName(h).toLowerCase()) as [string, string];
+    all.push(...(await getSteamTagEconomics(db, { cohort: opts?.cohort, minSupply: 1, pair })));
+  }
   return {
     ...base,
     rows: all.filter((r) => r.games >= minSupply).slice(0, limit),

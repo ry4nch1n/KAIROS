@@ -469,7 +469,7 @@ export async function fetchStoreTags(
 }
 
 /** Store and SteamSpy spell some tags differently ("Roguelike" / "Rogue-like"). */
-const tagKey = (name: string) => name.toLowerCase().replace(/[^a-z0-9]/g, "");
+export const tagKey = (name: string) => name.toLowerCase().replace(/[^a-z0-9]/g, "");
 
 /**
  * Top-N SteamSpy tags by weight (the rich genre-like signal), plus any `steered` tag the title
@@ -947,14 +947,15 @@ export const STEAM_BASE_URL = STORE;
 export async function steamCrawl(
   limit = SEED_LIMIT_DEFAULT,
   log: (m: string) => void = () => {},
-  tagSeeds: { tag: string; appids: number[]; upcoming?: number[] }[] = [],
+  tagSeeds: { tag: string; appids: number[]; upcoming?: number[]; parts?: string[] }[] = [],
   rotation = 0,
 ): Promise<{ games: RawGame[]; baseUrl: string }> {
   log(`[steam] seeding appids (limit ${limit})…\n`);
   resetFollowerRun(); // breaker is per-run, not per-process
   resetStoreTagRun();
   const seeded = addTagSeeds(await seedAppIds(limit), tagSeeds, limit, TAG_SEED_SHARE, rotation);
-  const steeredTags = tagSeeds.map((t) => t.tag);
+  // A pair's halves are the real tags on a title; its "A × B" label is on none (#293).
+  const steeredTags = tagSeeds.flatMap((t) => t.parts ?? [t.tag]);
   for (const t of seeded.perTag) {
     log(`[steam] tag ${t.tag}: seeded ${t.added} new / ${t.known} already known\n`);
   }
