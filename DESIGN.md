@@ -220,7 +220,10 @@ funnel**.
   reviews-sorted page capped at US$20 and kept to titles whose list price is US$10–20. Both are
   deduped and capped at a quarter of the same `CRAWL_LIMIT`, so a niche's mid-band peers enter
   `games`, not only its megahits. Each crawl starts every tag's list further along, because that
-  cap covers only a few rows per tag. Tag seeding is fail-soft per page: a blocked page is logged
+  cap covers only a few rows per tag. A third page per steered tag lists its coming-soon titles,
+  nearest launch first (`STEAM_TAG_UPCOMING_N`, default 50), and 40% of that quarter is reserved
+  for them, because released seeds alone fill it; slots they can't use return to released seeds.
+  Tag seeding is fail-soft per page: a blocked page is logged
   and the crawl carries on. A game stores its top 10 SteamSpy tags plus any steered tag it carries
   below that cut; other tags keep plain top-10 membership.
 - **Released and upcoming are separate cohorts.** Market analytics read released titles only; upcoming
