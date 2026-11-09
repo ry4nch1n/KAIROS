@@ -272,7 +272,10 @@ export const CONTRACT = {
   // v44: `FestivalLiftRead` gains `byPriceBand`, `byTag` (steered tags, capped), `priced` and
   //      `tagged` (#284 - same n/percentiles/thin per slice; a title with no listed price is in no
   //      band, never 'Free'). Additive.
-  version: 44,
+  // v45: new read `GET /api/steam/peers` returning `SteamPeers` (#296 - one row per title in a tag
+  //      scope; sticky AI disclosure; null, never 0; `hasDemo` null until the crawl captures it).
+  //      Additive.
+  version: 45,
   // HAND-MAINTAINED (#284): add a window only with dates verified from the event's own
   // announcement, never estimated. start/end inclusive UTC dates. A Steam-wide fest has no
   // participant list (whole coming-soon cohort); showcases/awards carry a `featured` appid list.
@@ -400,6 +403,30 @@ export const CONTRACT = {
 } as const;
 
 export type Contract = typeof CONTRACT;
+
+// One title in a tag-scoped peer panel (#296). null = not measured, never 0.
+export interface SteamPeer {
+  appid: string;
+  name: string;
+  releaseDate: string | null;
+  comingSoon: boolean | null;
+  priceCents: number | null;
+  priceBand: string | null; // null when no price is listed, never 'Free'
+  reviews: number | null;
+  rating: number | null;
+  followers: number | null;
+  topTags: string[];
+  aiDisclosure: boolean | null; // newest non-null reading, last-known rather than re-verified
+  hasDemo: boolean | null; // null for every title until the crawl captures it
+}
+
+export interface SteamPeers {
+  query: string; // normalized terms actually searched
+  band: string | null; // price-band label applied, if any
+  total: number; // titles in scope before the row cap
+  capped: boolean;
+  rows: SteamPeer[]; // most-reviewed first
+}
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 

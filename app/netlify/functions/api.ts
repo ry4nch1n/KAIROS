@@ -94,6 +94,20 @@ export default async (req: Request) => {
         200,
         "daily",
       );
+    // Per-title peer panel behind a tag scope (#296). Crawl-derived, query string in the cache key.
+    if (path === "/steam/peers") {
+      const band = q.parsePeerBand(url.searchParams.get("band"));
+      if (band === false) return json({ error: "unknown band", allowed: q.PEER_BAND_KEYS }, 400);
+      return json(
+        await q.getSteamPeers(
+          db,
+          url.searchParams.get("tags") ?? url.searchParams.get("tag"),
+          band,
+        ),
+        200,
+        "daily",
+      );
+    }
     if (path === "/hidden-gems") return json(await q.getHiddenGems(db, platform), 200, "daily");
     if (path === "/genres") return json(await q.getGenres(db, platform), 200, "daily");
     if (path === "/developers") return json(await q.getDevelopers(db, platform), 200, "daily");

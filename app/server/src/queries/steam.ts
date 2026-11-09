@@ -12,6 +12,7 @@ import type {
   SteamTagPriceBand,
   SupplyCensus,
   SteamTagLookup,
+  SteamPeers,
   SteamCohort,
   SteamComparable,
   SteamOverview,
@@ -912,6 +913,115 @@ const PRICE_BAND_SQL = `CASE
               WHEN l.price_cents < 2000 THEN '$10–20'
               ELSE '$20+'
             END`;
+
+// Peer panel (#296): the titles behind a tag, one row each with their fields side by side, where
+// /api/steam/tags can only give medians. Same scope rules as the named lookup (substring terms,
+// `a × b` pairs, curation labels dropped, indie cohort) but coming-soon titles stay in, flagged.
+const PEER_LIMIT = 100;
+const PEER_TOP_TAGS = 8;
+const PEER_BAND_PARAMS: Record<string, string> = {
+  free: "Free",
+  "0-5": "<$5",
+  "5-10": "$5–10",
+  "10-20": "$10–20",
+  "20+": "$20+",
+  "20-plus": "$20+",
+};
+export const PEER_BAND_KEYS = Object.keys(PEER_BAND_PARAMS);
+/** The band label for a `?band=` value: null when absent, false when it names no band. */
+export function parsePeerBand(raw: unknown): string | null | false {
+  if (raw == null || String(raw).trim() === "") return null;
+  return PEER_BAND_PARAMS[String(raw).trim().toLowerCase()] ?? false;
+}
+
+export async function getSteamPeers(
+  db: Querier,
+  rawTags: unknown,
+  band: string | null = null,
+): Promise<SteamPeers> {
+  const terms = parseTagQuery(rawTags);
+  const empty: SteamPeers = { query: terms.join(", "), band, total: 0, capped: false, rows: [] };
+  const name = canonSql("t.name");
+  const carries = (cond: string) =>
+    `EXISTS (SELECT 1 FROM game_tags gt JOIN tags t ON t.id = gt.tag_id
+             WHERE gt.game_id = g.id AND ${cond})`;
+  const params: unknown[] = [];
+  const param = (v: unknown) => `$${params.push(v)}`;
+  const scopes: string[] = [];
+  const singles = terms.filter((t) => !parseTagPairFlag(t));
+  if (singles.length) {
+    // Resolve to canonical names first so a curation label can't define a peer set.
+    const matched = await db.query(
+      `SELECT DISTINCT ${name} AS tag FROM tags t
+       WHERE ${singles.map((_, i) => `lower(${name}) LIKE $${i + 1}`).join(" OR ")}`,
+      singles.map((t) => `%${t}%`),
+    );
+    const names = matched
+      .map((r) => String(r.tag))
+      .filter((t) => !isCurationTag(t))
+      .map((t) => t.toLowerCase());
+    if (names.length) scopes.push(carries(`lower(${name}) = ANY(${param(names)})`));
+  }
+  for (const term of terms) {
+    const halves = parseTagPairFlag(term);
+    if (!halves) continue;
+    const [a, b] = halves.map((h) => canonicalName(h).toLowerCase());
+    scopes.push(
+      `(${carries(`lower(${name}) = ${param(a)}`)} AND ${carries(`lower(${name}) = ${param(b)}`)})`,
+    );
+  }
+  if (!scopes.length) return empty;
+  // An unpriced title has no band: PRICE_BAND_SQL alone reads NULL as 'Free'.
+  const bandSql = `CASE WHEN l.price_cents IS NOT NULL THEN ${PRICE_BAND_SQL} END`;
+  const bandFilter = band ? `AND ${bandSql} = ${param(band)}` : "";
+  const rows = await db.query(
+    `WITH ${AI_LAST_CTE}
+     SELECT g.source_game_id AS appid, g.title, g.release_date, l.coming_soon, l.price_cents,
+            ${bandSql} AS band, l.votes, l.rating, l.followers, ai.ai_disclosure, tg.tags,
+            count(*) OVER()::int AS total
+     FROM v_latest l
+     JOIN games g ON g.id = l.game_id
+     JOIN sources src ON src.id = g.source_id
+     LEFT JOIN ai_last ai ON ai.game_id = l.game_id
+     LEFT JOIN LATERAL (
+       SELECT array_agg(DISTINCT ${name}) AS tags
+       FROM game_tags gt JOIN tags t ON t.id = gt.tag_id WHERE gt.game_id = g.id
+     ) tg ON TRUE
+     WHERE g.is_live AND src.name = 'steam' AND (l.scale_tier IS NULL OR l.scale_tier <> 'aaa')
+       AND (${scopes.join(" OR ")}) ${bandFilter}
+     ORDER BY l.votes DESC NULLS LAST, g.id
+     LIMIT ${PEER_LIMIT}`,
+    params,
+  );
+  const opt = (v: unknown) => (v == null ? null : num(v));
+  const total = rows.length ? num(rows[0].total) : 0;
+  return {
+    ...empty,
+    total,
+    capped: total > rows.length,
+    rows: rows.map((r) => ({
+      appid: String(r.appid),
+      name: r.title,
+      releaseDate:
+        r.release_date == null ? null : new Date(r.release_date).toISOString().slice(0, 10),
+      comingSoon: r.coming_soon == null ? null : Boolean(r.coming_soon),
+      priceCents: opt(r.price_cents),
+      priceBand: r.band ?? null,
+      reviews: opt(r.votes),
+      rating: r.rating == null ? null : +Number(r.rating).toFixed(2),
+      followers: opt(r.followers),
+      // game_tags keeps no store-vote order, so "top" is a stable alphabetical cut.
+      topTags: ((r.tags ?? []) as string[])
+        .filter((t) => t && !isCurationTag(t))
+        .sort()
+        .slice(0, PEER_TOP_TAGS),
+      aiDisclosure: r.ai_disclosure == null ? null : Boolean(r.ai_disclosure),
+      // The crawl does not capture demo presence yet, so it is unmeasured for every title.
+      hasDemo: null,
+    })),
+  };
+}
+
 export async function getSteamPricing(db: Querier): Promise<SteamPriceBand[]> {
   const rows = await db.query(
     `SELECT ${PRICE_BAND_SQL} AS band,

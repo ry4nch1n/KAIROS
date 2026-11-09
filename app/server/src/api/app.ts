@@ -63,6 +63,20 @@ export function createApp(db: Querier) {
     }
   });
 
+  // Per-title peer panel behind a tag scope (#296) — `?tags=a,b&band=10-20`.
+  app.get("/api/steam/peers", async (req, res) => {
+    try {
+      const band = q.parsePeerBand(req.query.band);
+      if (band === false) {
+        res.status(400).json({ error: "unknown band", allowed: q.PEER_BAND_KEYS });
+        return;
+      }
+      res.json(await q.getSteamPeers(db, req.query.tags ?? req.query.tag, band));
+    } catch (e) {
+      res.status(500).json({ error: String(e) });
+    }
+  });
+
   app.get("/api/genres", async (req, res) =>
     res.json(await q.getGenres(db, parsePlatform(req.query.platform))),
   );
