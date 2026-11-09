@@ -765,6 +765,26 @@ export function addTagSeeds(
   };
 }
 
+/** The seeds whose going dark thins what the crawl is for: indie breadth, recency, pre-release. */
+const WATCHED_SEEDS = new Set([
+  "tag=indie",
+  "search topsellers Indie",
+  "search popularcomingsoon Indie",
+]);
+
+/**
+ * Report a watched seed that came back empty as a GitHub Actions annotation (#294), which the run
+ * summary shows. The crawl and check:steam are separate processes and a seed's yield is not
+ * persisted, so the crawl says it itself. A warning, not a failure: a third-party endpoint going
+ * dark must not turn every daily crawl red.
+ */
+function annotateDarkSeed(label: string): void {
+  if (!WATCHED_SEEDS.has(label)) return;
+  console.log(
+    `::warning title=Steam seed dark::Seed ${label} yielded 0 appids; the crawl continued on its other seeds.`,
+  );
+}
+
 /** Build a deduped appid seed list. Indie stream is listed first so it is well represented. */
 export async function seedAppIds(limit = SEED_LIMIT_DEFAULT): Promise<number[]> {
   const fetchIds = async (label: string, fn: () => Promise<number[]>): Promise<number[]> => {
@@ -773,10 +793,14 @@ export async function seedAppIds(limit = SEED_LIMIT_DEFAULT): Promise<number[]> 
       // A seed that 200s but parses to nothing is the silent failure mode (#138): the crawl
       // stays "green" on a narrower seed and nobody notices for weeks. A layout/param change
       // must be as loud as a throw — same degradation (other seeds carry the run), but visible.
-      if (!ids.length) console.warn(`seed ${label} yielded 0 appids — other seeds only`);
+      if (!ids.length) {
+        console.warn(`seed ${label} yielded 0 appids — other seeds only`);
+        annotateDarkSeed(label);
+      }
       return ids;
     } catch (e) {
       console.warn(`seed ${label} failed:`, String(e));
+      annotateDarkSeed(label);
       return [];
     }
   };
@@ -792,7 +816,9 @@ export async function seedAppIds(limit = SEED_LIMIT_DEFAULT): Promise<number[]> 
     return parseSearchAppids(j?.results_html ?? "");
   });
   // (1) Indie breadth — SteamSpy Indie tag ranked by owners (all-time; broadens the mid-tier).
-  // NOTE: SteamSpy tags are case-sensitive — "Indie" returns {} (empty); "indie" is the real tag.
+  // NOTE: measured 2026-11-09 with the crawler's UA, two requests per casing about a minute apart:
+  // "indie" and "Indie" all returned HTTP 200 with {} — no casing is known to work. Fail-soft: the seed
+  // comes back empty, the other seeds carry the run, and annotateDarkSeed reports it (#294).
   // Rank by owners (rankTagByOwners), NOT Object.keys, so we seed the top indie hits not the oldest.
   const indie = await fetchIds("tag=indie", async () => {
     const j = JSON.parse(await politeFetch(`${STEAMSPY}?request=tag&tag=indie`));
