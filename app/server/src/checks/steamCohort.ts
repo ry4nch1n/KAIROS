@@ -48,6 +48,8 @@ export interface SteamCohortCounts {
   storeFeaturesCaptured: number;
   aiEligible: number; // eligibility mirrors wantsAiDisclosure() in crawler/steam.ts
   aiCaptured: number;
+  /** Of `aiCaptured`, the readings that came back disclosed — the input to the #283 parser canary. */
+  aiDisclosed: number;
 }
 
 /** Count the freshest Steam crawl cohort once — every gate metric comes out of this one pass. */
@@ -83,7 +85,8 @@ export async function steamCohortCounts(db: Querier): Promise<SteamCohortCounts>
               count(*) FILTER (WHERE has_simplified_chinese IS NOT NULL)::int AS simplified_chinese_captured,
               count(*) FILTER (WHERE store_features IS NOT NULL)::int AS store_features_captured,
               count(*) FILTER (WHERE ai_wanted)::int AS ai_eligible,
-              count(*) FILTER (WHERE ai_wanted AND ai_disclosure IS NOT NULL)::int AS ai_captured
+              count(*) FILTER (WHERE ai_wanted AND ai_disclosure IS NOT NULL)::int AS ai_captured,
+              count(*) FILTER (WHERE ai_wanted AND ai_disclosure)::int AS ai_disclosed
        FROM fresh`,
       [STEAM_AI_DISCLOSURE_MAX_AGE_DAYS],
     )
@@ -103,5 +106,6 @@ export async function steamCohortCounts(db: Querier): Promise<SteamCohortCounts>
     storeFeaturesCaptured: n(r?.store_features_captured),
     aiEligible: n(r?.ai_eligible),
     aiCaptured: n(r?.ai_captured),
+    aiDisclosed: n(r?.ai_disclosed),
   };
 }

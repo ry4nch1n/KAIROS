@@ -23,6 +23,13 @@ import { loadGames } from "../src/crawler/load.ts";
 import { crazygames } from "../src/crawler/crazygames.ts";
 import type { RawGame } from "../src/crawler/base.ts";
 import * as q from "../src/queries/index.ts";
+import { setBriefSteering } from "../src/queries/library.ts";
+import {
+  AI_CANARY_MIN_CAPTURED,
+  aiDisclosureCanary,
+  formatAiCoverage,
+  steeredAiCoverage,
+} from "../src/checks/aiDisclosureCoverage.ts";
 import { createApp } from "../src/api/app.ts";
 
 const fx = (name: string) =>
@@ -774,6 +781,57 @@ describe("D10d getSteamTagLookup — named sub-genre lookup (#113)", () => {
       aiMedianVotesDisclosed: null,
       aiSplitThin: true,
     });
+  });
+
+  it("keeps a title's AI reading when newer snapshots are unchecked (#283)", async () => {
+    const db = await freshMemoryDb();
+    const day = (d: string, a: boolean | null, b: boolean | null, c: boolean | null) =>
+      loadGames(
+        db,
+        "steam",
+        STEAM_BASE_URL,
+        [
+          ...many(["S1"], { tags: ["Card Battler"], aiDisclosure: a, votes: 100 }),
+          ...many(["S2"], { tags: ["Card Battler"], aiDisclosure: b, votes: 200 }),
+          ...many(["S3"], { tags: ["Card Battler"], aiDisclosure: c, votes: 300 }),
+        ],
+        d,
+      );
+    await day("2026-06-01T00:00:00.000Z", true, true, null);
+    // S1 goes NULL (kept true); S2 is re-read false (newest reading wins); S3 was never checked.
+    await day("2026-06-02T00:00:00.000Z", null, false, null);
+    await day("2026-06-03T00:00:00.000Z", null, null, null);
+    const row = (await q.getSteamTagLookup(db, "card battler")).rows[0];
+    expect(row).toMatchObject({
+      games: 3,
+      aiChecked: 2,
+      aiDisclosed: 1,
+      aiMedianVotesDisclosed: 100,
+      aiMedianVotesUndisclosed: 200,
+    });
+  });
+
+  it("reports AI coverage for steered tags only, and warns on a zero-disclosure cohort (#283)", async () => {
+    const db = await freshMemoryDb();
+    await loadGames(
+      db,
+      "steam",
+      STEAM_BASE_URL,
+      [
+        ...many(["C1", "C2"], { tags: ["Card Battler"], aiDisclosure: false }),
+        ...many(["C3"], { tags: ["Card Battler"], aiDisclosure: null }),
+        ...many(["P1", "P2", "P3"], { tags: ["Tile Puzzle"], aiDisclosure: true }),
+      ],
+      "2026-06-30T00:00:00.000Z",
+    );
+    await setBriefSteering(db, ["Card battler"]);
+    const rows = await steeredAiCoverage(db);
+    expect(rows.map(formatAiCoverage)).toEqual([
+      "Card Battler 2/3 checked (67%), 0 disclosed ⚠️ under 10 a side",
+    ]);
+    expect(aiDisclosureCanary(AI_CANARY_MIN_CAPTURED, 0)).toMatch(/0 disclosed/);
+    expect(aiDisclosureCanary(AI_CANARY_MIN_CAPTURED - 1, 0)).toBeNull();
+    expect(aiDisclosureCanary(AI_CANARY_MIN_CAPTURED, 1)).toBeNull();
   });
 
   it("takes comma-separated tags, and refuses a query too short to name a market", async () => {
