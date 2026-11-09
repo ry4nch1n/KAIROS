@@ -887,6 +887,78 @@ describe("D10d getSteamTagLookup — named sub-genre lookup (#113)", () => {
   });
 });
 
+describe("D10f getSteamPeers — per-title panel behind a tag (#296)", () => {
+  const card = ["Card Battler", "Popular"];
+  async function seedPeers(db: Querier) {
+    const day = (d: string, ai: boolean | null) =>
+      loadGames(
+        db,
+        "steam",
+        STEAM_BASE_URL,
+        [
+          steamGame({ sourceGameId: "10", tags: card, votes: 100, aiDisclosure: ai }),
+          steamGame({ sourceGameId: "20", tags: card, votes: 900, priceCents: 500 }),
+          // Unlisted price and unreleased: in the panel, but in no band and never 'Free'.
+          {
+            ...steamGame({ sourceGameId: "30", tags: card, votes: 300 }),
+            priceCents: null,
+            votes: null,
+            rating: null,
+            comingSoon: true,
+            followers: 42,
+          },
+          steamGame({ sourceGameId: "40", tags: [...card, "Cozy"], votes: 500 }),
+          steamGame({ sourceGameId: "50", tags: card, scaleTier: "aaa" }),
+          steamGame({ sourceGameId: "60", tags: ["Racing", "Popular"], votes: 700 }),
+        ],
+        d,
+      );
+    await day("2026-06-01T00:00:00.000Z", true);
+    await day("2026-06-02T00:00:00.000Z", null);
+  }
+
+  it("lists one row per title, most-reviewed first, null for what was not measured", async () => {
+    const db = await freshMemoryDb();
+    await seedPeers(db);
+    const p = await q.getSteamPeers(db, "Card Battler,Roguelike Deckbuilder");
+    expect(p.rows.map((r) => r.appid)).toEqual(["20", "40", "10", "30"]);
+    expect(p).toMatchObject({ total: 4, capped: false });
+    expect(p.rows[3]).toMatchObject({
+      comingSoon: true,
+      priceCents: null,
+      priceBand: null,
+      reviews: null,
+      rating: null,
+      followers: 42,
+      aiDisclosure: null,
+      hasDemo: null,
+    });
+    // The newest snapshot is NULL; the last reading survives. Curation labels stay out of tags.
+    expect(p.rows[2]).toMatchObject({ aiDisclosure: true, topTags: ["Card Battler"] });
+  });
+
+  it("filters by band without letting an unpriced title in", async () => {
+    const db = await freshMemoryDb();
+    await seedPeers(db);
+    const peers = (b: string) => q.getSteamPeers(db, "card battler", q.parsePeerBand(b) as string);
+    expect((await peers("10-20")).rows.map((r) => r.appid)).toEqual(["40", "10"]);
+    expect((await peers("5-10")).rows.map((r) => r.appid)).toEqual(["20"]);
+    expect((await peers("free")).rows).toEqual([]);
+  });
+
+  it("validates the band and accepts a pair, and a curation term defines no scope", async () => {
+    const db = await freshMemoryDb();
+    await seedPeers(db);
+    expect(q.parsePeerBand("nope")).toBe(false);
+    expect(q.parsePeerBand(undefined)).toBeNull();
+    expect(q.parsePeerBand("20+")).toBe("$20+");
+    const pair = await q.getSteamPeers(db, "Card Battler × Cozy");
+    expect(pair.rows.map((r) => r.appid)).toEqual(["40"]);
+    expect((await q.getSteamPeers(db, "popular")).rows).toEqual([]);
+    expect((await q.getSteamPeers(db, "")).rows).toEqual([]);
+  });
+});
+
 describe("D11 platform isolation incl. steam", () => {
   it("steam queries ignore browser rows and vice-versa", async () => {
     const db = await freshMemoryDb();
