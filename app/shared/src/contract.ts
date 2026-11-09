@@ -269,7 +269,10 @@ export const CONTRACT = {
   //      either side). Additive.
   // v43: top-level `festivalWindows` taxonomy + `SteamOverview.festivalLift` (#284 — per-window
   //      entry-follower and lift percentiles, per-title rows; null, never 0). Additive.
-  version: 43,
+  // v44: `FestivalLiftRead` gains `byPriceBand`, `byTag` (steered tags, capped), `priced` and
+  //      `tagged` (#284 - same n/percentiles/thin per slice; a title with no listed price is in no
+  //      band, never 'Free'). Additive.
+  version: 44,
   // HAND-MAINTAINED (#284): add a window only with dates verified from the event's own
   // announcement, never estimated. start/end inclusive UTC dates. A Steam-wide fest has no
   // participant list (whole coming-soon cohort); showcases/awards carry a `featured` appid list.

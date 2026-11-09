@@ -330,6 +330,17 @@ export interface FestivalLiftRow {
   lift: number | null; // windowVelocity ÷ preVelocity; null when either is missing or preVelocity ≤ 0
 }
 
+/** One price-band or tag slice of a festival cohort read (#284). `thin` when n < thinBelow. */
+export interface FestivalScopedRead {
+  scope: string; // price-band label or canonical tag
+  titles: number;
+  withEntry: number;
+  n: number; // titles in this slice with a measurable lift
+  thin: boolean;
+  entryFollowers: FestivalDistribution;
+  lift: FestivalDistribution;
+}
+
 /** Cohort read of one contract `festivalWindows` entry (#284). */
 export interface FestivalLiftRead {
   id: string;
@@ -344,6 +355,10 @@ export interface FestivalLiftRead {
   thin: boolean; // n < thinBelow — a hint, not a benchmark
   entryFollowers: FestivalDistribution;
   lift: FestivalDistribution;
+  priced: number; // cohort titles with a listed price - the price slices' denominator
+  tagged: number; // cohort titles with any tag (coming-soon tags come from store-page capture)
+  byPriceBand: FestivalScopedRead[]; // latest listed price; unpriced titles are in no band
+  byTag: FestivalScopedRead[]; // steered tags only, most measured first, capped
   note: string; // plain-language caveat (cohort scope, dilution, thin sample)
   rows: FestivalLiftRow[]; // most-followed-at-entry first, capped
 }
